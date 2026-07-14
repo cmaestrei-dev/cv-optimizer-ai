@@ -247,7 +247,7 @@ def _procesar_y_generar(
         filename = build_pdf_filename(profile, role, company)
 
         try:
-            output_path = generate_pdf(cv_final, profile, output_path=f"output/{filename}")
+            pdf_bytes = generate_pdf(cv_final, profile)
             st.write(":material/check_circle: PDF listo.")
             status.update(label=":material/check_circle: CV generado con éxito!", state="complete")
         except Exception as pdf_e:
@@ -264,14 +264,13 @@ def _procesar_y_generar(
 
     st.success(f":material/description: Archivo: `{filename}`")
 
-    with open(output_path, "rb") as pdf_file:
-        st.download_button(
-            label=f":material/download: Descargar {filename}",
-            data=pdf_file.read(),
-            file_name=filename,
-            mime="application/pdf",
-            type="primary",
-        )
+    st.download_button(
+        label=f":material/download: Descargar {filename}",
+        data=pdf_bytes,
+        file_name=filename,
+        mime="application/pdf",
+        type="primary",
+    )
 
     with st.expander(":material/preview: Ver análisis de la vacante"):
         st.code(resultado, language="markdown")

@@ -198,11 +198,8 @@ def build_html(cv_markdown: str, profile: UserProfile) -> str:
 def generate_pdf(
     cv_markdown: str,
     profile: UserProfile,
-    output_path: str = "cv_adaptado.pdf",
-) -> str:
+) -> bytes:
     html_content = build_html(cv_markdown, profile)
 
     doc = HTML(string=html_content)
-    doc.write_pdf(output_path)
-
-    return output_path
+    return doc.write_pdf(target=None)

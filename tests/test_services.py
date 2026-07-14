@@ -57,16 +57,15 @@ class TestBuildHtml:
 
 class TestGeneratePdf:
     @patch("services.pdf_generator.HTML")
-    def test_generates_pdf_and_returns_path(self, mock_html, tmp_path):
+    def test_generates_pdf_and_returns_bytes(self, mock_html):
         mock_doc = MagicMock()
         mock_html.return_value = mock_doc
 
         profile = UserProfile(username="test", full_name="Test")
-        output = str(tmp_path / "output.pdf")
-        result = generate_pdf("## Test", profile, output_path=output)
-        assert result == output
+        result = generate_pdf("## Test", profile)
+        assert result == mock_doc.write_pdf.return_value
         mock_html.assert_called_once()
-        mock_doc.write_pdf.assert_called_once_with(output)
+        mock_doc.write_pdf.assert_called_once_with(target=None)
 
 
 class TestBuildPdfFilename:
