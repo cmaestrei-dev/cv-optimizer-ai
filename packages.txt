@@ -7,4 +7,3 @@ libfontconfig1
 libfreetype6
 libharfbuzz0b
 libjpeg62-turbo
-libpng16-16
