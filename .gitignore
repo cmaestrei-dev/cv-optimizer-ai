@@ -1,0 +1,13 @@
+__pycache__/
+*.pyc
+*.pyo
+.env
+data/
+temp_html_for_pdf/
+cv_adaptado.pdf
+*.pdf
+output/
+.streamlit/secrets.toml
+.opencode/
+.impeccable/
+

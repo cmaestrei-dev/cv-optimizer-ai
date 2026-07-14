@@ -1,0 +1,8 @@
+### Analista TI - El Arte de Nicolás | Febrero 2024 - Diciembre 2025 | [Colombia] | [Híbrido]
+
+*   Lideré la estrategia de transformación digital integral para la marca "El Arte de Nicolás", orquestando la migración completa de operaciones manuales, basadas en WhatsApp e Instagram, hacia un ecosistema digital robusto, escalable y automatizado.
+*   Conduje la ingeniería de requisitos exhaustiva con stakeholders clave, traduciendo necesidades de negocio en especificaciones técnicas detalladas y aplicando principios de diseño UI/UX para concebir una experiencia de usuario intuitiva y altamente funcional.
+*   Diseñé y modelé la arquitectura de datos fundamental, estableciendo esquemas relacionales y no relacionales optimizados para garantizar la integridad, escalabilidad y eficiencia en la gestión de información transaccional y perfiles de cliente.
+*   Arquitecté y gestioné la integración de APIs críticas, incluyendo pasarelas de pago (ej. Stripe, PayU), plataformas logísticas y la API oficial de WhatsApp Business, permitiendo la automatización de notificaciones, marketing y soporte al cliente.
+*   Desarrollé e implementé soluciones de automatización de procesos clave, a la vez que proporcioné soporte técnico integral, abarcando software, hardware, asistencia remota y resolución de tickets, asegurando la continuidad operativa y la optimización de recursos.
+*   Administré la infraestructura de red, implementé medidas proactivas de ciberseguridad, gestioné bases de datos y exploré activamente la aplicación de Inteligencia Artificial para la mejora continua de procesos y la toma de decisiones estratégicas.
