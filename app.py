@@ -1,6 +1,14 @@
 import logging
+import os as _os
 
 import streamlit as st
+
+try:
+    for _key in ("TURSO_DB_URL", "TURSO_AUTH_TOKEN", "GEMINI_API_KEY"):
+        if _key in st.secrets:
+            _os.environ[_key] = str(st.secrets[_key])
+except Exception:
+    pass
 
 from services.gemini_client import GeminiClient
 from ui.profile_form import render_profile_sidebar
