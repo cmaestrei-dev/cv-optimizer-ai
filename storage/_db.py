@@ -47,42 +47,71 @@ def _get_connection() -> sqlite3.Connection:
 # ── Turso HTTP wrapper ─────────────────────────────────────────────
 
 
-def _turso_execute(sql: str, params: tuple = ()) -> list[dict]:
+def _turso_pipeline_request(requests_list: list[dict]) -> list[list[dict]]:
+    import time
+
     import requests
 
     turso_url = _TURSO_URL.replace("libsql://", "https://")
-    body = {
-        "requests": [
-            {
-                "type": "execute",
-                "stmt": {"sql": sql, "args": list(params) if params else []},
-            }
-        ]
+    url = f"{turso_url}/v2/pipeline"
+    headers = {
+        "Authorization": f"Bearer {_TURSO_TOKEN}",
+        "Content-Type": "application/json",
     }
-    resp = requests.post(
-        f"{turso_url}/v2/pipeline",
-        headers={
-            "Authorization": f"Bearer {_TURSO_TOKEN}",
-            "Content-Type": "application/json",
-        },
-        json=body,
-        timeout=15,
-    )
-    resp.raise_for_status()
+    body = {"requests": requests_list}
+
+    last_error = None
+    for attempt in range(3):
+        try:
+            resp = requests.post(url, headers=headers, json=body, timeout=15)
+            if resp.status_code < 400:
+                break
+            error_body = resp.text[:500] if resp.text else "(empty body)"
+            logger.warning(
+                "Turso HTTP %s (attempt %d/3): %s",
+                resp.status_code,
+                attempt + 1,
+                error_body,
+            )
+            last_error = requests.HTTPError(
+                f"Turso HTTP {resp.status_code}: {error_body}", response=resp
+            )
+        except (requests.ConnectionError, requests.Timeout) as e:
+            logger.warning("Turso network error (attempt %d/3): %s", attempt + 1, e)
+            last_error = e
+        if attempt < 2:
+            time.sleep(2**attempt)
+    else:
+        raise last_error  # type: ignore[misc]
+
     data = resp.json()
     results = data.get("results", [])
     if not results:
         raise RuntimeError(f"Turso returned empty results: {data}")
-    result = results[0]
-    if result.get("type") == "error":
-        raise RuntimeError(f"Turso error: {result.get('error', result)}")
-    inner = result.get("response", {}).get("result", {})
-    cols = [c["name"] for c in inner.get("cols", [])]
-    rows = inner.get("rows", [])
-    parsed = []
-    for row in rows:
-        parsed.append({cols[i]: _turso_extract_value(v) for i, v in enumerate(row)})
-    return parsed
+
+    parsed_results: list[list[dict]] = []
+    for result in results:
+        if result.get("type") == "error":
+            raise RuntimeError(f"Turso error: {result.get('error', result)}")
+        inner = result.get("response", {}).get("result", {})
+        cols = [c["name"] for c in inner.get("cols", [])]
+        rows = inner.get("rows", [])
+        parsed = []
+        for row in rows:
+            parsed.append(
+                {cols[i]: _turso_extract_value(v) for i, v in enumerate(row)}
+            )
+        parsed_results.append(parsed)
+    return parsed_results
+
+
+def _turso_execute(sql: str, params: tuple = ()) -> list[dict]:
+    request = {
+        "type": "execute",
+        "stmt": {"sql": sql, "args": list(params) if params else []},
+    }
+    all_results = _turso_pipeline_request([request])
+    return all_results[0] if all_results else []
 
 
 def _turso_extract_value(val: dict | list | str | int | None) -> str | int | None:
@@ -92,10 +121,16 @@ def _turso_extract_value(val: dict | list | str | int | None) -> str | int | Non
 
 
 def _turso_execute_script(sql: str) -> None:
+    requests_list: list[dict] = []
     for statement in sql.split(";"):
         statement = statement.strip()
         if statement:
-            _turso_execute(statement + ";")
+            requests_list.append({
+                "type": "execute",
+                "stmt": {"sql": statement + ";", "args": []},
+            })
+    if requests_list:
+        _turso_pipeline_request(requests_list)
 
 
 # ── unified execute ────────────────────────────────────────────────
