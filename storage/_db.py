@@ -17,6 +17,19 @@ def _is_turso() -> bool:
     return bool(_TURSO_URL and _TURSO_TOKEN)
 
 
+def get_storage_info() -> dict:
+    info = {"mode": "turso" if _is_turso() else "local", "connected": False}
+    if _is_turso():
+        try:
+            result = _turso_execute("SELECT 1")
+            info["connected"] = bool(result)
+        except Exception:
+            info["connected"] = False
+    else:
+        info["connected"] = True
+    return info
+
+
 def _get_db_path() -> str:
     return os.path.join(config.DATA_DIR, "cv_optimizer.db")
 

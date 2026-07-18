@@ -1,5 +1,6 @@
 from storage._db import (
     all_data_files_exist,
+    get_storage_info,
     append_skill,
     delete_education_entry,
     delete_experience_entry,

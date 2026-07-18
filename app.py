@@ -11,6 +11,7 @@ except Exception:
     pass
 
 from services.gemini_client import GeminiClient
+from storage import get_storage_info
 from ui.profile_form import render_profile_sidebar
 from ui.tab_educacion import render_tab_educacion
 from ui.tab_experiencia import render_tab_experiencia
@@ -126,6 +127,15 @@ def main():
 
     with st.sidebar:
         st.header("Configuración")
+
+        storage_info = get_storage_info()
+        if storage_info["mode"] == "turso":
+            icon = ":material/cloud_done:" if storage_info["connected"] else ":material/cloud_off:"
+            label = "Turso (nube)" if storage_info["connected"] else "Turso sin conexion"
+            st.caption(f"{icon} {label}")
+        else:
+            st.caption(":material/folder_data: SQLite local")
+
         gemini_api_key = st.text_input(
             "Ingresa tu API Key de Gemini",
             type="password",
