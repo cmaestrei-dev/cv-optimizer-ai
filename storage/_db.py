@@ -137,10 +137,21 @@ def _turso_execute(sql: str, params: tuple = ()) -> list[dict]:
     return all_results[0] if all_results else []
 
 
-def _turso_extract_value(val: dict | list | str | int | None) -> str | int | None:
-    if isinstance(val, dict) and "value" in val:
-        return val["value"]
-    return val
+def _turso_extract_value(val: dict | list | str | int | None) -> str | int | float | None:
+    if not isinstance(val, dict):
+        return val
+    type_ = val.get("type", "")
+    if type_ == "null":
+        return None
+    v = val.get("value")
+    if type_ == "integer":
+        return int(v) if v is not None else 0
+    if type_ == "real":
+        return float(v) if v is not None else 0.0
+    if type_ == "blob":
+        import base64
+        return base64.b64decode(v) if v is not None else b""
+    return str(v) if v is not None else ""
 
 
 def _turso_execute_script(sql: str) -> None:
