@@ -129,12 +129,16 @@ def main():
         st.header("Configuración")
 
         storage_info = get_storage_info()
+        has_turso_secrets = bool(_os.environ.get("TURSO_DB_URL"))
         if storage_info["mode"] == "turso":
-            icon = ":material/cloud_done:" if storage_info["connected"] else ":material/cloud_off:"
-            label = "Turso (nube)" if storage_info["connected"] else "Turso sin conexion"
-            st.caption(f"{icon} {label}")
+            if storage_info["connected"]:
+                st.success(":material/cloud_done:  Turso (nube) — datos persisten")
+            else:
+                st.error(":material/cloud_off:  Turso sin conexion — revisa credenciales")
+        elif has_turso_secrets:
+            st.error(":material/cloud_off:  Turso configurado pero NO se cargo a tiempo")
         else:
-            st.caption(":material/folder_data: SQLite local")
+            st.warning(":material/folder_data:  SQLite local — datos se pierden al dormir")
 
         gemini_api_key = st.text_input(
             "Ingresa tu API Key de Gemini",
