@@ -37,6 +37,7 @@ def _get_connection() -> sqlite3.Connection:
 def _turso_execute(sql: str, params: tuple = ()) -> list[dict]:
     import requests
 
+    turso_url = _TURSO_URL.replace("libsql://", "https://")
     body = {
         "requests": [
             {
@@ -46,7 +47,7 @@ def _turso_execute(sql: str, params: tuple = ()) -> list[dict]:
         ]
     }
     resp = requests.post(
-        f"{_TURSO_URL}/v2/pipeline",
+        f"{turso_url}/v2/pipeline",
         headers={
             "Authorization": f"Bearer {_TURSO_TOKEN}",
             "Content-Type": "application/json",
@@ -60,10 +61,21 @@ def _turso_execute(sql: str, params: tuple = ()) -> list[dict]:
     if not results:
         raise RuntimeError(f"Turso returned empty results: {data}")
     result = results[0]
-    if "error" in result:
-        raise RuntimeError(f"Turso error: {result['error']}")
-    cols = [c["name"] for c in result.get("cols", [])]
-    return [dict(zip(cols, r)) for r in result.get("rows", [])]
+    if result.get("type") == "error":
+        raise RuntimeError(f"Turso error: {result.get('error', result)}")
+    inner = result.get("response", {}).get("result", {})
+    cols = [c["name"] for c in inner.get("cols", [])]
+    rows = inner.get("rows", [])
+    parsed = []
+    for row in rows:
+        parsed.append({cols[i]: _turso_extract_value(v) for i, v in enumerate(row)})
+    return parsed
+
+
+def _turso_extract_value(val: dict | list | str | int | None) -> str | int | None:
+    if isinstance(val, dict) and "value" in val:
+        return val["value"]
+    return val
 
 
 def _turso_execute_script(sql: str) -> None:
