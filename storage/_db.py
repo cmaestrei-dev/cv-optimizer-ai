@@ -105,10 +105,33 @@ def _turso_pipeline_request(requests_list: list[dict]) -> list[list[dict]]:
     return parsed_results
 
 
+def _turso_encode_params(params: tuple) -> list[dict]:
+    encoded = []
+    for val in params:
+        if val is None:
+            encoded.append({"type": "null"})
+        elif isinstance(val, int):
+            encoded.append({"type": "integer", "value": str(val)})
+        elif isinstance(val, float):
+            encoded.append({"type": "real", "value": val})
+        elif isinstance(val, bytes):
+            import base64
+
+            encoded.append(
+                {"type": "blob", "value": base64.b64encode(val).decode()}
+            )
+        else:
+            encoded.append({"type": "text", "value": str(val)})
+    return encoded
+
+
 def _turso_execute(sql: str, params: tuple = ()) -> list[dict]:
     request = {
         "type": "execute",
-        "stmt": {"sql": sql, "args": list(params) if params else []},
+        "stmt": {
+            "sql": sql,
+            "args": _turso_encode_params(params),
+        },
     }
     all_results = _turso_pipeline_request([request])
     return all_results[0] if all_results else []
