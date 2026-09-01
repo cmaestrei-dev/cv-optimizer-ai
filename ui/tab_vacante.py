@@ -1,3 +1,5 @@
+import logging
+
 import streamlit as st
 
 from models import UserProfile
@@ -12,6 +14,8 @@ from storage import (
     read_skills,
 )
 from utils.retry import RetryableError, retry_with_backoff
+
+logger = logging.getLogger(__name__)
 
 
 def render_tab_vacante(client: GeminiClient | None, profile: UserProfile | None) -> None:
@@ -172,8 +176,9 @@ def _procesar_vacante(client: GeminiClient, archivo_imagen, texto_plano: str, pr
             st.error(":material/cancel: Los servidores de IA están saturados. Espera unos segundos y vuelve a intentarlo.")
         except JobParsingError as e:
             st.warning(f":material/warning: {e}")
-        except RuntimeError:
-            st.error(":material/cancel: Hubo un problema al comunicarse con la IA. Revisa tu API Key e intenta de nuevo.")
+        except RuntimeError as e:
+            logger.error("Error de la API de Gemini: %s", e)
+            st.error(f":material/cancel: Error de la API de Gemini: {e}")
         except Exception:
             st.error(":material/cancel: Ocurrió un error inesperado. Por favor intenta de nuevo.")
 
@@ -206,8 +211,9 @@ def _procesar_y_generar(
         except JobParsingError as e:
             st.warning(f":material/warning: {e}")
             return
-        except RuntimeError:
-            st.error(":material/cancel: Hubo un problema al comunicarse con la IA. Revisa tu API Key e intenta de nuevo.")
+        except RuntimeError as e:
+            logger.error("Error de la API de Gemini: %s", e)
+            st.error(f":material/cancel: Error de la API de Gemini: {e}")
             return
         except Exception:
             st.error(":material/cancel: Ocurrió un error inesperado. Por favor intenta de nuevo.")
@@ -235,8 +241,9 @@ def _procesar_y_generar(
         except RetryableError:
             st.error(":material/cancel: Los servidores de IA están saturados. Espera unos segundos y vuelve a intentarlo.")
             return
-        except RuntimeError:
-            st.error(":material/cancel: Hubo un problema al comunicarse con la IA. Revisa tu API Key e intenta de nuevo.")
+        except RuntimeError as e:
+            logger.error("Error de la API de Gemini: %s", e)
+            st.error(f":material/cancel: Error de la API de Gemini: {e}")
             return
         except Exception:
             st.error(":material/cancel: Ocurrió un error inesperado. Por favor intenta de nuevo.")

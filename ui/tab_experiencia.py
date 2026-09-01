@@ -1,3 +1,4 @@
+import logging
 import re
 
 import streamlit as st
@@ -15,6 +16,8 @@ from storage import (
 )
 from utils.pdf_extractor import extract_text_from_pdf
 from utils.retry import RetryableError, retry_with_backoff
+
+logger = logging.getLogger(__name__)
 
 
 def _parse_cv_sections(raw: str) -> tuple[list[str], list[str], list[str]]:
@@ -219,8 +222,9 @@ def _render_new_experience_form(client: GeminiClient | None, profile: UserProfil
                         st.markdown(nueva_exp_pulida)
                 except RetryableError:
                     st.error(":material/cancel: Los servidores de IA están saturados. Espera unos segundos y vuelve a intentarlo.")
-                except RuntimeError:
-                    st.error(":material/cancel: Hubo un problema al comunicarse con la IA. Revisa tu API Key e intenta de nuevo.")
+                except RuntimeError as e:
+                    logger.error("Error de la API de Gemini: %s", e)
+                    st.error(f":material/cancel: Error de la API de Gemini: {e}")
                 except Exception:
                     st.error(":material/cancel: Ocurrió un error inesperado. Por favor intenta de nuevo.")
 
