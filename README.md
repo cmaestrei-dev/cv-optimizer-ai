@@ -10,8 +10,8 @@ Genera CVs ATS-optimizados mediante IA, cruzando tu historial real con cada vaca
 ## Uso local
 
 ```bash
-# Instalar dependencias
-pip install -r requirements.txt
+# Instalar dependencias (incluye pytest y ruff)
+pip install -r requirements-dev.txt
 
 # Configurar variables de entorno
 cp .streamlit/secrets.toml.example .streamlit/secrets.toml
@@ -31,6 +31,7 @@ Para persistencia local (SQLite), no se requiere configuración adicional. La ba
    - `GEMINI_API_KEY` — tu API key de Google Gemini
    - `TURSO_DB_URL` — URL de tu base de datos Turso
    - `TURSO_AUTH_TOKEN` — token de autenticación de Turso
+   - `APP_ACCESS_PASSWORD` — contraseña de acceso a la app (**obligatoria** si usas Turso: sin ella la app queda cerrada)
 
 ### Base de datos en Turso (gratuito)
 
@@ -53,6 +54,8 @@ ui/                 # Componentes de la interfaz (tabs, formularios)
 models/             # Dataclasses (UserProfile)
 utils/              # Utilidades (extracción de PDF, retry)
 ```
+
+Plan, estado y decisiones del proyecto: [`docs/ROADMAP.md`](docs/ROADMAP.md).
 
 ## Tests
 
