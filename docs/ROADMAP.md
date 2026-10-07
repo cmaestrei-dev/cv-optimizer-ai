@@ -83,7 +83,9 @@
 - [x] PDF: la plantilla CSS tenía llaves dobles (`{{ }}`) que WeasyPrint no entendía → se ignoraban los márgenes de página (75 px en vez de 48) y los guiones de las viñetas. Corregido (más espacio útil por página) con test de regresión
 - [x] Evaluación del motor (`evals/`, `scripts/run_evals.py`): 3 perfiles y 5 vacantes ficticios (administrativo, desarrollo, ventas; una en inglés) con resultados esperados. Primera corrida: Gemini y DeepSeek 20/20 en match, 0 viñetas inventadas, 5/5 en una página e idioma; Gemini 7,5 s/CV vs DeepSeek 9,9 s y 1 resumen rechazado
 - [x] Entrevista más visible (feedback real: la usuaria no la encontró): va primero en la pestaña y se abre sola si menos de la mitad de los logros tienen cifras; avisos tras importar y en "CV inteligente"
+- [x] **Completar el perfil** (feedback real: LinkedIn deja descripciones breves → perfil pobre → CV pobre). Una sola sección "Completar y mejorar mi experiencia" con tres modos: "Cuéntame todo lo que hacías" (texto libre → logros separados), "Tareas típicas de tu cargo" (marcar lo que sí hizo + detalle), "Entrevista: agrega cifras". En "CV inteligente", cada requisito faltante tiene "Sí lo he hecho: contarlo" → logro en el empleo elegido → "Actualizar puntaje". Todo verificado contra las palabras del usuario; duplicados desmarcados. Prueba real: compatibilidad 38 → 88 tras contar una brecha
 - [ ] Normalización con ESCO → **pospuesta** (ver decisiones)
+- [ ] (Idea) Generar el texto de LinkedIn ("Acerca de" y experiencias) desde el perfil completo
 - [ ] Retirar el generador clásico, `services/gemini_client.py`, `storage/` y Turso cuando el motor nuevo esté validado por los usuarios
 
 ### Fase 2 — Seguimiento de postulaciones (tracker)
@@ -140,6 +142,7 @@
 | 2026-10-07 | Importar CV: la IA extrae y el código verifica contra el texto del PDF; lo no encontrado se descarta y se muestra | Un importador que "infiere" habilidades llenaría el perfil de cosas falsas que luego el motor usaría como verdad |
 | 2026-10-07 | ESCO pospuesto | El mapa de evidencias ya resuelve sinónimos del oficio (100 % de acierto en los evals); ESCO aporta sobre todo a escala (SaaS: normalizar miles de perfiles, sugerir habilidades por ocupación). Reevaluar si los evals muestran fallos de sinónimos o en la Fase 5 |
 | 2026-10-07 | Evals con casos ficticios y expectativas por palabra clave, fuera de la CI | Miden calidad real con IA real (cuesta cuota); la CI solo prueba las métricas. Son la base para elegir proveedor del SaaS con datos |
+| 2026-10-07 | Tareas típicas generadas por IA solo como recordatorio: la persona marca lo que hizo | Reconocer es más fácil que recordar; la confirmación explícita mantiene la honestidad (nada entra sin que la persona lo marque) |
 | 2026-10-07 | No purgar el historial git de los `.md` personales | Solo contenido de CV (sin contacto ni IDs); purgar exige force push a `main` público y GitHub mantiene accesibles los commits huérfanos por SHA |
 
 ## Próximo paso

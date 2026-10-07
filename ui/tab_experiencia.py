@@ -9,7 +9,7 @@ from core.profile.legacy import parse_experience_markdown
 from models import UserProfile
 from services.gemini_client import GeminiClient
 from ui.importer import render_import
-from ui.interview import render_interview
+from ui.profile_coach import render_profile_coach
 from utils.retry import RetryableError, retry_with_backoff
 
 logger = logging.getLogger(__name__)
@@ -193,7 +193,7 @@ def render_tab_experiencia(
 
     empty = profile is not None and not service.profile_status(profile.username)[0]
     if profile is not None and not empty:
-        render_interview(profile, api_key_overrides)  # el siguiente paso natural tras importar
+        render_profile_coach(profile, api_key_overrides)  # el siguiente paso natural tras importar
     render_import(profile, api_key_overrides, expanded=empty)
     st.markdown("**O agrega una experiencia a mano**")
     _render_new_experience_form(client, profile)

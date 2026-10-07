@@ -132,6 +132,11 @@ def update_experience(username: str, experience_id: int, achievements: list[str]
         repo.replace_achievements(s, experience, achievements)
 
 
+def append_achievements(username: str, experience_id: int, texts: list[str]) -> int:
+    with session_scope() as s:
+        return repo.append_achievements(s, _require_user(s, username), experience_id, texts)
+
+
 def delete_experience(username: str, experience_id: int) -> None:
     with session_scope() as s:
         repo.delete_experience(s, _require_user(s, username), experience_id)

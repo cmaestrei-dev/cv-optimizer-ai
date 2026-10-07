@@ -118,6 +118,19 @@ def replace_achievements(session: Session, experience: Experience, texts: list[s
     session.flush()
 
 
+def append_achievements(session: Session, user: User, experience_id: int, texts: list[str]) -> int:
+    """Agrega logros al final de un cargo del usuario. Devuelve cuántos agregó."""
+    experience = _owned_experience(session, user, experience_id)
+    start = max((a.position for a in experience.achievements), default=-1) + 1
+    added = 0
+    for text in (t.strip() for t in texts):
+        if text:
+            experience.achievements.append(Achievement(text=text, position=start + added))
+            added += 1
+    session.flush()
+    return added
+
+
 def delete_experience(session: Session, user: User, experience_id: int) -> None:
     session.delete(_owned_experience(session, user, experience_id))
 
