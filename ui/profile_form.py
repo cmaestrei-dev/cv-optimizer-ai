@@ -1,21 +1,26 @@
-import os
 import re
-import shutil
 
 import streamlit as st
 
-from config import DATA_DIR, MIN_PASSWORD_LENGTH
+from config import MIN_PASSWORD_LENGTH
+from core.profile import service
+from core.profile.repository import USER_FIELDS
 from models import UserProfile
-from storage import (
-    delete_profile,
-    has_education,
-    has_knowledge_base,
-    has_skills,
-    list_profiles,
-    load_profile,
-    migrate_legacy_data,
-    save_profile,
-)
+
+
+def load_profile(username: str) -> dict | None:
+    user = service.get_user(username)
+    if user is None:
+        return None
+    return {"username": user.username, **{k: getattr(user, k) for k in USER_FIELDS}}
+
+
+def _save_profile(profile: UserProfile, *, new: bool) -> None:
+    fields = {k: v for k, v in profile.to_dict().items() if k in USER_FIELDS}
+    if new:
+        service.create_user(profile.username, **fields)
+    else:
+        service.update_user(profile.username, **fields)
 
 
 def _is_authenticated(profile_action: str) -> bool:
@@ -44,15 +49,6 @@ def _render_login_form(profile_action: str) -> bool:
 
 
 def _render_profile_details(profile: UserProfile) -> UserProfile:
-    has_exp = has_knowledge_base(profile.slug)
-    has_sk = has_skills(profile.slug)
-    has_ed = has_education(profile.slug)
-
-    if not has_exp or not has_sk or not has_ed:
-        migrated = migrate_legacy_data(profile.slug)
-        if migrated > 0:
-            st.sidebar.success(f"Se migraron {migrated} archivo(s) de datos existentes a tu perfil.")
-
     with st.sidebar.expander("Editar perfil", expanded=False), st.form("edit_profile_form"):
         new_full_name = st.text_input("Nombre completo", value=profile.full_name)
         new_email = st.text_input("Email", value=profile.email)
@@ -89,14 +85,12 @@ def _render_profile_details(profile: UserProfile) -> UserProfile:
                 )
                 if new_password:
                     updated.set_password(new_password)
-                save_profile(profile.username, updated.to_dict())
+                _save_profile(updated, new=False)
                 st.session_state["active_profile"] = updated
                 st.success("Perfil actualizado.")
                 st.rerun()
 
-    has_exp = has_knowledge_base(profile.slug)
-    has_sk = has_skills(profile.slug)
-    has_ed = has_education(profile.slug)
+    has_exp, has_sk, has_ed = service.profile_status(profile.username)
     completed = sum([has_exp, has_sk, has_ed])
     total = 3
 
@@ -119,7 +113,7 @@ def _render_profile_details(profile: UserProfile) -> UserProfile:
 def render_profile_sidebar() -> UserProfile | None:
     st.sidebar.header("Perfil")
 
-    existing_profiles = list_profiles()
+    existing_profiles = service.list_usernames()
 
     col1, col2 = st.sidebar.columns([3, 1])
     with col1:
@@ -147,10 +141,7 @@ def render_profile_sidebar() -> UserProfile | None:
                         st.rerun()
                 with col_c2:
                     if st.button("Confirmar eliminación", key="confirm_delete_btn", type="primary"):
-                        delete_profile(profile_action)
-                        profile_dir = os.path.join(DATA_DIR, profile_action)
-                        if os.path.exists(profile_dir):
-                            shutil.rmtree(profile_dir)
+                        service.delete_user(profile_action)
                         st.session_state.pop("active_profile", None)
                         st.session_state.pop("profile_authenticated", None)
                         st.session_state[delete_key] = False
@@ -187,12 +178,9 @@ def render_profile_sidebar() -> UserProfile | None:
                         github_url=github.strip(),
                     )
                     profile.set_password(password)
-                    save_profile(slug, profile.to_dict())
+                    _save_profile(profile, new=True)
                     st.session_state["active_profile"] = profile
                     st.session_state["profile_authenticated"] = slug
-                    migrated = migrate_legacy_data(slug)
-                    if migrated > 0:
-                        st.sidebar.success(f"Se migraron {migrated} archivo(s) de datos existentes a '{slug}'.")
                     st.success(f"Perfil '{slug}' creado.")
                     st.rerun()
 

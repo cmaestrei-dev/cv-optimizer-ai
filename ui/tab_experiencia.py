@@ -4,20 +4,16 @@ import re
 import streamlit as st
 
 from config import WORK_MODALITIES
+from core.profile import service
+from core.profile.legacy import parse_education_markdown, parse_experience_markdown
 from models import UserProfile
 from services.gemini_client import GeminiClient
-from storage import (
-    append_skill,
-    delete_experience_entry,
-    get_experience_list,
-    prepend_education,
-    prepend_knowledge_base,
-    update_experience,
-)
 from utils.pdf_extractor import extract_text_from_pdf
 from utils.retry import RetryableError, retry_with_backoff
 
 logger = logging.getLogger(__name__)
+
+_SKILL_LINE = re.compile(r"\*\*(.+?)\*\*\s*(?:->\s*\[?([^\]]+?)\]?)?\s*$")
 
 
 def _parse_cv_sections(raw: str) -> tuple[list[str], list[str], list[str]]:
@@ -153,34 +149,41 @@ def _render_cv_import(client: GeminiClient | None, profile: UserProfile | None) 
     if st.button(":material/check: Importar seleccionados a mi perfil", type="primary", key="do_import"):
         imported = 0
         if import_exp:
-            for exp_text in experiences:
-                exp_text = exp_text.strip()
-                if exp_text:
-                    prepend_knowledge_base(profile.slug, exp_text)
-                    imported += 1
+            for parsed in parse_experience_markdown("\n".join(experiences)):
+                service.add_experience(
+                    profile.username, role=parsed.role, company=parsed.company,
+                    period_text=parsed.period_text, country=parsed.country,
+                    modality=parsed.modality, achievements=parsed.achievements,
+                )
+                imported += 1
         if import_skills:
             for skill_line in skills:
-                skill_line = skill_line.strip()
-                if skill_line and re.search(r"\*\*(.+?)\*\*", skill_line):
-                    append_skill(profile.slug, skill_line)
+                match = _SKILL_LINE.search(skill_line)
+                if match and service.add_skill(profile.username, match.group(1), match.group(2) or "Otros"):
                     imported += 1
         if import_edu:
-            for edu_text in education:
-                edu_text = edu_text.strip()
-                if edu_text:
-                    prepend_education(profile.slug, edu_text)
-                    imported += 1
+            for parsed in parse_education_markdown("\n".join(education)):
+                service.add_education(
+                    profile.username, title=parsed.title, institution=parsed.institution,
+                    period_text=parsed.period_text, description=parsed.description,
+                )
+                imported += 1
         st.session_state.pop("cv_parsed", None)
-        st.success(f":material/check: {imported} elemento(s) importados correctamente.")
+        st.session_state["exp_flash"] = f"{imported} elemento(s) importados correctamente."
         st.rerun()
+
+
+def _lines(text: str) -> list[str]:
+    """Una viñeta por línea; quita marcas de viñeta que el usuario haya pegado."""
+    return [re.sub(r"^\s*(?:[-*•]|\d+[.)])\s+", "", line).strip() for line in text.splitlines() if line.strip()]
 
 
 def _render_new_experience_form(client: GeminiClient | None, profile: UserProfile | None) -> None:
     col1, col2 = st.columns(2)
 
     with col1:
-        nuevo_cargo = st.text_input("Nombre del Cargo", placeholder="Ej: Analista de Soporte IT")
-        nombre_empresa = st.text_input("Empresa", placeholder="Ej: Tech Solutions Inc.")
+        nuevo_cargo = st.text_input("Nombre del Cargo", placeholder="Ej: Auxiliar Administrativa")
+        nombre_empresa = st.text_input("Empresa", placeholder="Ej: Logística SAS")
         periodo = st.text_input("Periodo", placeholder="Ej: Enero 2024 - Presente")
 
     with col2:
@@ -188,92 +191,104 @@ def _render_new_experience_form(client: GeminiClient | None, profile: UserProfil
         modalidad = st.selectbox("Modalidad", WORK_MODALITIES)
 
     logros_crudos = st.text_area(
-        "Funciones y Logros (Texto crudo)",
-        placeholder="Escribe o pega en bruto lo que hacías. La IA lo pulirá y le dará formato profesional, sin inventar datos...",
+        "Funciones y Logros (una por línea, o en texto libre)",
+        placeholder="Escribe lo que hacías. Puedes guardarlo tal cual, o pulirlo con IA "
+        "(redacción profesional, sin inventar datos)...",
         height=150,
     )
 
-    if st.button("Guardar en Base Maestra", type="primary"):
+    col_ai, col_raw = st.columns(2)
+    with col_ai:
+        save_polished = st.button("Pulir con IA y guardar", type="primary", use_container_width=True)
+    with col_raw:
+        save_raw = st.button("Guardar tal cual", use_container_width=True)
+    if not (save_polished or save_raw):
+        return
+
+    if profile is None:
+        st.error(":material/warning: Primero crea o selecciona un perfil en la barra lateral.")
+        return
+    if not nuevo_cargo.strip() or not logros_crudos.strip():
+        st.warning(":material/warning: Por favor llena al menos el Cargo y las Funciones.")
+        return
+
+    achievements = _lines(logros_crudos)
+    if save_polished:
         if client is None:
             st.error(":material/warning: Por favor, ingresa tu API Key en la barra lateral primero.")
-        elif profile is None:
-            st.error(":material/warning: Primero crea o selecciona un perfil en la barra lateral.")
-        elif not nuevo_cargo or not nombre_empresa or not logros_crudos:
-            st.warning(":material/warning: Por favor llena al menos el Cargo, la Empresa y las Funciones.")
-        else:
-            with st.spinner("Estandarizando y guardando experiencia..."):
+            return
+        with st.spinner("Puliendo la redacción..."):
 
-                @retry_with_backoff()
-                def _call():
-                    return client.polish_experience(
-                        role=nuevo_cargo,
-                        company=nombre_empresa,
-                        period=periodo,
-                        country=pais,
-                        modality=modalidad,
-                        raw_details=logros_crudos,
-                    )
+            @retry_with_backoff()
+            def _call():
+                return client.polish_experience(
+                    role=nuevo_cargo, company=nombre_empresa, period=periodo,
+                    country=pais, modality=modalidad, raw_details=logros_crudos,
+                )
 
-                try:
-                    nueva_exp_pulida = _call()
-                    prepend_knowledge_base(profile.slug, nueva_exp_pulida)
-                    st.success(":material/check: Nueva experiencia añadida a tu base de conocimiento.")
-                    with st.expander(":material/preview: Ver formato guardado"):
-                        st.markdown(nueva_exp_pulida)
-                except RetryableError:
-                    st.error(":material/cancel: Los servidores de IA están saturados. Espera unos segundos y vuelve a intentarlo.")
-                except RuntimeError as e:
-                    logger.error("Error de la API de Gemini: %s", e)
-                    st.error(f":material/cancel: Error de la API de Gemini: {e}")
-                except Exception:
-                    st.error(":material/cancel: Ocurrió un error inesperado. Por favor intenta de nuevo.")
+            try:
+                parsed = parse_experience_markdown(_call())
+            except RetryableError:
+                st.error(":material/cancel: Los servidores de IA están saturados. Espera unos segundos y vuelve a intentarlo.")
+                return
+            except RuntimeError as e:
+                logger.error("Error de la API de Gemini: %s", e)
+                st.error(f":material/cancel: Error de la API de Gemini: {e}")
+                return
+            except Exception:
+                st.error(":material/cancel: Ocurrió un error inesperado. Por favor intenta de nuevo.")
+                return
+        if parsed and parsed[0].achievements:
+            achievements = parsed[0].achievements
+
+    # Cargo, empresa y fechas salen del formulario, nunca de la IA.
+    service.add_experience(
+        profile.username, role=nuevo_cargo, company=nombre_empresa, period_text=periodo,
+        country=pais, modality=modalidad, achievements=achievements,
+    )
+    st.session_state["exp_flash"] = f"Experiencia '{nuevo_cargo.strip()}' guardada con {len(achievements)} logro(s)."
+    st.rerun()
 
 
 def _render_existing_experiences(profile: UserProfile) -> None:
-    exp_list = get_experience_list(profile.slug)
-    if not exp_list:
+    experiences = service.list_experiences(profile.username)
+    if not experiences:
         return
 
     st.markdown("---")
-    st.subheader(f":material/list_alt: Experiencias registradas ({len(exp_list)})")
+    st.subheader(f":material/list_alt: Experiencias registradas ({len(experiences)})")
 
     confirm_del_key = "exp_confirm_delete"
-    if confirm_del_key not in st.session_state:
-        st.session_state[confirm_del_key] = None
-
-    for i, exp in enumerate(exp_list):
-        exp_key = f"exp_{exp['id']}"
-        first_line = exp["content"].split("\n")[0].strip()
-        label = f"Experiencia #{len(exp_list) - i}"
-        if first_line.startswith("### "):
-            header = first_line[4:]
-            parts = header.split(" - ", 1)
-            if len(parts) == 2:
-                role = parts[0].strip()
-                company = parts[1].split(" | ")[0].strip()
-                label = f"{role} @ {company}"
+    for exp in experiences:
+        exp_key = f"exp_{exp.id}"
+        label = f"{exp.role} @ {exp.company}" if exp.company else exp.role
+        if exp.period_text:
+            label += f" — {exp.period_text}"
 
         with st.expander(label, expanded=False):
-            st.markdown(exp["content"])
+            details = " | ".join(part for part in (exp.period_text, exp.country, exp.modality) if part)
+            if details:
+                st.caption(details)
+            for achievement in exp.achievements:
+                st.markdown(f"- {achievement.text}")
 
-            col_e1, col_e2, col_e3 = st.columns([1, 1, 4])
+            col_e1, col_e2, _ = st.columns([1, 1, 4])
             with col_e1:
                 if st.button(":material/edit: Editar", key=f"edit_{exp_key}"):
                     st.session_state[f"editing_{exp_key}"] = True
                     st.rerun()
             with col_e2:
                 if st.button(":material/delete: Borrar", key=f"del_{exp_key}"):
-                    st.session_state[confirm_del_key] = exp_key
+                    st.session_state[confirm_del_key] = exp.id
                     st.rerun()
 
-            if st.session_state[confirm_del_key] == exp_key:
-                st.warning("¿Eliminar permanentemente esta experiencia?")
+            if st.session_state.get(confirm_del_key) == exp.id:
+                st.warning("¿Eliminar permanentemente esta experiencia y sus logros?")
                 col_y, col_n = st.columns(2)
                 with col_y:
                     if st.button("Sí, eliminar", key=f"confirm_del_{exp_key}", type="primary"):
-                        delete_experience_entry(exp["id"])
+                        service.delete_experience(profile.username, exp.id)
                         st.session_state[confirm_del_key] = None
-                        st.success("Experiencia eliminada.")
                         st.rerun()
                 with col_n:
                     if st.button("Cancelar", key=f"cancel_del_{exp_key}"):
@@ -281,29 +296,55 @@ def _render_existing_experiences(profile: UserProfile) -> None:
                         st.rerun()
 
             if st.session_state.get(f"editing_{exp_key}"):
-                st.markdown("---")
-                edited = st.text_area(
-                    "Editar experiencia (formato Markdown)",
-                    value=exp["content"],
-                    height=300,
-                    key=f"ta_{exp_key}",
-                )
-                col_s1, col_s2 = st.columns(2)
-                with col_s1:
-                    if st.button(":material/check: Guardar cambios", key=f"save_{exp_key}", type="primary"):
-                        update_experience(exp["id"], edited.strip())
-                        st.session_state[f"editing_{exp_key}"] = False
-                        st.success("Experiencia actualizada.")
-                        st.rerun()
-                with col_s2:
-                    if st.button("Cancelar", key=f"cancel_{exp_key}"):
-                        st.session_state[f"editing_{exp_key}"] = False
-                        st.rerun()
+                _render_experience_editor(profile, exp, exp_key)
+
+
+def _render_experience_editor(profile: UserProfile, exp, exp_key: str) -> None:
+    st.markdown("---")
+    with st.form(f"form_{exp_key}"):
+        col1, col2 = st.columns(2)
+        with col1:
+            role = st.text_input("Cargo", value=exp.role)
+            company = st.text_input("Empresa", value=exp.company)
+            period = st.text_input("Periodo", value=exp.period_text)
+        with col2:
+            country = st.text_input("País", value=exp.country)
+            modality_options = list(dict.fromkeys([*WORK_MODALITIES, exp.modality] if exp.modality else WORK_MODALITIES))
+            modality = st.selectbox(
+                "Modalidad", modality_options,
+                index=modality_options.index(exp.modality) if exp.modality in modality_options else 0,
+            )
+        achievements = st.text_area(
+            "Logros (uno por línea)",
+            value="\n".join(a.text for a in exp.achievements),
+            height=260,
+        )
+        col_s1, col_s2 = st.columns(2)
+        with col_s1:
+            saved = st.form_submit_button(":material/check: Guardar cambios", type="primary")
+        with col_s2:
+            cancelled = st.form_submit_button("Cancelar")
+
+    if saved:
+        if not role.strip():
+            st.warning("El cargo no puede quedar vacío.")
+            return
+        service.update_experience(
+            profile.username, exp.id, achievements=_lines(achievements),
+            role=role, company=company, period_text=period, country=country, modality=modality,
+        )
+    if saved or cancelled:
+        st.session_state[f"editing_{exp_key}"] = False
+        st.rerun()
 
 
 def render_tab_experiencia(client: GeminiClient | None, profile: UserProfile | None) -> None:
     st.header(":material/description: Registrar Nueva Experiencia")
-    st.markdown("Añade un nuevo logro o empleo a tu base de datos local permanente.")
+    st.markdown("Añade un empleo con sus logros. Cada logro se guarda por separado para elegir los mejores en cada CV.")
+
+    flash = st.session_state.pop("exp_flash", None)
+    if flash:
+        st.success(f":material/check: {flash}")
 
     _render_cv_import(client, profile)
     _render_new_experience_form(client, profile)

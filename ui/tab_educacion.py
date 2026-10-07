@@ -2,40 +2,8 @@ import html
 
 import streamlit as st
 
+from core.profile import service
 from models import UserProfile
-from storage import delete_education_entry, prepend_education, read_education
-
-
-def _parse_education_entries(raw: str) -> list[dict]:
-    entries = []
-    current = None
-    for line in raw.split("\n"):
-        stripped = line.strip()
-        if stripped.startswith("### "):
-            if current:
-                entries.append(current)
-            header = stripped[4:]
-            parts = header.split(" | ", 1)
-            title_inst = parts[0].rsplit(" - ", 1)
-            if len(title_inst) == 2:
-                titulo, institucion = title_inst
-            else:
-                titulo, institucion = header, ""
-            periodo = parts[1] if len(parts) > 1 else ""
-            current = {
-                "titulo": titulo.strip(),
-                "institucion": institucion.strip(),
-                "periodo": periodo.strip(),
-                "descripcion": "",
-                "raw_line": stripped,
-            }
-        elif stripped.startswith("- ") and current:
-            current["descripcion"] += stripped[2:] + " "
-        elif stripped == "":
-            continue
-    if current:
-        entries.append(current)
-    return entries
 
 
 def render_tab_educacion(profile: UserProfile | None) -> None:
@@ -74,13 +42,13 @@ def render_tab_educacion(profile: UserProfile | None) -> None:
         elif not nuevo_titulo.strip() or not institucion.strip() or not periodo_educacion.strip():
             st.warning(":material/warning: Por favor, llena el Título/Certificación, Institución y Año/Periodo.")
         else:
-            nueva_linea = f"### {nuevo_titulo.strip()} - {institucion.strip()} | {periodo_educacion.strip()}\n"
-            if descripcion_educacion.strip():
-                nueva_linea += f"- {descripcion_educacion.strip()}\n"
-            nueva_linea += "\n"
-
-            prepend_education(profile.slug, nueva_linea)
-            st.success(":material/check: Educación/Certificación añadida correctamente.")
+            service.add_education(
+                profile.username,
+                title=nuevo_titulo,
+                institution=institucion,
+                period_text=periodo_educacion,
+                description=descripcion_educacion,
+            )
             st.rerun()
 
     st.markdown("---")
@@ -90,60 +58,47 @@ def render_tab_educacion(profile: UserProfile | None) -> None:
         st.info("Selecciona un perfil para ver tu historial educativo.")
         return
 
-    contenido = read_education(profile.slug)
-    if contenido.strip():
-        entries = _parse_education_entries(contenido)
-        if entries:
-            confirm_key = "edu_confirm_delete"
-            if confirm_key not in st.session_state:
-                st.session_state[confirm_key] = None
-
-            for i, entry in enumerate(entries):
-                border_color = "rgba(88,166,255,0.15)"
-                card_html = (
-                    f'<div style="'
-                    f'background:rgba(22,27,34,0.4);'
-                    f'border:1px solid {border_color};'
-                    f'border-radius:8px;'
-                    f'padding:12px 16px;'
-                    f'margin-bottom:10px;'
-                    f'">'
-                    f'<div style="font-size:15px;font-weight:600;color:var(--color-accent,#58a6ff);">'
-                    f'{html.escape(entry["titulo"])}</div>'
-                    f'<div style="font-size:13px;color:var(--color-text,#c9d1d9);margin-top:2px;">'
-                    f'{html.escape(entry["institucion"])}</div>'
-                    f'<div style="font-size:12px;color:rgba(201,209,217,0.6);margin-top:1px;">'
-                    f'{html.escape(entry["periodo"])}</div>'
-                )
-                if entry["descripcion"].strip():
-                    card_html += (
-                        f'<div style="font-size:13px;color:rgba(201,209,217,0.8);margin-top:6px;">'
-                        f'{html.escape(entry["descripcion"].strip())}</div>'
-                    )
-                card_html += '</div>'
-                st.markdown(card_html, unsafe_allow_html=True)
-
-                if st.button(":material/delete: Eliminar", key=f"del_edu_{i}", type="secondary"):
-                    st.session_state[confirm_key] = i
-                    st.rerun()
-
-            if st.session_state[confirm_key] is not None:
-                idx = st.session_state[confirm_key]
-                if idx < len(entries):
-                    target = entries[idx]
-                    st.warning(f"¿Eliminar **{target['titulo']}** de tu historial educativo?")
-                    col_y, col_n = st.columns(2)
-                    with col_y:
-                        if st.button("Sí, eliminar", key="confirm_edu_del", type="primary"):
-                            delete_education_entry(profile.slug, idx)
-                            st.session_state[confirm_key] = None
-                            st.success(f"'{target['titulo']}' eliminada.")
-                            st.rerun()
-                    with col_n:
-                        if st.button("Cancelar", key="cancel_edu_del"):
-                            st.session_state[confirm_key] = None
-                            st.rerun()
-        else:
-            st.markdown(contenido)
-    else:
+    entries = service.list_education(profile.username)
+    if not entries:
         st.info("Aún no tienes educación o certificaciones registradas. ¡Agrega la primera arriba!")
+        return
+
+    confirm_key = "edu_confirm_delete"
+    for entry in entries:
+        card_html = (
+            '<div style="background:rgba(22,27,34,0.4);border:1px solid rgba(88,166,255,0.15);'
+            'border-radius:8px;padding:12px 16px;margin-bottom:10px;">'
+            '<div style="font-size:15px;font-weight:600;color:var(--color-accent,#58a6ff);">'
+            f"{html.escape(entry.title)}</div>"
+            '<div style="font-size:13px;color:var(--color-text,#c9d1d9);margin-top:2px;">'
+            f"{html.escape(entry.institution)}</div>"
+            '<div style="font-size:12px;color:rgba(201,209,217,0.6);margin-top:1px;">'
+            f"{html.escape(entry.period_text)}</div>"
+        )
+        if entry.description:
+            card_html += (
+                '<div style="font-size:13px;color:rgba(201,209,217,0.8);margin-top:6px;">'
+                f"{html.escape(entry.description)}</div>"
+            )
+        st.markdown(card_html + "</div>", unsafe_allow_html=True)
+
+        if st.button(":material/delete: Eliminar", key=f"del_edu_{entry.id}", type="secondary"):
+            st.session_state[confirm_key] = (profile.username, entry.id, entry.title)
+            st.rerun()
+
+    pending = st.session_state.get(confirm_key)
+    if pending is not None and pending[0] != profile.username:
+        pending = st.session_state[confirm_key] = None  # pertenecía a otro perfil
+    if pending is not None:
+        _, education_id, title = pending
+        st.warning(f"¿Eliminar **{title}** de tu historial educativo?")
+        col_y, col_n = st.columns(2)
+        with col_y:
+            if st.button("Sí, eliminar", key="confirm_edu_del", type="primary"):
+                service.delete_education(profile.username, education_id)
+                st.session_state[confirm_key] = None
+                st.rerun()
+        with col_n:
+            if st.button("Cancelar", key="cancel_edu_del"):
+                st.session_state[confirm_key] = None
+                st.rerun()

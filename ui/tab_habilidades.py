@@ -1,25 +1,18 @@
 import html
-import re
 
 import streamlit as st
 
 from config import SKILL_CATEGORIES
+from core.profile import service
 from models import UserProfile
-from storage import append_skill, get_skills_lines, overwrite_skills
 
 
-def _extract_skill_name(line: str) -> str:
-    match = re.search(r"\*\*(.+?)\*\*", line)
-    return match.group(1).strip().lower() if match else ""
-
-
-def _categories_for(lines: list[str]) -> list[str]:
+def _categories_for(categories_in_use: list[str]) -> list[str]:
     """Categorías universales + las que el perfil ya usa (para no ocultar habilidades viejas)."""
     categories = list(SKILL_CATEGORIES)
-    for line in lines:
-        match = re.search(r"-> \[(.+?)\]", line)
-        if match and match.group(1) not in categories:
-            categories.append(match.group(1))
+    for category in categories_in_use:
+        if category not in categories:
+            categories.append(category)
     return categories
 
 
@@ -27,18 +20,16 @@ def render_tab_habilidades(profile: UserProfile | None) -> None:
     st.header(":material/build: Base Maestra de Habilidades (Skills)")
     st.markdown("Administra las herramientas, conocimientos y competencias que dominas.")
 
-    lines = get_skills_lines(profile.slug) if profile else []
-    categories = _categories_for(lines)
+    skills = service.list_skills(profile.username) if profile else []
+    categories = _categories_for([s.category for s in skills])
 
     col_s1, col_s2 = st.columns(2)
-
     with col_s1:
         nueva_habilidad = st.text_input(
             "Nombre de la habilidad",
             placeholder="Ej: Excel avanzado, SAP, Facturación electrónica, Python",
             key="nueva_habilidad_input",
         )
-
     with col_s2:
         categoria_habilidad = st.selectbox("Categoría", categories, key="cat_habilidad")
 
@@ -47,20 +38,10 @@ def render_tab_habilidades(profile: UserProfile | None) -> None:
             st.error(":material/warning: Primero crea o selecciona un perfil en la barra lateral.")
         elif not nueva_habilidad.strip():
             st.warning(":material/warning: Escribe el nombre de la habilidad.")
+        elif not service.add_skill(profile.username, nueva_habilidad.strip(), categoria_habilidad):
+            st.warning(f":material/warning: '{nueva_habilidad.strip()}' ya existe en tu base de habilidades.")
         else:
-            skill_name = nueva_habilidad.strip()
-            nueva_linea = f"- **{skill_name}** -> [{categoria_habilidad}]\n"
-
-            already_exists = any(
-                _extract_skill_name(line) == skill_name.lower()
-                for line in lines
-            )
-            if already_exists:
-                st.warning(f":material/warning: '{skill_name}' ya existe en tu base de habilidades.")
-            else:
-                append_skill(profile.slug, nueva_linea)
-                st.success(f":material/check: '{skill_name}' guardada correctamente.")
-                st.rerun()
+            st.rerun()
 
     st.markdown("---")
     st.subheader(":material/list_alt: Tus Habilidades Registradas")
@@ -68,98 +49,57 @@ def render_tab_habilidades(profile: UserProfile | None) -> None:
     if profile is None:
         st.info("Selecciona un perfil para ver tus habilidades.")
         return
-
-    if not lines:
+    if not skills:
         st.info("Aún no tienes habilidades registradas. ¡Agrega la primera arriba!")
         return
 
-    parsed_skills = []
-    for raw_line in lines:
-        name = _extract_skill_name(raw_line)
-        cat = None
-        for c in categories:
-            if f"[{c}]" in raw_line:
-                cat = c
-                break
-        if name and cat:
-            parsed_skills.append((name, cat, raw_line))
+    grouped: dict[str, list] = {}
+    for skill in skills:
+        grouped.setdefault(skill.category, []).append(skill)
 
-    if parsed_skills:
-        grouped = {}
-        for name, cat, raw_line in parsed_skills:
-            grouped.setdefault(cat, []).append((name, raw_line))
+    confirm_key = "skill_confirm_delete"
+    for category in categories:
+        items = grouped.get(category)
+        if not items:
+            continue
+        with st.expander(f":material/category: {category} ({len(items)})"):
+            pills_html = '<div style="display:flex;flex-wrap:wrap;gap:6px;">' + "".join(
+                '<span style="background:rgba(88,166,255,0.12);color:var(--color-accent,#58a6ff);'
+                "padding:3px 10px;border-radius:12px;font-size:13px;font-weight:500;"
+                f'white-space:nowrap;">{html.escape(skill.name)}</span> '
+                for skill in items
+            ) + "</div>"
+            st.markdown(pills_html, unsafe_allow_html=True)
 
-        confirm_key = "skill_confirm_delete"
-        if confirm_key not in st.session_state:
-            st.session_state[confirm_key] = None
-
-        for cat, items in grouped.items():
-            with st.expander(f":material/category: {cat} ({len(items)})"):
-                pills_html = '<div style="display:flex;flex-wrap:wrap;gap:6px;">'
-                for _i, (name, _raw_line) in enumerate(items):
-                    pills_html += (
-                        f'<span style="'
-                        f'background:rgba(88,166,255,0.12);'
-                        f'color:var(--color-accent,#58a6ff);'
-                        f'padding:3px 10px;'
-                        f'border-radius:12px;'
-                        f'font-size:13px;'
-                        f'font-weight:500;'
-                        f'white-space:nowrap;'
-                        f'">{html.escape(name)}</span> '
-                    )
-                pills_html += '</div>'
-                st.markdown(pills_html, unsafe_allow_html=True)
-
-                col_del, _col_spacer = st.columns([2, 3])
-                with col_del:
-                    skill_to_delete = st.selectbox(
-                        "Seleccionar habilidad para eliminar",
-                        options=["—"] + [name for name, _ in items],
-                        key=f"skill_select_{cat}",
-                        label_visibility="collapsed",
-                    )
-                    if skill_to_delete != "—" and st.button(
-                        ":material/delete: Eliminar", key=f"del_btn_{cat}", type="secondary"
-                    ):
-                        st.session_state[confirm_key] = (cat, skill_to_delete)
-                        st.rerun()
-
-        if st.session_state[confirm_key] is not None:
-            cat, name = st.session_state[confirm_key]
-            st.warning(f"¿Eliminar **{name}** de {cat}?")
-            col_y, col_n = st.columns(2)
-            with col_y:
-                if st.button("Sí, eliminar", key=f"confirm_del_{cat}_{name}", type="primary"):
-                    target_line = next(
-                        (rl for n, rl in parsed_skills if n == name), None
-                    )
-                    if target_line:
-                        remaining = [line for line in lines if line != target_line]
-                        overwrite_skills(profile.slug, remaining)
-                    st.session_state[confirm_key] = None
-                    st.success(f"'{name}' eliminada.")
+            by_id = {skill.id: skill.name for skill in items}
+            col_del, _col_spacer = st.columns([2, 3])
+            with col_del:
+                to_delete = st.selectbox(
+                    "Seleccionar habilidad para eliminar",
+                    options=[None, *by_id],
+                    format_func=lambda sid, names=by_id: "—" if sid is None else names[sid],
+                    key=f"skill_select_{category}",
+                    label_visibility="collapsed",
+                )
+                if to_delete is not None and st.button(
+                    ":material/delete: Eliminar", key=f"del_btn_{category}", type="secondary"
+                ):
+                    st.session_state[confirm_key] = (profile.username, to_delete, by_id[to_delete])
                     st.rerun()
-            with col_n:
-                if st.button("Cancelar", key=f"cancel_del_{cat}_{name}"):
-                    st.session_state[confirm_key] = None
-                    st.rerun()
-    else:
-        skills_to_delete = []
-        for cat in categories:
-            skills_cat = [line for line in lines if f"[{cat}]" in line]
-            if skills_cat:
-                with st.expander(f"{cat} ({len(skills_cat)})"):
-                    for i, s in enumerate(skills_cat):
-                        col_a, col_b = st.columns([10, 1])
-                        with col_a:
-                            limpio = s.replace(f" -> [{cat}]", "").strip()
-                            st.markdown(limpio)
-                        with col_b:
-                            if st.button("Eliminar", key=f"del_skill_{cat}_{i}", help="Eliminar"):
-                                skills_to_delete.append(s)
-        if skills_to_delete:
-            remaining = [line for line in lines if line not in skills_to_delete]
-            overwrite_skills(profile.slug, remaining)
-            st.success(f"{len(skills_to_delete)} habilidad(es) eliminada(s).")
-            st.rerun()
+
+    pending = st.session_state.get(confirm_key)
+    if pending is not None and pending[0] != profile.username:
+        pending = st.session_state[confirm_key] = None  # pertenecía a otro perfil
+    if pending is not None:
+        _, skill_id, name = pending
+        st.warning(f"¿Eliminar **{name}**?")
+        col_y, col_n = st.columns(2)
+        with col_y:
+            if st.button("Sí, eliminar", key=f"confirm_del_{skill_id}", type="primary"):
+                service.delete_skill(profile.username, skill_id)
+                st.session_state[confirm_key] = None
+                st.rerun()
+        with col_n:
+            if st.button("Cancelar", key=f"cancel_del_{skill_id}"):
+                st.session_state[confirm_key] = None
+                st.rerun()

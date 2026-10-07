@@ -665,6 +665,32 @@ def all_data_files_exist(user_slug: str) -> bool:
     return has_knowledge_base(user_slug) and has_skills(user_slug) and has_education(user_slug)
 
 
+# ── export para migrar al modelo nuevo (core/profile) ───────────────
+
+
+def export_profile_rows(user_slug: str) -> dict:
+    """Filas crudas de un perfil, sin transformar, para la migración al modelo estructurado."""
+    init_db()
+    user_filter = "user_id = (SELECT id FROM profiles WHERE username = ?)"
+    return {
+        "profile": load_profile(user_slug) or {},
+        "experiences": [
+            r["content"]
+            for r in _execute(f"SELECT content FROM experiences WHERE {user_filter} ORDER BY id", (user_slug,))
+        ],
+        "skills": [
+            (r["name"], r["category"])
+            for r in _execute(f"SELECT name, category FROM skills WHERE {user_filter} ORDER BY id", (user_slug,))
+        ],
+        "education": [
+            r["content"]
+            for r in _execute(
+                f"SELECT content FROM education_entries WHERE {user_filter} ORDER BY id", (user_slug,)
+            )
+        ],
+    }
+
+
 # ── legacy migration stub ──────────────────────────────────────────
 
 

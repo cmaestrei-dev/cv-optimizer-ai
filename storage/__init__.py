@@ -4,6 +4,7 @@ from storage._db import (
     delete_education_entry,
     delete_experience_entry,
     delete_profile,
+    export_profile_rows,
     get_experience_list,
     get_skills_lines,
     get_storage_info,
