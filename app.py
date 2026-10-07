@@ -16,6 +16,7 @@ except Exception:
 from core.db import database_url
 from core.profile import service as profile_service
 from ui.profile_form import render_profile_sidebar
+from ui.tab_bandeja import inbox_count, render_tab_bandeja
 from ui.tab_cv_inteligente import render_tab_cv_inteligente
 from ui.tab_educacion import render_tab_educacion
 from ui.tab_experiencia import render_tab_experiencia
@@ -166,7 +167,10 @@ def main():
         .stApp [data-testid="stTabs"] button {
             transition: color var(--transition-fast), border-color var(--transition-fast);
         }
-        .stApp .stProgress > div > div {
+        .stApp [data-testid="stProgressBarTrack"] {
+            background-color: rgba(201,209,217,0.12);
+        }
+        .stApp [data-testid="stProgressBarTrack"] > div {
             background-color: var(--color-accent);
         }
         </style>
@@ -207,10 +211,20 @@ def main():
 
     profile = render_profile_sidebar()
 
-    due = due_count(profile)
-    tab0, tab_track, tab_market, tab2, tab3, tab4 = st.tabs([
+    # Los contadores van fuera de las pestañas: si la etiqueta de una pestaña cambia, Streamlit vuelve a
+    # la primera (p. ej. al descartar una vacante en la bandeja).
+    due, inbox = due_count(profile), inbox_count(profile)
+    pending = [
+        f":material/inbox: {inbox} vacante(s) por revisar en la bandeja" if inbox else "",
+        f":material/alarm: {due} seguimiento(s) para hoy en «Mis postulaciones»" if due else "",
+    ]
+    notice = st.container()  # siempre presente: si aparece/desaparece, las pestañas cambian de posición y se reinician
+    if any(pending):
+        notice.caption(" · ".join(p for p in pending if p))
+    tab0, tab_inbox, tab_track, tab_market, tab2, tab3, tab4 = st.tabs([
         ":material/auto_awesome: CV inteligente",
-        ":material/work_history: Mis postulaciones" + (f" ({due} por hacer)" if due else ""),
+        ":material/inbox: Bandeja de vacantes",
+        ":material/work_history: Mis postulaciones",
         ":material/insights: Mi mercado",
         ":material/description: Mi experiencia (importar CV)",
         ":material/build: Gestionar Habilidades",
@@ -220,6 +234,9 @@ def main():
     overrides = {"gemini": user_api_key.strip()} if user_api_key.strip() else {}
     with tab0:
         render_tab_cv_inteligente(profile, overrides)
+
+    with tab_inbox:
+        render_tab_bandeja(profile, overrides)
 
     with tab_track:
         render_tab_postulaciones(profile)

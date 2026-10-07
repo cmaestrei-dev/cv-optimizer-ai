@@ -1,13 +1,16 @@
 """Casos de uso del seguimiento de postulaciones (una transacción por operación, dueño verificado)."""
 
 import hashlib
+import re
 from dataclasses import dataclass
 from datetime import UTC, date, datetime, timedelta
+from urllib.parse import parse_qsl, urlencode, urlparse
 from zoneinfo import ZoneInfo
 
-from sqlalchemy import select
+from sqlalchemy import func, select
 from sqlalchemy.orm import Session, selectinload
 
+from core.capture import canonical_url
 from core.db import session_scope
 from core.profile.models import User
 from core.profile.repository import NotFoundError
@@ -15,6 +18,7 @@ from core.tracking.models import (
     ACTIVE_STATUSES,
     APPLIED_STATUSES,
     STATUSES,
+    TRIAGE_STATUSES,
     Application,
     ApplicationEvent,
     CVDocumentRecord,
@@ -76,6 +80,7 @@ def create_application(
     url: str = "",
     vacancy_text: str = "",
     analysis_json: str = "",
+    match_json: str = "",
     match_score: int | None = None,
     status: str = "guardada",
     applied_on: date | None = None,
@@ -86,7 +91,7 @@ def create_application(
         application = Application(
             user_id=_user_id(s, username), role=role.strip() or "(sin cargo)", company=company.strip(),
             platform=platform, url=url.strip(), vacancy_text=vacancy_text, analysis_json=analysis_json,
-            match_score=match_score, status=status, applied_on=applied_on,
+            match_json=match_json, match_score=match_score, status=status, applied_on=applied_on,
         )
         if status in APPLIED_STATUSES and applied_on:
             application.next_action_on = applied_on + timedelta(days=DEFAULT_FOLLOW_UP_DAYS)
@@ -102,6 +107,14 @@ def get_application(username: str, application_id: int) -> Application:
         return _owned(s, username, application_id)
 
 
+def exists(username: str, application_id: int) -> bool:
+    try:
+        get_application(username, application_id)
+    except NotFoundError:
+        return False
+    return True
+
+
 def list_applications(username: str, statuses: tuple[str, ...] | None = None) -> list[Application]:
     with session_scope() as s:
         query = select(Application).where(Application.user_id == _user_id(s, username))
@@ -109,6 +122,48 @@ def list_applications(username: str, statuses: tuple[str, ...] | None = None) ->
             query = query.where(Application.status.in_(statuses))
         query = query.options(selectinload(Application.events), selectinload(Application.cvs))
         return list(s.scalars(query.order_by(Application.updated_at.desc(), Application.id.desc())))
+
+
+def count(username: str, statuses: tuple[str, ...]) -> int:
+    with session_scope() as s:
+        query = select(func.count(Application.id)).where(
+            Application.user_id == _user_id(s, username), Application.status.in_(statuses)
+        )
+        return s.scalar(query) or 0
+
+
+def set_match(username: str, application_id: int, score: int, match_json: str = "") -> None:
+    """Actualiza la compatibilidad guardada cuando se recalcula con el perfil actual."""
+    with session_scope() as s:
+        application = _owned(s, username, application_id)
+        application.match_score = score
+        if match_json:
+            application.match_json = match_json
+
+
+_TRACKING_PARAMS = re.compile(
+    r"^(utm_\w*|trk\w*|refid|trackingid|position|pagenum|gclid|fbclid|msclkid|mc_\w+|_ga|ref|ref_src|src|source|origin|si)$", re.I
+)
+
+
+def normalize_url(url: str) -> str:
+    """Clave de una vacante: host/ruta de la URL canónica + parámetros que la identifican (p. ej. `?jk=`),
+    sin los de seguimiento. Ante la duda se conserva el parámetro: un duplicado es mejor que mezclar dos vacantes."""
+    parsed = urlparse(canonical_url(url))
+    if not parsed.hostname:
+        return ""
+    key = f"{parsed.hostname.lower().removeprefix('www.')}{parsed.path.rstrip('/')}"
+    params = sorted((k, v) for k, v in parse_qsl(parsed.query) if not _TRACKING_PARAMS.match(k))
+    return f"{key}?{urlencode(params)}" if params else key
+
+
+def find_by_url(username: str, url: str) -> Application | None:
+    key = normalize_url(url)
+    if not key:
+        return None
+    with session_scope() as s:  # sin cargar eventos ni CVs: se llama por cada enlace de la bandeja
+        query = select(Application).where(Application.user_id == _user_id(s, username), Application.url != "")
+        return next((a for a in s.scalars(query.order_by(Application.id.desc())) if normalize_url(a.url) == key), None)
 
 
 def delete_application(username: str, application_id: int) -> None:
@@ -129,7 +184,7 @@ def attach_cv(username: str, application_id: int, *, pdf: bytes, docx: bytes, ma
         application.cvs.append(record)
         s.flush()
         _event(application, "cv_generado", f"CV #{record.id} · huella {record.pdf_sha256[:12]}")
-        if application.status == "guardada":
+        if application.status in (*TRIAGE_STATUSES, "guardada"):
             _set_status(application, "cv_generado")
         return record.id
 
@@ -218,7 +273,11 @@ class Summary:
 
 def summary(username: str, on: date | None = None) -> Summary:
     on = on or today()
-    applications = list_applications(username)
+    # La bandeja (por revisar) y lo descartado sin enviar no son postulaciones.
+    applications = [
+        a for a in list_applications(username)
+        if a.status not in TRIAGE_STATUSES and not (a.status == "descartada" and a.applied_on is None)
+    ]
     by_status = dict.fromkeys(STATUSES, 0)
     for a in applications:
         by_status[a.status] += 1

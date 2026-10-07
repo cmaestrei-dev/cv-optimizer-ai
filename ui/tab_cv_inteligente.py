@@ -1,5 +1,6 @@
 """Pestaña del motor nuevo: analizar → ver compatibilidad y brechas → generar → editar → descargar."""
 
+import json
 import logging
 import uuid
 
@@ -7,6 +8,7 @@ import streamlit as st
 
 from core.capture import CaptureError, capture_vacancy
 from core.engine import pipeline
+from core.engine.cover import write_cover_note
 from core.engine.document import render
 from core.engine.screening import answer_screening
 from core.llm import LLMConfigError, StructuredOutputError, get_llm
@@ -21,6 +23,7 @@ from core.vacancy import NotAVacancyError
 from models import UserProfile
 from services.docx_generator import build_docx_filename
 from services.pdf_generator import build_pdf_filename
+from ui.text import md
 from utils.retry import RetryableError
 
 logger = logging.getLogger(__name__)
@@ -32,7 +35,7 @@ _LEVEL_ICON = {
 }
 
 
-def _run(action, spinner: str):
+def run_engine(action, spinner: str):
     """Ejecuta una llamada al motor mostrando errores comprensibles. Devuelve None si falla."""
     try:
         with st.spinner(spinner):
@@ -67,9 +70,9 @@ def _evidence_label(ref: str, snap: ProfileSnapshot) -> str:
 def _render_match(analysis: pipeline.Analysis, snap: ProfileSnapshot) -> None:
     vacancy, match = analysis.vacancy, analysis.match
     details = " · ".join(p for p in (vacancy.company, vacancy.area, vacancy.modality, vacancy.location) if p)
-    st.markdown(f"#### {vacancy.role}")
+    st.markdown(f"#### {md(vacancy.role)}")
     if details:
-        st.caption(details)
+        st.caption(md(details))
 
     col_score, col_years = st.columns(2)
     with col_score:
@@ -84,11 +87,11 @@ def _render_match(analysis: pipeline.Analysis, snap: ProfileSnapshot) -> None:
     st.markdown("**Requisitos de la vacante**")
     for m in match.requirements:
         kind = "obligatorio" if m.requirement.kind == "obligatorio" else "deseable"
-        line = f"{_LEVEL_ICON[m.level]} **{m.requirement.text}** · _{kind}_"
+        line = f"{_LEVEL_ICON[m.level]} **{md(m.requirement.text)}** · _{kind}_"
         if m.evidence:
-            line += "  \n  ↳ " + "; ".join(_evidence_label(ref, snap) for ref in m.evidence[:3])
+            line += "  \n  ↳ " + "; ".join(md(_evidence_label(ref, snap)) for ref in m.evidence[:3])
         elif m.note:
-            line += f"  \n  ↳ {m.note}"
+            line += f"  \n  ↳ {md(m.note)}"
         st.markdown(line)
 
 
@@ -112,7 +115,7 @@ def _render_gaps(state: dict, profile: UserProfile, overrides: dict[str, str]) -
         )
         for i, m in enumerate(gaps):
             kind = "obligatorio" if m.requirement.kind == "obligatorio" else "deseable"
-            st.markdown(f"{_LEVEL_ICON[m.level]} **{m.requirement.text}** · _{kind}_")
+            st.markdown(f"{_LEVEL_ICON[m.level]} **{md(m.requirement.text)}** · _{kind}_")
             with st.popover(":material/add: Sí lo he hecho: contarlo"), st.form(f"ci_gap_form_{i}"):
                 exp_id = st.selectbox(
                     "¿En qué empleo?", options=[e.id for e in experiences],
@@ -131,7 +134,7 @@ def _add_gap_story(profile: UserProfile, overrides: dict[str, str], exp, match_i
     if not story.strip():
         st.warning("Cuéntanos cómo lo hacías.")
         return
-    candidates = _run(
+    candidates = run_engine(
         lambda: split_into_achievements(
             get_llm("extract", overrides), exp, story, context=f"La vacante pide: {match_item.requirement.text}"
         ),
@@ -152,12 +155,15 @@ def _add_gap_story(profile: UserProfile, overrides: dict[str, str], exp, match_i
 
 def _reanalyze(state: dict, profile: UserProfile, overrides: dict[str, str]) -> None:
     snap = service.snapshot(profile.username)
-    analysis = _run(
+    analysis = run_engine(
         lambda: pipeline.analyze(get_llm("extract", overrides), snap, state["text"], state["images"]),
         "Recalculando con tu perfil actualizado...",
     )
     if analysis is not None:
         state.update(analysis=analysis, snap=snap)
+        if state.get("application_id"):
+            tracking.set_match(profile.username, state["application_id"], analysis.match.score,
+                               json.dumps(pipeline.match_summary(analysis.match), ensure_ascii=False))
         st.session_state.pop("ci_cv", None)
         st.session_state.pop("ci_stale", None)
         st.rerun()
@@ -186,14 +192,14 @@ def _render_cv(state: dict, profile: UserProfile) -> None:
     with col_pdf:
         st.download_button(
             ":material/download: Descargar PDF", data=output.pdf, file_name=filename,
-            mime="application/pdf", type="primary", use_container_width=True, on_click="ignore",
+            mime="application/pdf", type="primary", width="stretch", on_click="ignore",
         )
     with col_docx:
         st.download_button(
             ":material/download: Descargar DOCX (Word)", data=output.docx,
             file_name=build_docx_filename(filename),
             mime="application/vnd.openxmlformats-officedocument.wordprocessingml.document",
-            use_container_width=True, on_click="ignore",
+            width="stretch", on_click="ignore",
         )
 
     with st.expander(":material/preview: Vista previa", expanded=True):
@@ -209,7 +215,7 @@ def _render_cv(state: dict, profile: UserProfile) -> None:
                 rows = [{"Incluir": b.included, "Viñeta": b.text} for b in exp.bullets]
                 edits.append(
                     st.data_editor(
-                        rows, key=f"ci_bullets_{i}", hide_index=True, use_container_width=True,
+                        rows, key=f"ci_bullets_{i}", hide_index=True, width="stretch",
                         column_config={"Viñeta": st.column_config.TextColumn(width="large")},
                         disabled=False, num_rows="fixed",
                     )
@@ -249,6 +255,8 @@ def render_tab_cv_inteligente(profile: UserProfile | None, api_key_overrides: di
                 "fuerte, completa primero tu experiencia en la pestaña «Mi experiencia (importar CV)» (5 minutos)."
             )
 
+    for key, value in st.session_state.pop("ci_pending_inputs", {}).items():
+        st.session_state[key] = value
     _render_capture()
     image = st.file_uploader("Captura de la vacante (opcional)", type=["png", "jpg", "jpeg", "webp"], key="ci_image")
     text = st.text_area("Texto de la vacante", placeholder="Pega aquí la oferta completa...", key="ci_text", height=180)
@@ -266,7 +274,7 @@ def render_tab_cv_inteligente(profile: UserProfile | None, api_key_overrides: di
                 st.warning(":material/warning: Registra al menos una experiencia con sus logros antes de analizar.")
             else:
                 images = (Image(image.getvalue(), image.type),) if image is not None else ()
-                analysis = _run(
+                analysis = run_engine(
                     lambda: pipeline.analyze(get_llm("extract", api_key_overrides), snap, text, images),
                     "Analizando la vacante y tu perfil...",
                 )
@@ -282,6 +290,10 @@ def render_tab_cv_inteligente(profile: UserProfile | None, api_key_overrides: di
     state = st.session_state.get("ci_analysis")
     if not state or state["username"] != profile.username:
         return
+    if state.get("application_id") and not tracking.exists(profile.username, state["application_id"]):
+        state.pop("application_id")  # la borraron en «Mis postulaciones»: se crea de nuevo si hace falta
+        for key in ("saved_hash", "sent", "cv_record_id"):
+            (st.session_state.get("ci_cv") or {}).pop(key, None)
 
     st.divider()
     flash = st.session_state.pop("ci_flash", None)
@@ -294,11 +306,12 @@ def render_tab_cv_inteligente(profile: UserProfile | None, api_key_overrides: di
     _render_match(state["analysis"], state["snap"])
     _render_gaps(state, profile, api_key_overrides)
     _render_screening(state, api_key_overrides)
+    _render_cover(state, api_key_overrides)
     _render_save_vacancy(state, profile)
 
     if st.button(":material/description: Generar CV", type="primary", key="ci_generate"):
         analysis: pipeline.Analysis = state["analysis"]
-        generated = _run(
+        generated = run_engine(
             lambda: pipeline.generate(
                 get_llm("write", api_key_overrides), state["snap"], profile, analysis, extra_focus=focus
             ),
@@ -322,13 +335,25 @@ def render_tab_cv_inteligente(profile: UserProfile | None, api_key_overrides: di
 # ── seguimiento: guardar la vacante y el CV exacto en "Mis postulaciones" ──
 
 
+_REUSABLE = ("por_revisar", "guardada", "cv_generado")  # aún sin enviar: misma vacante, misma postulación
+
+
 def _ensure_application(state: dict, profile: UserProfile, platform: str = "", url: str = "") -> int:
     """Una postulación por análisis: se crea la primera vez y se reutiliza."""
     if state.get("application_id"):
         return state["application_id"]
     source = state.get("source") or {}
     platform, url = platform or source.get("platform", ""), url or source.get("url", "")
+    existing = tracking.find_by_url(profile.username, url) if url else None
     vacancy = state["analysis"].vacancy
+    same = existing is not None and (
+        existing.vacancy_text == state.get("text", "") or existing.role.casefold() == vacancy.role.strip().casefold()
+    )
+    if same and existing.status in _REUSABLE:
+        if existing.status == "por_revisar":
+            tracking.change_status(profile.username, existing.id, "guardada", "Preparada desde «CV inteligente»")
+        state["application_id"] = existing.id
+        return existing.id
     state["application_id"] = tracking.create_application(
         profile.username, role=vacancy.role, company=vacancy.company, platform=platform, url=url,
         vacancy_text=state.get("text", ""), analysis_json=vacancy.model_dump_json(),
@@ -349,6 +374,8 @@ def _render_save_vacancy(state: dict, profile: UserProfile) -> None:
 def _render_tracking(state: dict, cv_state: dict, profile: UserProfile) -> None:
     output = cv_state["cv"].output
     current_hash = tracking.sha256(output.pdf)
+    if not cv_state.get("sent"):
+        _render_checklist(state, cv_state, profile)
     st.markdown("**Seguimiento**")
     if cv_state.get("saved_hash") == current_hash:
         label = "enviado" if cv_state.get("sent") else "guardado"
@@ -373,8 +400,8 @@ def _render_tracking(state: dict, cv_state: dict, profile: UserProfile) -> None:
         )
         url = col_url.text_input("Enlace de la vacante (opcional)", value=source.get("url", ""), key="ci_track_url")
         col_save, col_sent = st.columns(2)
-        save = col_save.form_submit_button(":material/bookmark: Guardar en mis postulaciones", use_container_width=True)
-        sent = col_sent.form_submit_button(":material/send: Ya la envié", type="primary", use_container_width=True)
+        save = col_save.form_submit_button(":material/bookmark: Guardar en mis postulaciones", width="stretch")
+        sent = col_sent.form_submit_button(":material/send: Ya la envié", type="primary", width="stretch")
     if save or sent:
         application_id = _ensure_application(state, profile, platform, url)
         filename = build_pdf_filename(profile, cv_state["role"], cv_state["company"])
@@ -397,7 +424,7 @@ def _render_capture() -> None:
         "Enlace de la vacante (LinkedIn, Computrabajo, Magneto, elempleo o la página de la empresa)",
         key="ci_url", placeholder="https://...",
     )
-    if col_btn.button(":material/download: Traer", key="ci_fetch", use_container_width=True):
+    if col_btn.button(":material/download: Traer", key="ci_fetch", width="stretch"):
         if not url.strip():
             st.warning("Pega primero el enlace de la vacante.")
             return
@@ -432,7 +459,7 @@ def _render_screening(state: dict, overrides: dict[str, str]) -> None:
                                      placeholder="¿Cuántos años de experiencia tiene en facturación?\n¿Cuál es su aspiración salarial?")
             go = st.form_submit_button(":material/auto_awesome: Proponer respuestas")
         if go and questions.strip():
-            answers = _run(
+            answers = run_engine(
                 lambda: answer_screening(get_llm("write", overrides), questions.splitlines(), state["snap"], state["analysis"].vacancy),
                 "Respondiendo con tu perfil...",
             )
@@ -447,3 +474,46 @@ def _render_screening(state: dict, overrides: dict[str, str]) -> None:
                     st.caption(f":material/person: Respóndela tú: {a.note or 'depende de ti'}")
                 elif a.note:
                     st.caption(a.note)
+
+
+def _render_cover(state: dict, overrides: dict[str, str]) -> None:
+    cover = st.session_state.get("ci_cover")
+    if cover and cover["token"] != state.get("token"):
+        cover = None
+    with st.expander(":material/mail: Mensaje para el reclutador", expanded=cover is not None):
+        st.caption(
+            "Para el campo «carta de presentación» del portal, un correo o un mensaje por LinkedIn. "
+            "Solo usa datos de tu perfil."
+        )
+        label = ":material/refresh: Escribir otro" if cover else ":material/auto_awesome: Escribir mensaje"
+        if st.button(label, key="ci_cover_btn"):
+            analysis: pipeline.Analysis = state["analysis"]
+            note = run_engine(
+                lambda: write_cover_note(get_llm("write", overrides), analysis.vacancy, analysis.match, state["snap"]),
+                "Escribiendo el mensaje...",
+            )
+            if note is not None:
+                st.session_state["ci_cover"] = cover = {"token": state.get("token"), "note": note}
+        if cover:
+            st.code(cover["note"].text, language=None, wrap_lines=True)
+            if cover["note"].fallback:
+                st.caption(
+                    ":material/shield: El borrador de la IA mencionaba datos que no están en tu perfil; este mensaje "
+                    "usa solo tus datos. Ajústalo a tu gusto antes de enviarlo."
+                )
+
+
+def _render_checklist(state: dict, cv_state: dict, profile: UserProfile) -> None:
+    """Lo que la persona hace en el portal: la app nunca envía por ella."""
+    filename = build_pdf_filename(profile, cv_state["role"], cv_state["company"])
+    url = (state.get("source") or {}).get("url", "")
+    st.markdown("**Antes de enviar en el portal**")
+    steps = [
+        f"Sube **{md(filename)}** (o su versión DOCX): es el CV hecho para esta vacante.",
+        "Responde las preguntas del formulario (sección «Preguntas del formulario del portal»).",
+        "Si el portal lo permite, pega el mensaje para el reclutador.",
+        "Vuelve aquí y marca **Ya la envié**: queda registrado qué CV exacto enviaste.",
+    ]
+    st.markdown("\n".join(f"{i}. {step}" for i, step in enumerate(steps, start=1)))
+    if url:
+        st.link_button(":material/open_in_new: Abrir la vacante para postular", url)

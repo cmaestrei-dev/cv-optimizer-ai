@@ -113,8 +113,8 @@ def _render_dump(profile: UserProfile, exp: ExperienceSnap, overrides: dict[str,
         st.markdown("**Esto es lo que entendimos.** Desmarca lo que no quieras guardar.")
         chosen = render_candidates_review(state["candidates"], "coach_dump_c_")
         col_save, col_cancel = st.columns(2)
-        save = col_save.form_submit_button(":material/save: Agregar a este empleo", type="primary", use_container_width=True)
-        cancel = col_cancel.form_submit_button("Descartar", use_container_width=True)
+        save = col_save.form_submit_button(":material/save: Agregar a este empleo", type="primary", width="stretch")
+        cancel = col_cancel.form_submit_button("Descartar", width="stretch")
     if save:
         _save(profile, exp, chosen, "coach_dump")
     if cancel:
@@ -147,8 +147,8 @@ def _render_tasks(profile: UserProfile, exp: ExperienceSnap, overrides: dict[str
             if checked:
                 picked.append((task, detail))
         col_save, col_cancel = st.columns(2)
-        save = col_save.form_submit_button(":material/save: Agregar las que marqué", type="primary", use_container_width=True)
-        cancel = col_cancel.form_submit_button("Descartar", use_container_width=True)
+        save = col_save.form_submit_button(":material/save: Agregar las que marqué", type="primary", width="stretch")
+        cancel = col_cancel.form_submit_button("Descartar", width="stretch")
     if cancel:
         st.session_state.pop("coach_tasks", None)
         st.rerun()
@@ -188,8 +188,8 @@ def _render_interview(profile: UserProfile, exp: ExperienceSnap, overrides: dict
                 for i, q in enumerate(questions)
             ]
             col_go, col_cancel = st.columns(2)
-            go = col_go.form_submit_button(":material/auto_fix_high: Proponer mejoras", type="primary", use_container_width=True)
-            cancel = col_cancel.form_submit_button("Cancelar", use_container_width=True)
+            go = col_go.form_submit_button(":material/auto_fix_high: Proponer mejoras", type="primary", width="stretch")
+            cancel = col_cancel.form_submit_button("Cancelar", width="stretch")
         if cancel:
             st.session_state.pop("interview", None)
             st.rerun()
@@ -217,8 +217,8 @@ def _render_interview(profile: UserProfile, exp: ExperienceSnap, overrides: dict
                 st.markdown(f":material/block: ~~{p.proposed}~~")
                 st.caption(f"Descartada: {'; '.join(p.problems)}")
         col_save, col_cancel = st.columns(2)
-        save = col_save.form_submit_button(":material/save: Guardar mejoras", type="primary", use_container_width=True)
-        discard = col_cancel.form_submit_button("Descartar", use_container_width=True)
+        save = col_save.form_submit_button(":material/save: Guardar mejoras", type="primary", width="stretch")
+        discard = col_cancel.form_submit_button("Descartar", width="stretch")
     if save and accepted:
         service.update_experience(profile.username, exp.id, achievements=merge_achievements(state["exp"], accepted))
         st.session_state["exp_flash"] = f"Se mejoraron {len(accepted)} logro(s) de {exp.role}."

@@ -37,6 +37,24 @@ def analyze(
     return Analysis(vacancy, compute_match(vacancy, evidence, profile))
 
 
+def match_only(llm: LLMClient, profile: ProfileSnapshot, vacancy: VacancyAnalysis) -> Analysis:
+    """Recalcula el match de una vacante ya analizada contra el perfil actual (1 llamada a la IA)."""
+    evidence = build_evidence_map(llm, vacancy, profile)
+    return Analysis(vacancy, compute_match(vacancy, evidence, profile))
+
+
+def match_summary(match: MatchResult) -> dict:
+    """Resumen serializable del match para guardarlo con la postulación."""
+    return {
+        "score": match.score,
+        "experience_years": match.experience_years,
+        "required_years": match.required_years,
+        "requirements": [
+            {"text": m.requirement.text, "kind": m.requirement.kind, "level": m.level} for m in match.requirements
+        ],
+    }
+
+
 def generate(
     llm: LLMClient,
     profile: ProfileSnapshot,
