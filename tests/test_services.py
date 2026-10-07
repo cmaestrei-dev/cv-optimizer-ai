@@ -375,16 +375,6 @@ class TestUniversalPrompts:
         assert "carreras de TI" not in prompt
         assert "NO INVENTES" in prompt
 
-    @patch("services.gemini_client.requests.post")
-    def test_cv_import_uses_universal_categories(self, mock_post):
-        from config import SKILL_CATEGORIES
-        from services.gemini_client import GeminiClient
-
-        _mock_ok(mock_post, "EXPERIENCIAS:")
-        GeminiClient(api_key="test").parse_cv_document("cv")
-        prompt = _sent_prompt(mock_post)
-        assert all(cat in prompt for cat in SKILL_CATEGORIES)
-        assert "Lenguajes de Programación" not in prompt
 
 
 class TestParseVacancyHeader:

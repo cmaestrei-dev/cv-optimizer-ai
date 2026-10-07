@@ -8,8 +8,8 @@ from config import (
     GEMINI_MODEL,
     LLM_TIMEOUT_SECONDS,
     PROMPT_VERSION,
-    SKILL_CATEGORIES,
 )
+from core.llm.client import is_auth_failure
 from utils.retry import RetryableError
 
 logger = logging.getLogger(__name__)
@@ -55,6 +55,11 @@ class GeminiClient:
             raise RuntimeError("Gemini tardó demasiado en responder. Intenta de nuevo.") from e
         if response.status_code == 200:
             return response.json()["candidates"][0]["content"]["parts"][0]["text"].strip()
+        elif is_auth_failure(response.status_code, response.text):
+            raise RuntimeError(
+                "La API key de Gemini no es válida o fue revocada. Revisa GEMINI_API_KEY en los "
+                "secretos y que el campo de la barra lateral esté vacío."
+            )
         elif response.status_code in (429, 503):
             raise RetryableError(f"Status {response.status_code}: {response.text[:200]}")
         else:
@@ -456,36 +461,6 @@ ORDEN DE SECCIONES (CRÍTICO):
 REGLA CRÍTICA FINAL: Devuelve EXCLUSIVAMENTE el texto del currículum en formato Markdown, sin ningún texto introductorio, saludo o explicación adicional antes o después del CV generado. No uses bloques de código.
 """
 
-        parts = [{"text": prompt}]
-        payload = self._build_payload(parts)
-        return self._call_api(payload)
-
-    # ── parse_cv_document ──────────────────────────────────────────────
-
-    def parse_cv_document(self, cv_markdown: str) -> str:
-        prompt = f"""Eres un extractor de CVs. Parseá este CV y devolvé EXCLUSIVAMENTE
-el siguiente formato Markdown, sin introducciones ni notas:
-
-EXPERIENCIAS:
-### [Cargo] - [Empresa] | [Periodo] | [País] | [Modalidad]
-- [Logro o responsabilidad 1]
-- [Logro o responsabilidad 2]
-
-SKILLS:
-- **[Nombre]** -> [Categoría]
-
-EDUCACION:
-### [Título o Certificación] - [Institución] | [Periodo]
-- [Descripción opcional]
-
-REGLAS:
-1. Cada experiencia DEBE tener al menos una viñeta de logro.
-2. Las skills DEBEN clasificarse en: {", ".join(SKILL_CATEGORIES)}.
-3. Si un campo no está en el CV, usá "No especificado".
-4. PROHIBIDO inventar datos. Solo extraé lo que esté en el CV.
-
-CV A PROCESAR:
-{cv_markdown}"""
         parts = [{"text": prompt}]
         payload = self._build_payload(parts)
         return self._call_api(payload)

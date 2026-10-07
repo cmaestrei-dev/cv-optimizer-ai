@@ -13,6 +13,7 @@ from sqlalchemy import func, select
 
 from core.db import session_scope, upgrade_schema
 from core.profile import repository as repo
+from core.profile.importer import ImportedCV
 from core.profile.legacy import (
     render_education_markdown,
     render_experiences_markdown,
@@ -211,3 +212,38 @@ def snapshot(username: str) -> ProfileSnapshot:
                 for d in repo.list_education(s, user)
             ),
         )
+
+
+def apply_import(
+    username: str,
+    data: ImportedCV,
+    *,
+    experiences: list[int],
+    skills: list[int],
+    education: list[int],
+    fill_contact: bool = False,
+) -> dict[str, int]:
+    """Guarda lo elegido de una importación en una sola transacción (todo o nada)."""
+    counts = {"experiencias": 0, "logros": 0, "habilidades": 0, "estudios": 0}
+    with session_scope() as s:
+        user = _require_user(s, username)
+        for i in experiences:
+            e = data.experiences[i]
+            repo.add_experience(
+                s, user, role=e.role, company=e.company, period_text=e.period_text,
+                country=e.country, modality=e.modality, achievements=e.achievements,
+            )
+            counts["experiencias"] += 1
+            counts["logros"] += len(e.achievements)
+        for i in skills:
+            if repo.add_skill(s, user, data.skills[i].name, data.skills[i].category):
+                counts["habilidades"] += 1
+        for i in education:
+            e = data.education[i]
+            repo.add_education(s, user, title=e.title, institution=e.institution, period_text=e.period_text)
+            counts["estudios"] += 1
+        if fill_contact:
+            for key in ("full_name", "email", "phone", "linkedin_url"):
+                if not getattr(user, key) and getattr(data, key).strip():
+                    setattr(user, key, getattr(data, key).strip())
+    return counts

@@ -219,20 +219,20 @@ def main():
     tab0, tab1, tab2, tab3, tab4 = st.tabs([
         ":material/auto_awesome: CV inteligente (nuevo)",
         ":material/inbox: Generador clásico",
-        ":material/description: Registrar Experiencia",
+        ":material/description: Mi experiencia (importar CV)",
         ":material/build: Gestionar Habilidades",
         ":material/school: Educación y Certificados",
     ])
 
+    overrides = {"gemini": user_api_key.strip()} if user_api_key.strip() else {}
     with tab0:
-        overrides = {"gemini": user_api_key.strip()} if user_api_key.strip() else {}
         render_tab_cv_inteligente(profile, overrides)
 
     with tab1:
         render_tab_vacante(client, profile)
 
     with tab2:
-        render_tab_experiencia(client, profile)
+        render_tab_experiencia(client, profile, overrides)
 
     with tab3:
         render_tab_habilidades(profile)

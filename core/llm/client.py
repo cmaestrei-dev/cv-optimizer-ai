@@ -14,6 +14,15 @@ from utils.retry import RetryableError, retry_with_backoff
 logger = logging.getLogger(__name__)
 
 _RETRYABLE_STATUS = {429, 500, 502, 503, 504}
+
+
+class LLMAuthError(RuntimeError):
+    """La API key no es válida, fue revocada o no tiene permisos."""
+
+
+def is_auth_failure(status_code: int, body: str) -> bool:
+    # Google responde 400 API_KEY_INVALID (clave clásica) o 401 (clave "AQ." inválida/revocada).
+    return status_code in (401, 403) or (status_code == 400 and "API_KEY_INVALID" in body)
 _CACHE_MAX_ENTRIES = 256
 
 
@@ -130,6 +139,11 @@ class LLMClient:
         except requests.Timeout as e:
             raise RuntimeError(f"{self.spec.name} tardó demasiado en responder.") from e
 
+        if is_auth_failure(response.status_code, response.text):
+            raise LLMAuthError(
+                f"La API key de {self.spec.name} no es válida o fue revocada. Revisa "
+                f"{self.spec.api_key_env} en los secretos y que el campo de la barra lateral esté vacío."
+            )
         if response.status_code in _RETRYABLE_STATUS:
             raise RetryableError(f"{self.spec.name} HTTP {response.status_code}: {response.text[:200]}")
         if response.status_code != 200:
