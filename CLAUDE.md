@@ -16,9 +16,9 @@ streamlit run app.py
 ## Mapa
 
 - `app.py` — entrada, inyecta `st.secrets` en `os.environ` antes de importar el resto, puerta de acceso.
-- `services/` — `gemini_client.py` (prompts por versión, `PROMPT_VERSION`), `pdf_generator.py`.
+- `services/` — `gemini_client.py` (prompts por versión, `PROMPT_VERSION`; v3 es la vigente y universal), `pdf_generator.py`, `docx_generator.py`.
 - `storage/_db.py` — SQLite o Turso (cliente HTTP propio), según `TURSO_DB_URL`/`TURSO_AUTH_TOKEN`.
-- `ui/` — una función `render_*` por pestaña; `profile_form.py` maneja perfiles y login.
+- `ui/` — una función `render_*` por pestaña; `profile_form.py` maneja perfiles y login. Los resultados que deben sobrevivir reruns (CV generado, skills extraídas) van en `st.session_state`.
 - `models/profile.py` — `UserProfile` y hashing de contraseñas.
 
 ## Reglas de seguridad (no romper)

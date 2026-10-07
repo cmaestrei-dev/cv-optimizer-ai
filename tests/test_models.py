@@ -131,3 +131,11 @@ class TestPasswordHashing:
         assert "test@test.com" in html
         assert "secret" not in html
         assert profile.password_hash not in html
+
+
+class TestContactLineText:
+    def test_plain_text_contact_line(self):
+        profile = UserProfile(
+            username="t", email="a@b.co", phone="300", linkedin_url="https://linkedin.com/in/a"
+        )
+        assert profile.contact_line_text == "a@b.co | 300 | linkedin.com/in/a"

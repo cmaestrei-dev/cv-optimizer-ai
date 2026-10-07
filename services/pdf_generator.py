@@ -22,7 +22,7 @@ _EMOJI_PATTERN = re.compile(
 )
 
 
-def _strip_emojis(text: str) -> str:
+def strip_emojis(text: str) -> str:
     return _EMOJI_PATTERN.sub("", text)
 
 CSS_TEMPLATE = """
@@ -158,15 +158,23 @@ def build_pdf_filename(profile: UserProfile, role: str = "", company: str = "") 
     return "_".join(parts) + ".pdf"
 
 
-def parse_vacancy_fields(vacancy_text: str) -> tuple[str, str]:
-    role = ""
-    company = ""
+_VACANCY_HEADER_KEYS = ("ROLE", "COMPANY", "LANGUAGE", "AREA")
+
+
+def parse_vacancy_header(vacancy_text: str) -> dict[str, str]:
+    """Campos 'CLAVE: valor' del análisis de la vacante (ROLE, COMPANY, LANGUAGE, AREA)."""
+    fields: dict[str, str] = {}
     for line in vacancy_text.split("\n"):
-        if line.upper().startswith("ROLE:"):
-            role = line.split(":", 1)[1].strip()
-        elif line.upper().startswith("COMPANY:"):
-            company = line.split(":", 1)[1].strip()
-    return role, company
+        key, sep, value = line.partition(":")
+        key = key.strip(" *#").upper()
+        if sep and key in _VACANCY_HEADER_KEYS and key not in fields:
+            fields[key] = value.strip(" *")
+    return fields
+
+
+def parse_vacancy_fields(vacancy_text: str) -> tuple[str, str]:
+    header = parse_vacancy_header(vacancy_text)
+    return header.get("ROLE", ""), header.get("COMPANY", "")
 
 
 def _deny_all_url_fetcher(url: str, *args, **kwargs):
@@ -177,12 +185,12 @@ def _deny_all_url_fetcher(url: str, *args, **kwargs):
 
 def build_html(cv_markdown: str, profile: UserProfile) -> str:
     cleaned = clean_markdown_output(cv_markdown)
-    cleaned = _strip_emojis(cleaned)
+    cleaned = strip_emojis(cleaned)
     # Escapar "<" anula cualquier HTML crudo; la sintaxis Markdown no lo necesita.
     cleaned = cleaned.replace("<", "&lt;")
     content_html = markdown.markdown(cleaned, tab_length=2)
 
-    full_name = html.escape(_strip_emojis(profile.full_name.upper())) if profile.full_name else ""
+    full_name = html.escape(strip_emojis(profile.full_name.upper())) if profile.full_name else ""
 
     css_filled = CSS_TEMPLATE.replace("{page_size}", PDF_PAGE_SIZE)
 
@@ -197,7 +205,7 @@ def build_html(cv_markdown: str, profile: UserProfile) -> str:
 <body>
 <h1>{full_name}</h1>
 <div class="contacto">
-{_strip_emojis(profile.contact_line_html)}
+{strip_emojis(profile.contact_line_html)}
 </div>
 {content_html}
 </body>
