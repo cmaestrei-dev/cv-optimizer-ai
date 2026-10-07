@@ -1,3 +1,5 @@
+import html
+
 import streamlit as st
 
 from models import UserProfile
@@ -107,16 +109,16 @@ def render_tab_educacion(profile: UserProfile | None) -> None:
                     f'margin-bottom:10px;'
                     f'">'
                     f'<div style="font-size:15px;font-weight:600;color:var(--color-accent,#58a6ff);">'
-                    f'{entry["titulo"]}</div>'
+                    f'{html.escape(entry["titulo"])}</div>'
                     f'<div style="font-size:13px;color:var(--color-text,#c9d1d9);margin-top:2px;">'
-                    f'{entry["institucion"]}</div>'
+                    f'{html.escape(entry["institucion"])}</div>'
                     f'<div style="font-size:12px;color:rgba(201,209,217,0.6);margin-top:1px;">'
-                    f'{entry["periodo"]}</div>'
+                    f'{html.escape(entry["periodo"])}</div>'
                 )
                 if entry["descripcion"].strip():
                     card_html += (
                         f'<div style="font-size:13px;color:rgba(201,209,217,0.8);margin-top:6px;">'
-                        f'{entry["descripcion"].strip()}</div>'
+                        f'{html.escape(entry["descripcion"].strip())}</div>'
                     )
                 card_html += '</div>'
                 st.markdown(card_html, unsafe_allow_html=True)

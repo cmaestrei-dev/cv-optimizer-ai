@@ -3,7 +3,7 @@ import logging
 
 import requests
 
-from config import GEMINI_BASE_URL, GEMINI_MODEL, PROMPT_VERSION
+from config import GEMINI_BASE_URL, GEMINI_MODEL, LLM_TIMEOUT_SECONDS, PROMPT_VERSION
 from utils.retry import RetryableError
 
 logger = logging.getLogger(__name__)
@@ -33,7 +33,14 @@ class GeminiClient:
         return {"contents": [{"parts": parts}]}
 
     def _call_api(self, payload: dict) -> str:
-        response = requests.post(self._base_url, headers=self._headers, json=payload)
+        try:
+            response = requests.post(
+                self._base_url, headers=self._headers, json=payload, timeout=LLM_TIMEOUT_SECONDS
+            )
+        except requests.ConnectionError as e:
+            raise RetryableError(f"Error de conexión con Gemini: {e}") from e
+        except requests.Timeout as e:
+            raise RuntimeError("Gemini tardó demasiado en responder. Intenta de nuevo.") from e
         if response.status_code == 200:
             return response.json()["candidates"][0]["content"]["parts"][0]["text"].strip()
         elif response.status_code in (429, 503):
@@ -268,9 +275,9 @@ INSUMOS:
 
 REGLAS OBLIGATORIAS:
 
-1. TÍTULO EXACTO: El cargo en cada experiencia debe ser IDÉNTICO al ROLE de la
-   vacante, en el MISMO IDIOMA. Si la vacante dice "Support Engineer", usa
-   "Support Engineer". No traduzcas ni adaptes.
+1. CARGOS REALES: Conserva el cargo real de cada experiencia; nunca lo reemplaces
+   por el de la vacante. El Perfil Profesional DEBE abrir con el ROLE exacto de la
+   vacante, en el MISMO IDIOMA (ej: "Support Engineer con...").
 
 2. KEYWORDS OBLIGATORIAS: Toda tecnología, herramienta o plataforma mencionada
    por nombre en los Requirements de la vacante DEBE aparecer al menos UNA VEZ
@@ -299,7 +306,7 @@ ESTRUCTURA EXACTA DE SALIDA:
 [3-4 líneas en 1ª persona, alineadas al ROLE]
 
 ## Experiencia Profesional
-### [ROLE exacto de la vacante] - [Empresa real] | [Periodo] | [País] | [Modalidad]
+### [Cargo real] - [Empresa real] | [Periodo] | [País] | [Modalidad]
 - [Viñeta con tecnología + impacto]
 
 ## Educación
@@ -334,7 +341,7 @@ INSUMOS DISPONIBLES:
 INSTRUCCIONES DE CONSTRUCCIÓN (REGLAS OBLIGATORIAS):
 1. PERFIL PROFESIONAL: Redacta un Perfil Profesional conciso (3-4 líneas) en primera persona, que posicione al profesional estratégicamente hacia el ROL de la VACANTE OBJETIVO. Utiliza las palabras clave más relevantes de la vacante.
 
-2. MATCH DE TÍTULOS (CRÍTICO): Reemplazá el nombre del cargo de CADA experiencia laboral por el cargo EXACTO que aparece en el ROLE de la vacante objetivo. Si la vacante pide "Support Engineer", TODAS las experiencias deben titularse "Support Engineer". Solo mantené el cargo original si pertenece a un rubro o industria radicalmente distinto. Esta regla tiene máxima prioridad.
+2. CARGOS REALES + MATCH DE TÍTULO (CRÍTICO): Conserva el nombre REAL del cargo de cada experiencia tal como aparece en la base maestra; nunca lo reemplaces por el de la vacante (falsificar un cargo se descubre al verificar referencias). Para el match ATS, el Perfil Profesional DEBE abrir con el cargo EXACTO del ROLE de la vacante, en su mismo idioma (ej: "Support Engineer con 3 años de experiencia en...").
 
 3. SELECCIÓN DE CONTENIDO INTELIGENTE: Selecciona entre 2 y 3 experiencias laborales de la base maestra que más valor agreguen a la VACANTE OBJETIVO. Si el candidato solo tiene 1 experiencia registrada, usa esa única. No inventes tecnologías, empleos o educación que no estén en los insumos.
 
@@ -354,7 +361,7 @@ INSTRUCCIONES DE CONSTRUCCIÓN (REGLAS OBLIGATORIAS):
 
 11. ESTRUCTURA Y ENCABEZADOS:
     - Utiliza títulos H2 para las secciones principales: "Perfil Profesional", "Experiencia Laboral", "Educación" y "Technical Skills".
-    - Para cada entrada en la sección "Experiencia Laboral", utiliza un H3 que contenga el cargo (preferiblemente el de la vacante si aplica) y la empresa real, seguido del Periodo, País y Modalidad. Ejemplo: ### Senior Software Engineer - Tech Solutions Inc. | Enero 2024 - Presente | Colombia | Remoto
+    - Para cada entrada en la sección "Experiencia Laboral", utiliza un H3 que contenga el cargo real y la empresa real, seguido del Periodo, País y Modalidad. Ejemplo: ### Senior Software Engineer - Tech Solutions Inc. | Enero 2024 - Presente | Colombia | Remoto
     - Para cada entrada en la sección "Educación", utiliza un H3 en UNA SOLA LÍNEA: ### [Título] - [Institución] | [Periodo]. Sin viñetas ni descripciones debajo.
     - La sección "Technical Skills" debe ser una lista de viñetas agrupadas por categorías cuando sea posible, con las habilidades más relevantes para la vacante primero.
 
@@ -391,7 +398,7 @@ INSTRUCCIONES DE CONSTRUCCIÓN (REGLAS OBLIGATORIAS):
 
 2. SELECCIÓN DE CONTENIDO INTELIGENTE: Selecciona inteligentemente sólo las experiencias y habilidades de las bases maestras que agreguen valor directo o indirecto a la VACANTE OBJETIVO. No inventes tecnologías, empleos o educación que no estén en los insumos.
 
-3. MATCH DE TÍTULOS: Siempre que sea posible, reemplaza el nombre del cargo de cada experiencia laboral por el cargo EXACTO que aparece en el ROLE de la vacante objetivo. Si el rol real era radicalmente distinto, mantenlo pero adáptalo al lenguaje y nomenclatura de la vacante.
+3. CARGOS REALES: Conserva el cargo real de cada experiencia laboral; nunca lo reemplaces por el de la vacante. Para el match ATS, abre el Perfil Profesional con el cargo EXACTO del ROLE de la vacante.
 
 4. RELEVANCIA ESTRICTA: Omite cualquier experiencia, habilidad o educación que no aporte valor directo o indirecto a la vacante. Es preferible un CV corto y preciso que uno largo con relleno irrelevante.
 
@@ -401,7 +408,7 @@ INSTRUCCIONES DE CONSTRUCCIÓN (REGLAS OBLIGATORIAS):
 
 7. ESTRUCTURA Y ENCABEZADOS:
     - Utiliza títulos H2 para las secciones principales: "Perfil Profesional", "Educación", "Experiencia Laboral" y "Technical Skills".
-    - Para cada entrada en la sección "Experiencia Laboral", utiliza un H3 que contenga el cargo (preferiblemente el de la vacante si aplica) y la empresa real, seguido del Periodo, País y Modalidad. Ejemplo: ### Senior Software Engineer - Tech Solutions Inc. | Enero 2024 - Presente | Colombia | Remoto
+    - Para cada entrada en la sección "Experiencia Laboral", utiliza un H3 que contenga el cargo real y la empresa real, seguido del Periodo, País y Modalidad. Ejemplo: ### Senior Software Engineer - Tech Solutions Inc. | Enero 2024 - Presente | Colombia | Remoto
     - Para cada entrada en la sección "Educación", utiliza un H3 con el formato: ### [Nombre de la Certificación o Título] - [Institución] | [Año o Periodo]
     - La sección "Technical Skills" debe ser una lista de viñetas agrupadas por categorías cuando sea posible, con las habilidades más relevantes para la vacante primero.
 

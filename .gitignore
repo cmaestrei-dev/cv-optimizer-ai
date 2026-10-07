@@ -11,3 +11,8 @@ output/
 .opencode/
 .impeccable/
 
+
+# Datos personales de CV (nunca versionar)
+/base_conocimiento.md
+/educacion.md
+/habilidades.md

@@ -1,3 +1,4 @@
+import html
 import logging
 import re
 
@@ -168,12 +169,20 @@ def parse_vacancy_fields(vacancy_text: str) -> tuple[str, str]:
     return role, company
 
 
+def _deny_all_url_fetcher(url: str, *args, **kwargs):
+    # El CV no necesita recursos externos. Sin esto, HTML inyectado (perfil o salida del LLM)
+    # puede incrustar archivos del servidor (file://) o hacer peticiones internas (SSRF).
+    raise ValueError(f"Recurso externo bloqueado: {url}")
+
+
 def build_html(cv_markdown: str, profile: UserProfile) -> str:
     cleaned = clean_markdown_output(cv_markdown)
     cleaned = _strip_emojis(cleaned)
+    # Escapar "<" anula cualquier HTML crudo; la sintaxis Markdown no lo necesita.
+    cleaned = cleaned.replace("<", "&lt;")
     content_html = markdown.markdown(cleaned, tab_length=2)
 
-    full_name = _strip_emojis(profile.full_name.upper()) if profile.full_name else ""
+    full_name = html.escape(_strip_emojis(profile.full_name.upper())) if profile.full_name else ""
 
     css_filled = CSS_TEMPLATE.replace("{page_size}", PDF_PAGE_SIZE)
 
@@ -201,5 +210,5 @@ def generate_pdf(
 ) -> bytes:
     html_content = build_html(cv_markdown, profile)
 
-    doc = HTML(string=html_content)
+    doc = HTML(string=html_content, url_fetcher=_deny_all_url_fetcher)
     return doc.write_pdf(target=None)
