@@ -1,7 +1,7 @@
 # Roadmap y estado del proyecto
 
 > Documento vivo. Se actualiza al terminar cada cambio relevante: qué existe, qué se hizo, qué sigue.
-> Última actualización: 2026-10-07 (entrega 2b de la Fase 1)
+> Última actualización: 2026-10-07 (entrega 2c de la Fase 1)
 
 ## Prioridad actual
 
@@ -55,23 +55,26 @@
 - [x] `core/vacancy.py`: análisis estructurado (requisitos obligatorios vs deseables, categoría, años, modalidad, keywords) con puente al formato actual
 - [x] Prueba real contra Gemini (2,3 s) y DeepSeek (8,4 s): ambos extraen bien cargo, área, años y separan obligatorios de deseables
 
-*2b — Perfil maestro estructurado* (rama `claude/motor-2b-perfil`)
+*2b — Perfil maestro estructurado* (PR #4, fusionado; migración en producción confirmada: 5 perfiles)
 - [x] Modelo de datos: usuarios, experiencias (cargo, empresa, periodo con fechas interpretadas, país, modalidad), logros atómicos, habilidades (sin duplicados ignorando mayúsculas/tildes), educación
 - [x] SQLAlchemy + Alembic sobre SQLite (local/tests) y Postgres (producción); probado contra Postgres real
 - [x] Capa de servicio (`core/profile/service.py`): cada operación con su propia transacción y verificación de dueño
 - [x] Migración determinista y única desde el modelo anterior al arrancar la app (las tablas viejas quedan como respaldo); probada con datos reales: 38/38 logros idénticos, 100% de fechas interpretadas
 - [x] Pestañas de perfil, experiencia, habilidades, educación y vacante sobre el modelo nuevo; logros editables uno por uno; "Guardar tal cual" sin IA
 - [x] La app se niega a arrancar desplegada sin `DATABASE_URL` (evita guardar en un archivo temporal)
-- [ ] **(usuario)** Poner `DATABASE_URL` de Neon en los secretos de Streamlit Cloud antes del merge
+- [x] **(usuario)** Poner `DATABASE_URL` de Neon en los secretos de Streamlit Cloud antes del merge
 - [ ] Retirar Turso y `storage/` cuando la migración en producción esté confirmada
 
-*2c — Motor de CV*
-- [ ] Match requisito ↔ evidencia (léxico + embeddings), puntaje y brechas visibles antes de generar
-- [ ] Selección de logros (mochila + MMR) con límite de espacio
-- [ ] Redacción controlada (solo viñetas y resumen; cargos/empresas/fechas salen de los datos)
-- [ ] Verificación de respaldo (herramientas y cifras deben existir en el logro original)
-- [ ] Render con ajuste medido a 1 página (conteo real de páginas)
-- [ ] Edición de viñetas antes de exportar
+*2c — Motor de CV* (rama `claude/motor-2c`)
+- [x] Match requisito ↔ evidencia: la IA propone qué logro/habilidad/estudio respalda cada requisito (y cada función del cargo); el código valida las referencias, corrige años con las fechas reales y calcula el puntaje (obligatorio 1.0, deseable 0.4)
+- [x] Selección determinista: siempre el cargo más reciente, ≥1 logro por cargo, mochila por líneas + diversidad (MMR) + equilibrio entre cargos; habilidades y estudios citados primero
+- [x] Redacción controlada: la IA solo reescribe viñetas y resumen; cargos, empresas, fechas, estudios y habilidades salen de los datos
+- [x] Verificación determinista: cifras, siglas y nombres propios deben existir en el logro original; 1 corrección y si no, texto original. Resumen no respaldado → resumen armado con datos reales
+- [x] Render desde datos estructurados (todo escapado) con ajuste medido a 1 página (cuenta páginas reales del PDF y quita lo menos relevante); DOCX del mismo documento
+- [x] Pestaña "CV inteligente (nuevo)": puntaje, requisitos con su evidencia, brechas, edición de viñetas antes de descargar; el generador clásico queda como respaldo
+- [x] Probado de punta a punta con Gemini real (perfil administrativo ficticio): 88/100, 1 página, 0 datos inventados
+- [ ] Validación con vacantes y perfiles reales de los usuarios
+- [ ] Retirar el generador clásico cuando el nuevo esté validado
 
 *2d — Extras*
 - [ ] Entrevista guiada para extraer logros con cifras reales
@@ -126,11 +129,15 @@
 | 2026-10-07 | La UI nunca mantiene una sesión de BD abierta: capa de servicio con una transacción por operación | `st.rerun()` lanza una `BaseException` que descartaría los cambios en silencio dentro de una sesión |
 | 2026-10-07 | Columnas de texto libre sin límite de longitud | Postgres rechaza textos más largos que la columna; SQLite no, y los tests no lo detectarían |
 | 2026-10-07 | No usar el CLI/MCP de Neon (`neon deploy`, `neon.ts`) | Solo se necesita la cadena de conexión; el despliegue es Streamlit Cloud |
+| 2026-10-07 | Cobertura de requisitos con un "mapa de evidencias" de la IA (validado por código), no con embeddings | Decidir si una evidencia cumple un requisito exige razonamiento; los umbrales de similitud no sirven para eso. Además explica qué logro cubre cada requisito y no requiere otra API ni vectores |
+| 2026-10-07 | Las funciones del cargo suman relevancia a los logros pero no puntaje | El puntaje debe reflejar requisitos (lo que filtra un reclutador); las funciones ayudan a elegir qué contar |
+| 2026-10-07 | El HTML del CV se arma desde datos estructurados, nunca desde Markdown de la IA | Elimina por diseño la inyección de HTML y permite medir/recortar por elemento |
+| 2026-10-07 | Generador nuevo en pestaña aparte; el clásico se mantiene hasta validar | Los usuarios están postulando ya; cero riesgo de romper lo que funciona |
 | 2026-10-07 | No purgar el historial git de los `.md` personales | Solo contenido de CV (sin contacto ni IDs); purgar exige force push a `main` público y GitHub mantiene accesibles los commits huérfanos por SHA |
 
 ## Próximo paso
 
-1. Usuario: poner `DATABASE_URL` (Neon) en los secretos de Streamlit Cloud (el `.env` local ya está listo y la conexión a Neon verificada); confirmar rotación de claves.
-2. Fusionar el PR de 2b → la app migra los perfiles de Turso a Neon al arrancar; verificar en la app.
-3. Validar el paso 1 con vacantes reales (en curso).
-4. Entrega 2c: motor de CV (match y brechas, selección, redacción controlada, verificación, ajuste a 1 página).
+1. Revisar y fusionar el PR de 2c; probar "CV inteligente (nuevo)" con vacantes reales (perfil del usuario y de su pareja, que aún debe crear su perfil).
+2. Entrega 2d: entrevista guiada para extraer logros con cifras (también resuelve que usuarios nuevos no sepan usar la app), set de evaluación, ESCO.
+3. Retirar el generador clásico, `services/gemini_client.py`, `storage/` y Turso cuando el motor nuevo esté validado.
+4. Fase 2: seguimiento de postulaciones (cada CV generado se guarda con su vacante).

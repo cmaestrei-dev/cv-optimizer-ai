@@ -18,6 +18,7 @@ from core.db import database_url
 from core.profile import service as profile_service
 from services.gemini_client import GeminiClient
 from ui.profile_form import render_profile_sidebar
+from ui.tab_cv_inteligente import render_tab_cv_inteligente
 from ui.tab_educacion import render_tab_educacion
 from ui.tab_experiencia import render_tab_experiencia
 from ui.tab_habilidades import render_tab_habilidades
@@ -215,12 +216,17 @@ def main():
 
     client = GeminiClient(api_key=gemini_api_key.strip()) if gemini_api_key else None
 
-    tab1, tab2, tab3, tab4 = st.tabs([
-        ":material/inbox: Vacante y Generar CV",
+    tab0, tab1, tab2, tab3, tab4 = st.tabs([
+        ":material/auto_awesome: CV inteligente (nuevo)",
+        ":material/inbox: Generador clásico",
         ":material/description: Registrar Experiencia",
         ":material/build: Gestionar Habilidades",
         ":material/school: Educación y Certificados",
     ])
+
+    with tab0:
+        overrides = {"gemini": user_api_key.strip()} if user_api_key.strip() else {}
+        render_tab_cv_inteligente(profile, overrides)
 
     with tab1:
         render_tab_vacante(client, profile)
