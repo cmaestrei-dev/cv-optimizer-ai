@@ -102,7 +102,7 @@ def _render_review(profile: UserProfile, plan: ImportPlan) -> None:
         st.session_state.pop(_STATE, None)
         st.session_state["exp_flash"] = (
             "Importado: " + ", ".join(f"{v} {k}" for k, v in counts.items())
-            + ". Siguiente paso: mejora tus logros con la entrevista guiada (justo aquí abajo)."
+            + ". Siguiente paso: completa y mejora tus logros (justo aquí abajo): LinkedIn suele quedarse corto."
         )
         st.rerun()
     if cancel:
