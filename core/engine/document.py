@@ -5,7 +5,7 @@ escapa. El ajuste a N páginas se hace midiendo el PDF real y quitando lo menos 
 """
 
 import html
-from dataclasses import dataclass, field
+from dataclasses import asdict, dataclass, field
 
 from weasyprint import HTML
 
@@ -77,6 +77,21 @@ class CVDocument:
 
     def visible_experiences(self) -> list[CVExperience]:
         return [e for e in self.experiences if e.included]
+
+    def to_dict(self) -> dict:
+        return asdict(self)
+
+    @classmethod
+    def from_dict(cls, data: dict) -> "CVDocument":
+        return cls(
+            language=data["language"],
+            summary=data["summary"],
+            experiences=[
+                CVExperience(**{**e, "bullets": [CVBullet(**b) for b in e["bullets"]]}) for e in data["experiences"]
+            ],
+            education=list(data["education"]),
+            skill_groups=[(label, list(items)) for label, items in data["skill_groups"]],
+        )
 
     def to_markdown(self) -> str:
         t = self.titles

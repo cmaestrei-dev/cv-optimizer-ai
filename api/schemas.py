@@ -2,6 +2,7 @@
 
 from datetime import date, datetime
 from typing import Annotated, Literal
+from urllib.parse import urlsplit
 
 from pydantic import AfterValidator, BaseModel, Field, StringConstraints
 
@@ -9,8 +10,17 @@ from core.tracking.models import PLATFORMS, STATUSES, TRIAGE_STATUSES
 
 
 def _http_or_empty(value: str) -> str:
-    if value and not value.startswith(("https://", "http://")):
+    if not value:
+        return value
+    if not value.startswith(("https://", "http://")):
         raise ValueError("El enlace debe empezar por https:// o http://")
+    try:
+        parsed = urlsplit(value)
+        if not parsed.hostname:
+            raise ValueError("El enlace no es válido")
+        _ = parsed.port  # lanza ValueError si el puerto no es válido
+    except ValueError as e:
+        raise ValueError("El enlace no es válido") from e
     return value
 
 
@@ -234,3 +244,144 @@ class MarketOut(BaseModel):
     platforms: list[PlatformStatsOut]
     keywords: list[KeywordOut]
     score_buckets: list[ScoreBucketOut]
+
+
+# ── motor: vacantes, análisis, CV y ayudas ────────────────────────────
+
+
+class VacancyIn(BaseModel):
+    text: Annotated[str, StringConstraints(strip_whitespace=True, max_length=20000)] = ""
+    url: Url = ""
+    prepare: bool = Field(default=False, description="true: lista para postular; false: a la bandeja")
+
+
+class EvidenceOut(BaseModel):
+    ref: str
+    label: str
+
+
+class RequirementOut(BaseModel):
+    index: int
+    text: str
+    kind: str
+    category: str
+    level: str = Field(description="cubre | parcial | no")
+    note: str
+    evidence: list[EvidenceOut]
+
+
+class MatchOut(BaseModel):
+    score: int
+    experience_years: float
+    required_years: float | None
+    meets_years: bool | None
+    requirements: list[RequirementOut]
+
+
+class AnalysisOut(BaseModel):
+    application_id: int
+    status: str
+    vacancy: dict
+    match: MatchOut | None = Field(description="null: nunca se calculó (POST /applications/{id}/analysis)")
+    stale: bool = Field(description="Tu perfil cambió desde el análisis: actualízalo antes de generar")
+
+
+class GenerateCVIn(BaseModel):
+    focus: Text = ""
+
+
+class JobOut(BaseModel):
+    id: int
+    kind: str
+    status: str = Field(description="queued | running | done | failed")
+    result: dict | None
+    error: str
+    created_at: datetime
+    finished_at: datetime | None
+
+
+class InboxIn(BaseModel):
+    links: Annotated[str, StringConstraints(max_length=20000)] = Field(description="Enlaces, uno por línea o mezclados")
+
+
+class InboxOut(BaseModel):
+    job: JobOut
+    accepted: list[str]
+    skipped: int = Field(description="Enlaces de más (se procesan 10 por carga)")
+
+
+class CVBulletEdit(BaseModel):
+    text: Annotated[str, StringConstraints(strip_whitespace=True, max_length=1000)]
+    included: bool = True
+
+
+class CVExperienceEdit(BaseModel):
+    bullets: list[CVBulletEdit] = Field(max_length=40)
+
+
+class CVEditIn(BaseModel):
+    summary: Annotated[str, StringConstraints(strip_whitespace=True, max_length=2000)]
+    experiences: list[CVExperienceEdit] = Field(max_length=30)
+
+
+class CVResultOut(BaseModel):
+    cv_id: int
+    filename: str
+    pages: int
+    trimmed: list[str] = Field(description="Lo que se quitó para caber en 1 página")
+
+
+class CVDetailOut(CVOut):
+    application_id: int
+    markdown: str
+    document: dict | None = Field(description="Documento estructurado (null: CV anterior a la edición)")
+
+
+class ScreeningIn(BaseModel):
+    questions: list[Annotated[str, StringConstraints(strip_whitespace=True, min_length=1, max_length=500)]] = Field(
+        min_length=1, max_length=15)
+
+
+class ScreeningAnswerOut(BaseModel):
+    question: str
+    answer: str
+    needs_you: bool
+    note: str
+
+
+class CoverOut(BaseModel):
+    text: str
+    fallback: bool = Field(description="La IA inventó algo y se usó un mensaje con solo datos reales")
+    problems: list[str]
+
+
+class GapIn(BaseModel):
+    requirement: int = Field(ge=0, description="Índice del requisito (0 = el primero)")
+    experience_id: int
+    story: Annotated[str, StringConstraints(strip_whitespace=True, min_length=1, max_length=3000)]
+
+
+class CandidateOut(BaseModel):
+    text: str
+    problems: list[str]
+    duplicate_of: str | None
+    added: bool
+
+
+class GapOut(BaseModel):
+    added: int
+    candidates: list[CandidateOut]
+
+
+class TitlesOut(BaseModel):
+    titles: list[str]
+
+
+class SearchLinkOut(BaseModel):
+    portal: str
+    url: str
+
+
+class UsageOut(BaseModel):
+    used_today: int
+    daily_limit: int

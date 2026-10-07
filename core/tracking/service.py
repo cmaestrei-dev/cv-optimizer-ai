@@ -81,6 +81,7 @@ def create_application(
     vacancy_text: str = "",
     analysis_json: str = "",
     match_json: str = "",
+    evidence_json: str = "",
     match_score: int | None = None,
     status: str = "guardada",
     applied_on: date | None = None,
@@ -91,7 +92,8 @@ def create_application(
         application = Application(
             user_id=_user_id(s, username), role=role.strip() or "(sin cargo)", company=company.strip(),
             platform=platform, url=url.strip(), vacancy_text=vacancy_text, analysis_json=analysis_json,
-            match_json=match_json, match_score=match_score, status=status, applied_on=applied_on,
+            match_json=match_json, evidence_json=evidence_json, match_score=match_score, status=status,
+            applied_on=applied_on,
         )
         if status in APPLIED_STATUSES and applied_on:
             application.next_action_on = applied_on + timedelta(days=DEFAULT_FOLLOW_UP_DAYS)
@@ -138,13 +140,21 @@ def count(username: str, statuses: tuple[str, ...]) -> int:
         return s.scalar(query) or 0
 
 
-def set_match(username: str, application_id: int, score: int, match_json: str = "") -> None:
-    """Actualiza la compatibilidad guardada cuando se recalcula con el perfil actual."""
+def set_match(
+    username: str, application_id: int, score: int, match_json: str = "", evidence_json: str = "",
+    analysis_json: str = "",
+) -> None:
+    """Actualiza la compatibilidad guardada. Las evidencias apuntan a los requisitos por número: si la
+    vacante se volvió a leer con la IA, su análisis (`analysis_json`) debe guardarse junto con ellas."""
     with session_scope() as s:
         application = _owned(s, username, application_id)
+        if analysis_json:
+            application.analysis_json = analysis_json
         application.match_score = score
         if match_json:
             application.match_json = match_json
+        if evidence_json:
+            application.evidence_json = evidence_json
 
 
 _TRACKING_PARAMS = re.compile(
@@ -155,10 +165,14 @@ _TRACKING_PARAMS = re.compile(
 def normalize_url(url: str) -> str:
     """Clave de una vacante: host/ruta de la URL canónica + parámetros que la identifican (p. ej. `?jk=`),
     sin los de seguimiento. Ante la duda se conserva el parámetro: un duplicado es mejor que mezclar dos vacantes."""
-    parsed = urlparse(canonical_url(url))
-    if not parsed.hostname:
+    try:
+        parsed = urlparse(canonical_url(url))
+        hostname = parsed.hostname
+    except ValueError:  # enlace mal formado: no se compara con nada
         return ""
-    key = f"{parsed.hostname.lower().removeprefix('www.')}{parsed.path.rstrip('/')}"
+    if not hostname:
+        return ""
+    key = f"{hostname.lower().removeprefix('www.')}{parsed.path.rstrip('/')}"
     params = sorted((k, v) for k, v in parse_qsl(parsed.query) if not _TRACKING_PARAMS.match(k))
     return f"{key}?{urlencode(params)}" if params else key
 
@@ -180,11 +194,14 @@ def delete_application(username: str, application_id: int) -> None:
 # ── CVs: el correcto para cada vacante ───────────────────────────────
 
 
-def attach_cv(username: str, application_id: int, *, pdf: bytes, docx: bytes, markdown: str, language: str, filename: str) -> int:
+def attach_cv(
+    username: str, application_id: int, *, pdf: bytes, docx: bytes, markdown: str, language: str, filename: str,
+    document_json: str = "",
+) -> int:
     with session_scope() as s:
         application = _owned(s, username, application_id)
         record = CVDocumentRecord(
-            pdf=pdf, docx=docx, markdown=markdown, language=language, filename=filename,
+            pdf=pdf, docx=docx, markdown=markdown, language=language, filename=filename, document_json=document_json,
             pdf_sha256=sha256(pdf), docx_sha256=sha256(docx),
         )
         application.cvs.append(record)
