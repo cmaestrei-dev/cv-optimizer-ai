@@ -29,8 +29,8 @@ Para persistencia local (SQLite), no se requiere configuración adicional. La ba
 2. Conecta el repo en [share.streamlit.io](https://share.streamlit.io)
 3. Configura los siguientes secretos en el dashboard de Streamlit Cloud:
    - `GEMINI_API_KEY` — tu API key de Google Gemini
-   - `TURSO_DB_URL` — URL de tu base de datos Turso
-   - `TURSO_AUTH_TOKEN` — token de autenticación de Turso
+   - `DATABASE_URL` — cadena de conexión de Postgres ([Neon](https://neon.tech), gratuito): **obligatoria** en despliegue
+   - `TURSO_DB_URL` / `TURSO_AUTH_TOKEN` — solo mientras se migran los datos del modelo anterior
    - Opcional, motor nuevo: `LLM_EXTRACT` / `LLM_WRITE` (`proveedor` o `proveedor:modelo`, p. ej. `deepseek:deepseek-flash`) y `DEEPSEEK_API_KEY`
    - `APP_ACCESS_PASSWORD` — contraseña de acceso a la app (**obligatoria** si usas Turso: sin ella la app queda cerrada)
 
