@@ -56,28 +56,6 @@ class VacancyAnalysis(BaseModel):
     def must_haves(self) -> list[Requirement]:
         return [r for r in self.requirements if r.kind == "obligatorio"]
 
-    def to_legacy_markdown(self) -> str:
-        """Formato que consumen los prompts actuales (ROLE/COMPANY/LANGUAGE/AREA + secciones)."""
-        lines = [
-            f"ROLE: {self.role}",
-            f"COMPANY: {self.company or 'No especificada'}",
-            f"LANGUAGE: {self.language}",
-            f"AREA: {self.area}",
-            "",
-            "About the Role:",
-            self.summary,
-            "",
-            "Requirements:",
-            *[
-                f"- {r.text}{' (deseable)' if r.kind == 'deseable' else ''}"
-                for r in self.requirements
-            ],
-            "",
-            "Responsibilities:",
-            *[f"- {r}" for r in self.responsibilities],
-        ]
-        return "\n".join(lines).strip()
-
 
 _PROMPT = """Analiza esta oferta de empleo (texto y/o imagen), de cualquier profesión o sector, \
 y extrae sus datos como un sistema ATS.

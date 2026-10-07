@@ -1,11 +1,6 @@
-import html
 import logging
 import re
 
-import markdown
-from weasyprint import HTML
-
-from config import PDF_PAGE_SIZE
 from models import UserProfile
 
 logger = logging.getLogger(__name__)
@@ -153,65 +148,7 @@ def build_pdf_filename(profile: UserProfile, role: str = "", company: str = "") 
     return "_".join(parts) + ".pdf"
 
 
-_VACANCY_HEADER_KEYS = ("ROLE", "COMPANY", "LANGUAGE", "AREA")
-
-
-def parse_vacancy_header(vacancy_text: str) -> dict[str, str]:
-    """Campos 'CLAVE: valor' del análisis de la vacante (ROLE, COMPANY, LANGUAGE, AREA)."""
-    fields: dict[str, str] = {}
-    for line in vacancy_text.split("\n"):
-        key, sep, value = line.partition(":")
-        key = key.strip(" *#").upper()
-        if sep and key in _VACANCY_HEADER_KEYS and key not in fields:
-            fields[key] = value.strip(" *")
-    return fields
-
-
-def parse_vacancy_fields(vacancy_text: str) -> tuple[str, str]:
-    header = parse_vacancy_header(vacancy_text)
-    return header.get("ROLE", ""), header.get("COMPANY", "")
-
-
-def _deny_all_url_fetcher(url: str, *args, **kwargs):
+def deny_all_url_fetcher(url: str, *args, **kwargs):
     # El CV no necesita recursos externos. Sin esto, HTML inyectado (perfil o salida del LLM)
-    # puede incrustar archivos del servidor (file://) o hacer peticiones internas (SSRF).
+    # podría incrustar archivos del servidor (file://) o hacer peticiones internas (SSRF).
     raise ValueError(f"Recurso externo bloqueado: {url}")
-
-
-def build_html(cv_markdown: str, profile: UserProfile) -> str:
-    cleaned = clean_markdown_output(cv_markdown)
-    cleaned = strip_emojis(cleaned)
-    # Escapar "<" anula cualquier HTML crudo; la sintaxis Markdown no lo necesita.
-    cleaned = cleaned.replace("<", "&lt;")
-    content_html = markdown.markdown(cleaned, tab_length=2)
-
-    full_name = html.escape(strip_emojis(profile.full_name.upper())) if profile.full_name else ""
-
-    css_filled = CSS_TEMPLATE.replace("{page_size}", PDF_PAGE_SIZE)
-
-    return f"""<!DOCTYPE html>
-<html lang="es">
-<head>
-<meta charset="utf-8">
-<style>
-{css_filled}
-</style>
-</head>
-<body>
-<h1>{full_name}</h1>
-<div class="contacto">
-{strip_emojis(profile.contact_line_html)}
-</div>
-{content_html}
-</body>
-</html>"""
-
-
-def generate_pdf(
-    cv_markdown: str,
-    profile: UserProfile,
-) -> bytes:
-    html_content = build_html(cv_markdown, profile)
-
-    doc = HTML(string=html_content, url_fetcher=_deny_all_url_fetcher)
-    return doc.write_pdf(target=None)

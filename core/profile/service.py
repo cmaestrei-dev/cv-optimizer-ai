@@ -7,20 +7,13 @@ descartaría los cambios sin avisar.
 
 import logging
 import threading
-from collections.abc import Callable
 
 from sqlalchemy import func, select
 
 from core.db import session_scope, upgrade_schema
 from core.profile import repository as repo
 from core.profile.importer import ImportedCV
-from core.profile.legacy import (
-    render_education_markdown,
-    render_experiences_markdown,
-    render_skills_markdown,
-)
-from core.profile.migration import UserMigrationReport, migrate_all
-from core.profile.models import AppMeta, Education, Experience, Skill, User
+from core.profile.models import Education, Experience, Skill, User
 from core.profile.snapshot import (
     AchievementSnap,
     EducationSnap,
@@ -31,37 +24,17 @@ from core.profile.snapshot import (
 
 logger = logging.getLogger(__name__)
 
-_LEGACY_MIGRATED_KEY = "legacy_migrated"
 _ready_lock = threading.Lock()
 _ready = False
 
 
-def ensure_ready(
-    legacy_usernames: Callable[[], list[str]],
-    legacy_export: Callable[[str], dict],
-    *,
-    migrate_legacy: bool = True,
-) -> list[UserMigrationReport]:
-    """Aplica migraciones de esquema y, una única vez, importa los perfiles del almacenamiento anterior.
-
-    Con migrate_legacy=False solo prepara el esquema y NO marca la migración como hecha, para que
-    la fuente correcta pueda migrar después.
-    """
+def ensure_ready() -> None:
+    """Aplica las migraciones de esquema pendientes (una vez por proceso)."""
     global _ready
     with _ready_lock:
-        if _ready:
-            return []
-        upgrade_schema()
-        reports: list[UserMigrationReport] = []
-        if not migrate_legacy:
+        if not _ready:
+            upgrade_schema()
             _ready = True
-            return reports
-        with session_scope() as session:
-            if session.get(AppMeta, _LEGACY_MIGRATED_KEY) is None:
-                reports = migrate_all(session, legacy_usernames(), legacy_export)
-                session.add(AppMeta(key=_LEGACY_MIGRATED_KEY, value=str(len(reports))))
-        _ready = True
-        return reports
 
 
 # ── usuarios ──────────────────────────────────────────────────────────
@@ -177,20 +150,6 @@ def add_education(username: str, **fields: str) -> None:
 def delete_education(username: str, education_id: int) -> None:
     with session_scope() as s:
         repo.delete_education(s, _require_user(s, username), education_id)
-
-
-# ── puente con el generador actual ────────────────────────────────────
-
-
-def legacy_markdown(username: str) -> tuple[str, str, str]:
-    """(experiencias, habilidades, educación) en el Markdown que esperan los prompts actuales."""
-    with session_scope() as s:
-        user = _require_user(s, username)
-        return (
-            render_experiences_markdown(repo.list_experiences(s, user)),
-            render_skills_markdown(repo.list_skills(s, user)),
-            render_education_markdown(repo.list_education(s, user)),
-        )
 
 
 def snapshot(username: str) -> ProfileSnapshot:

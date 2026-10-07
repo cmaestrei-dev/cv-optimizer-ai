@@ -14,7 +14,7 @@ from core.engine.selection import Selection
 from core.engine.writing import WrittenCV
 from models import UserProfile
 from services.docx_generator import generate_docx
-from services.pdf_generator import CSS_TEMPLATE, _deny_all_url_fetcher, strip_emojis
+from services.pdf_generator import CSS_TEMPLATE, deny_all_url_fetcher, strip_emojis
 
 SECTION_TITLES = {
     "es": ("Perfil Profesional", "Experiencia Laboral", "Educación", "Habilidades"),
@@ -180,7 +180,7 @@ class RenderResult:
 def render(doc: CVDocument, contact: UserProfile, max_pages: int = 1) -> RenderResult:
     trimmed: list[str] = []
     for _ in range(60):
-        rendered = HTML(string=render_html(doc, contact), url_fetcher=_deny_all_url_fetcher).render()
+        rendered = HTML(string=render_html(doc, contact), url_fetcher=deny_all_url_fetcher).render()
         if len(rendered.pages) <= max_pages:
             break
         removed = _trim_once(doc)

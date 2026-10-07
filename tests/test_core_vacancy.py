@@ -3,8 +3,7 @@ from unittest.mock import MagicMock
 
 import pytest
 
-from core.vacancy import NotAVacancyError, VacancyAnalysis, analyze_vacancy
-from services.pdf_generator import parse_vacancy_header
+from core.vacancy import NotAVacancyError, analyze_vacancy
 
 _ANALYSIS = {
     "is_vacancy": True,
@@ -47,10 +46,3 @@ class TestAnalyzeVacancy:
     def test_requires_some_input(self):
         with pytest.raises(ValueError):
             analyze_vacancy(_llm(_ANALYSIS), text="  ")
-
-    def test_legacy_markdown_is_compatible_with_current_parser(self):
-        markdown = VacancyAnalysis.model_validate(_ANALYSIS).to_legacy_markdown()
-        header = parse_vacancy_header(markdown)
-        assert header["ROLE"] == "Auxiliar Administrativo"
-        assert header["AREA"] == "Administrativa"
-        assert "- SAP (deseable)" in markdown

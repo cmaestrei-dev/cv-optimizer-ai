@@ -81,7 +81,7 @@ class TestAppendAchievements:
     @pytest.fixture(autouse=True)
     def _fresh(self, monkeypatch):
         monkeypatch.setattr(service, "_ready", False)
-        service.ensure_ready(lambda: [], lambda u: {}, migrate_legacy=False)
+        service.ensure_ready()
 
     def test_appends_after_existing_in_order(self):
         service.create_user("ana")

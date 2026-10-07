@@ -4,13 +4,14 @@ import re
 import streamlit as st
 
 from config import WORK_MODALITIES
+from core.llm import get_llm
 from core.profile import service
-from core.profile.legacy import parse_experience_markdown
+from core.profile.completion import split_into_achievements
+from core.profile.periods import parse_period
+from core.profile.snapshot import ExperienceSnap
 from models import UserProfile
-from services.gemini_client import GeminiClient
 from ui.importer import render_import
-from ui.profile_coach import render_profile_coach
-from utils.retry import RetryableError, retry_with_backoff
+from ui.profile_coach import call_llm, render_profile_coach
 
 logger = logging.getLogger(__name__)
 
@@ -21,7 +22,7 @@ def _lines(text: str) -> list[str]:
     return [re.sub(r"^\s*(?:[-*•]|\d+[.)])\s+", "", line).strip() for line in text.splitlines() if line.strip()]
 
 
-def _render_new_experience_form(client: GeminiClient | None, profile: UserProfile | None) -> None:
+def _render_new_experience_form(profile: UserProfile | None, api_key_overrides: dict[str, str]) -> None:
     col1, col2 = st.columns(2)
 
     with col1:
@@ -57,32 +58,16 @@ def _render_new_experience_form(client: GeminiClient | None, profile: UserProfil
 
     achievements = _lines(logros_crudos)
     if save_polished:
-        if client is None:
-            st.error(":material/warning: Por favor, ingresa tu API Key en la barra lateral primero.")
+        draft = ExperienceSnap(0, nuevo_cargo.strip(), nombre_empresa.strip(), periodo.strip(), parse_period(periodo))
+        candidates = call_llm(
+            lambda: split_into_achievements(get_llm("extract", api_key_overrides), draft, logros_crudos),
+            "Puliendo la redacción (sin inventar datos)...",
+        )
+        if candidates is None:
             return
-        with st.spinner("Puliendo la redacción..."):
-
-            @retry_with_backoff()
-            def _call():
-                return client.polish_experience(
-                    role=nuevo_cargo, company=nombre_empresa, period=periodo,
-                    country=pais, modality=modalidad, raw_details=logros_crudos,
-                )
-
-            try:
-                parsed = parse_experience_markdown(_call())
-            except RetryableError:
-                st.error(":material/cancel: Los servidores de IA están saturados. Espera unos segundos y vuelve a intentarlo.")
-                return
-            except RuntimeError as e:
-                logger.error("Error de la API de Gemini: %s", e)
-                st.error(f":material/cancel: Error de la API de Gemini: {e}")
-                return
-            except Exception:
-                st.error(":material/cancel: Ocurrió un error inesperado. Por favor intenta de nuevo.")
-                return
-        if parsed and parsed[0].achievements:
-            achievements = parsed[0].achievements
+        verified = [c.text for c in candidates if c.ok]
+        if verified:
+            achievements = verified  # si la IA no aportó nada verificable, se guarda el texto tal cual
 
     # Cargo, empresa y fechas salen del formulario, nunca de la IA.
     service.add_experience(
@@ -181,9 +166,7 @@ def _render_experience_editor(profile: UserProfile, exp, exp_key: str) -> None:
         st.rerun()
 
 
-def render_tab_experiencia(
-    client: GeminiClient | None, profile: UserProfile | None, api_key_overrides: dict[str, str]
-) -> None:
+def render_tab_experiencia(profile: UserProfile | None, api_key_overrides: dict[str, str]) -> None:
     st.header(":material/description: Tu experiencia")
     st.markdown("Cada logro se guarda por separado para elegir los mejores en cada CV.")
 
@@ -196,6 +179,6 @@ def render_tab_experiencia(
         render_profile_coach(profile, api_key_overrides)  # el siguiente paso natural tras importar
     render_import(profile, api_key_overrides, expanded=empty)
     st.markdown("**O agrega una experiencia a mano**")
-    _render_new_experience_form(client, profile)
+    _render_new_experience_form(profile, api_key_overrides)
     if profile:
         _render_existing_experiences(profile)

@@ -86,7 +86,8 @@
 - [x] **Completar el perfil** (feedback real: LinkedIn deja descripciones breves → perfil pobre → CV pobre). Una sola sección "Completar y mejorar mi experiencia" con tres modos: "Cuéntame todo lo que hacías" (texto libre → logros separados), "Tareas típicas de tu cargo" (marcar lo que sí hizo + detalle), "Entrevista: agrega cifras". En "CV inteligente", cada requisito faltante tiene "Sí lo he hecho: contarlo" → logro en el empleo elegido → "Actualizar puntaje". Todo verificado contra las palabras del usuario; duplicados desmarcados. Prueba real: compatibilidad 38 → 88 tras contar una brecha
 - [ ] Normalización con ESCO → **pospuesta** (ver decisiones)
 - [ ] (Idea) Generar el texto de LinkedIn ("Acerca de" y experiencias) desde el perfil completo
-- [ ] Retirar el generador clásico, `services/gemini_client.py`, `storage/` y Turso cuando el motor nuevo esté validado por los usuarios
+- [x] Retirado el generador clásico, `services/gemini_client.py`, `storage/` (Turso), el puente Markdown y la migración del modelo anterior (ya ejecutada en producción). "Pulir con IA" usa el motor nuevo verificado
+- [ ] **(usuario)** Borrar los secretos `TURSO_*` de Streamlit y la base de Turso (copia vieja de datos personales) cuando confirme que todo está en Neon
 
 ### Fase 2 — Seguimiento de postulaciones (tracker) (rama `claude/fase2-postulaciones`)
 - [x] Postulación: cargo, empresa, plataforma, enlace, texto y análisis de la vacante (JSON, para la fase 3), puntaje, estado, fechas, contacto
@@ -152,11 +153,11 @@
 | 2026-10-07 | Una postulación por vacante analizada; cada CV generado se adjunta a ella | Evita duplicados y permite ver todas las versiones; solo un CV de esa misma vacante puede marcarse como enviado |
 | 2026-10-07 | Captura por enlace con `JobPosting` (schema.org) + respaldo de texto visible, en vez de scraping | Es lo que los portales publican para Google Empleos; una lectura por petición del usuario. No hay inicio de sesión ni recorrido de listados |
 | 2026-10-07 | "Mi mercado" en tablas con barras en la celda, no gráficos de colores | Pocos datos personales y varias medidas por portal: una tabla es legible con 3 o 300 filas, trae la vista de tabla y no depende del color |
+| 2026-10-07 | Retirar el código legado (generador clásico, cliente Gemini nativo, Turso) | El motor nuevo cubre todo y es más seguro (verificación); mantener dos caminos duplicaba el trabajo de cada cambio |
 | 2026-10-07 | No purgar el historial git de los `.md` personales | Solo contenido de CV (sin contacto ni IDs); purgar exige force push a `main` público y GitHub mantiene accesibles los commits huérfanos por SHA |
 
 ## Próximo paso
 
 1. Usuarios: usar "Traer" con enlaces reales, registrar postulaciones y estados; revisar "Mi mercado" tras ~10 envíos.
-2. Retirar el generador clásico, `services/gemini_client.py`, `storage/` y Turso (el motor nuevo ya cubre todo).
 3. Fase 4 — descubrimiento y aplicación asistida: buscar vacantes objetivo y puntuarlas; cola de aprobación; la persona confirma cada envío.
 4. Fase 5 — SaaS (FastAPI + React, extensión de navegador, auth gestionada, pagos, Ley 1581).
