@@ -28,7 +28,8 @@ def skill_key(name: str) -> str:
 
 
 def list_usernames(session: Session) -> list[str]:
-    return list(session.scalars(select(User.username).order_by(User.username)))
+    """Perfiles de Streamlit. Las cuentas del SaaS no se listan: allí un perfil sin contraseña se abre sin pedirla."""
+    return list(session.scalars(select(User.username).where(User.auth_subject.is_(None)).order_by(User.username)))
 
 
 def get_user(session: Session, username: str) -> User | None:

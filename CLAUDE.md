@@ -7,10 +7,11 @@ App Streamlit que genera CVs ATS a medida por vacante (IA multi-proveedor + Weas
 ## Comandos
 
 ```bash
-pip install -r requirements-dev.txt
+pip install -r requirements-dev.txt   # incluye requirements-api.txt (FastAPI)
 pytest tests/ -q
 ruff check .
 streamlit run app.py
+uvicorn api.main:app --reload         # API (fase 5); token local: AUTH_DEV_SECRET=... python scripts/dev_token.py ana
 ```
 
 ## Mapa
@@ -19,9 +20,10 @@ streamlit run app.py
 - `core/tracking/` — fase 2: `models.py` (Application, ApplicationEvent de solo-agregar, CVDocumentRecord con PDF/DOCX + SHA-256) y `service.py` (crear, adjuntar CV, `mark_sent` solo con un CV de esa postulación, estados, notas, recordatorios, resumen). UI: `ui/tab_postulaciones.py` y la sección de seguimiento de `ui/tab_cv_inteligente.py`.
 - Fase 3: `core/capture.py` (traer vacante por enlace: JobPosting o texto de la página, con protección SSRF), `core/tracking/insights.py` ("Mi mercado", determinista), `core/engine/screening.py` (preguntas de filtro verificadas); UI en `ui/tab_mercado.py` y `ui/tab_cv_inteligente.py`.
 - Fase 4: `core/discovery.py` (cargos sugeridos, enlaces de búsqueda por portal, `triage` de la bandeja con detección de repetidas), `core/engine/cover.py` (mensaje al reclutador verificado), `core/capture.canonical_url` (una URL por vacante). Estados `por_revisar` / `descartada` en `core/tracking/models.py`. UI en `ui/tab_bandeja.py`; "Preparar" llena `ci_analysis` y `ci_pending_inputs` de "CV inteligente".
+- `api/` — fase 5: FastAPI sobre los mismos servicios del núcleo (nunca lógica propia). `auth.py`: JWT del proveedor de identidad verificado con JWKS (`AUTH_JWKS_URL`/`AUTH_ISSUER`/`AUTH_AUDIENCE`, los tres obligatorios) o `AUTH_DEV_SECRET` (solo con SQLite); cada "emisor|sub" se crea como usuario `saas:…` (con contraseña local inutilizable) y `users.auth_subject`. Listas, resumen y mercado usan `list_applications(..., with_files=False)` para no traer los PDF. Dependencia `CurrentAccount` en cada ruta. `schemas.py`: contratos con validación. `routers/`: perfil, postulaciones (+ descarga de CV verificada), mercado. Las dependencias de la API van en `requirements-api.txt` (Streamlit Cloud usa `requirements.txt`).
 - `app.py` — entrada, inyecta `st.secrets` en `os.environ` antes de importar el resto. Puerta de acceso: con `DATABASE_URL` de Postgres exige `APP_ACCESS_PASSWORD`; con contraseña pero sin `DATABASE_URL` se cierra (evita datos efímeros).
 - `services/` — `pdf_generator.py` (plantilla CSS, `deny_all_url_fetcher`, nombres de archivo) y `docx_generator.py`.
-- `migrations/` — Alembic. Cambio de modelo = nueva revisión (`DATABASE_URL=sqlite:///tmp.db alembic revision --autogenerate -m ...`); el test `test_alembic_schema_matches_models` falla si falta.
+- `migrations/` — Alembic. Cambio de modelo = nueva revisión (`DATABASE_URL=sqlite:///tmp.db alembic revision --autogenerate -m ...`); el test `test_alembic_schema_matches_models` falla si falta. **En SQLite, el modo batch recrea la tabla y borra la vieja**: `env.py` apaga las llaves foráneas solo mientras migra (si no, se borrarían en cascada los datos que cuelgan de ella). Aun así, preferir operaciones que no recrean (`add_column`, `create_index(unique=True)` en vez de restricciones únicas) y nombrar siempre restricciones e índices. `tests/test_migrations.py` sube y baja con datos.
 - `evals/` + `scripts/run_evals.py` — evaluación del motor con IA real y casos ficticios (`--providers gemini deepseek`); correrla tras cambiar prompts o el motor. No va en la CI.
 - `ui/` — una función `render_*` por pestaña; `profile_form.py` maneja perfiles y login. Los resultados que deben sobrevivir reruns (CV generado, skills extraídas) van en `st.session_state`. Las etiquetas de `st.tabs` son fijas (si cambian, Streamlit vuelve a la primera pestaña). Para escribir en un widget ya dibujado, guardar un valor pendiente y `st.rerun()`. Tema en `.streamlit/config.toml` (oscuro fijo, coherente con el CSS de `app.py`).
 - `models/profile.py` — `UserProfile` y hashing de contraseñas.
@@ -37,6 +39,8 @@ streamlit run app.py
 - Cualquier descarga de una URL que venga del usuario pasa por `core/capture._download` (valida esquema, IP pública en cada redirección, tamaño). Riesgo residual conocido: DNS rebinding entre la validación y la conexión; mitigado por la puerta de acceso.
 - La UI nunca abre sesiones de BD: usa `core/profile/service.py` (st.rerun() es una BaseException y descartaría cambios).
 - Toda consulta por id filtra también por el usuario dueño.
+- Las cuentas del SaaS (`auth_subject` no vacío) nunca se listan en Streamlit: allí un perfil sin contraseña se abre sin pedirla.
+- La API nunca acepta tokens sin verificar firma, emisor y vencimiento; el secreto de desarrollo no funciona con Postgres. En la API, `NotFoundError` responde 404 igual exista o no el recurso en otra cuenta.
 - Los eventos de una postulación nunca se editan ni se borran (solo con la postulación completa).
 - Los tests nunca tocan bases reales: `tests/conftest.py` fuerza un SQLite temporal.
 - Nunca versionar datos personales ni secretos (`.streamlit/secrets.toml`, `.env`, `data/`).

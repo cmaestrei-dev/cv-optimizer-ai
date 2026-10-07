@@ -21,7 +21,7 @@ def render_tab_mercado(profile: UserProfile | None) -> None:
         "Qué piden las vacantes que analizas y qué te está funcionando, **por portal**. "
         "Se calcula solo con tus postulaciones guardadas: entre más registres (y actualices su estado), más útil es."
     )
-    applications = tracking.list_applications(profile.username)
+    applications = tracking.list_applications(profile.username, with_files=False)
     if not applications:
         st.info("Aún no hay datos. Analiza vacantes en «CV inteligente» y guárdalas o regístralas al enviarlas.")
         return

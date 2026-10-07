@@ -1,7 +1,7 @@
 # Roadmap y estado del proyecto
 
 > Documento vivo. Se actualiza al terminar cada cambio relevante: qué existe, qué se hizo, qué sigue.
-> Última actualización: 2026-10-07 (fase 4: bandeja de vacantes y aplicación asistida)
+> Última actualización: 2026-10-07 (fase 5a: API sobre el núcleo)
 
 ## Prioridad actual
 
@@ -115,10 +115,33 @@
 - [x] Probado de punta a punta con Gemini y vacantes reales de LinkedIn, Computrabajo y elempleo; migración 0003 probada en Postgres
 - [ ] Extensión que llena formularios en la sesión del usuario; el usuario confirma el envío → fase 5 (requiere API)
 
-### Fase 5 — SaaS
-- [ ] FastAPI + React, Postgres, cola de trabajos, almacenamiento de archivos
-- [ ] Autenticación gestionada, multi-tenant, pagos
-- [ ] Política de tratamiento de datos (Ley 1581 de 2012), términos, observabilidad
+### Fase 5 — SaaS (FastAPI + React), en entregas con su PR
+La app de Streamlit sigue funcionando sobre la misma base durante toda la fase; se retira cuando la versión nueva tenga paridad.
+
+*5a — API sobre el núcleo* (rama `claude/fase5a-api`)
+- [x] FastAPI que usa los mismos servicios del núcleo (sin lógica duplicada); errores de dominio → respuestas claras; cabeceras `nosniff` y `no-store`; CORS solo para los orígenes configurados
+- [x] Cuentas por token: JWT de un proveedor de identidad verificado con su JWKS (independiente del proveedor); modo de desarrollo con secreto local, prohibido con la base de producción. Cada cuenta se crea sola la primera vez (migración 0004, probada en Postgres con altas simultáneas) y queda aislada de las demás
+- [x] Perfil (contacto, experiencias con logros, habilidades, educación), postulaciones (vistas, detalle, estados, notas, recordatorios, envío solo con un CV de esa postulación, resumen), descarga del CV exacto (si no coincide con su huella, no se entrega), "Mi mercado"
+- [x] Las cuentas del SaaS no aparecen en Streamlit (allí un perfil sin contraseña se abre sin pedirla)
+- [x] 16 pruebas de la API (tokens falsos, vencidos, de otro emisor o audiencia, `alg: none`, cabecera manipulada, JWKS con RSA, aislamiento entre cuentas en cada ruta) y prueba con servidor real
+- [x] Revisión independiente aplicada: la migración 0004 en SQLite habría borrado en cascada los datos de todos los perfiles locales (ahora índice único sin recrear la tabla + `env.py` apaga las llaves foráneas mientras migra, con prueba que lo demuestra); audiencia del token obligatoria (con Google, otra app podría reutilizar el token de una persona); tokens manipulados ya no dan error 500; cuentas `saas:` con contraseña local inutilizable; las listas ya no traen los PDF de cada CV
+
+*5b — Motor por API*: agregar vacante (texto o enlace) con análisis y match; bandeja por lotes como trabajo en segundo plano (tabla de trabajos + proceso aparte); CV con documento estructurado guardado (editar viñetas y volver a generar el PDF); preguntas de filtro; mensaje al reclutador; importar CV en PDF; completar perfil. Límites de uso de IA por cuenta (costos)
+
+*5c — Frontend React* (Vite + TypeScript), en español y pensado primero para el celular: entrar, perfil, bandeja, preparar/CV, postulaciones, mercado. Actualizar `PRODUCT.md` (hoy dice "sector tecnológico") y `DESIGN.md`
+
+*5d — Cuentas reales y despliegue*: proveedor de identidad (Google y correo), vincular los perfiles de Streamlit con su contraseña actual, despliegue (backend en contenedor por WeasyPrint, frontend estático), dominio; retirar Streamlit
+
+*5e — Operar como SaaS*: observabilidad (errores, latencia, costo de IA por cuenta), copias de seguridad, Ley 1581 (política de tratamiento, autorización, exportar y borrar mis datos), términos, proveedor de IA de pago (sin plan gratuito)
+
+*5f — Cobros*: planes y pasarela de pago (según si el dueño factura como persona natural o empresa)
+
+*5g — (opcional) Extensión de navegador* para traer vacantes con un clic y llenar formularios con confirmación humana; recordatorios por correo
+
+### Fase 6 — Pruebas reales y retroalimentación
+- [ ] Uso diario por los dos usuarios (y amigos) con postulaciones reales
+- [ ] Registro de problemas y mejoras; ajustar cargos sugeridos, mensajes, motor y diseño con datos reales
+- [ ] Evals con casos reales anonimizados
 
 ## Registro de decisiones
 
@@ -164,10 +187,13 @@
 | 2026-10-07 | Etiquetas de pestaña fijas; los contadores van en una línea encima | Streamlit vuelve a la primera pestaña si cambia la etiqueta (descartar una vacante sacaba a la persona de la bandeja) |
 | 2026-10-07 | Repetidas por enlace: host + ruta + parámetros que identifican la vacante (`?jk=`), sin los de seguimiento; ante la duda se conserva el parámetro | Mezclar dos vacantes ataría el CV de una a la otra (rompe la garantía de "CV correcto"); un duplicado solo cuesta un clic en "Descartar" |
 | 2026-10-07 | "Mi mercado" cuenta también las vacantes de la bandeja y las descartadas | Son datos de qué pide el mercado aunque no se postule; las métricas de envío y avance solo cuentan las enviadas |
+| 2026-10-07 | La API verifica tokens de un proveedor de identidad (JWKS) en vez de manejar contraseñas | Verificación de correo, recuperación de contraseña, login con Google y protección contra fuerza bruta ya resueltos; cambiar de proveedor = cambiar 3 variables |
+| 2026-10-07 | La API reutiliza los servicios del núcleo; Streamlit y API conviven sobre la misma base | Sin lógica duplicada ni migración de datos; los usuarios no pierden nada mientras se construye la versión nueva |
+| 2026-10-07 | Migraciones sin recrear tablas en SQLite (índices únicos en vez de restricciones) y llaves foráneas apagadas solo durante la migración | Recrear `users` con cascadas activas borraba todos los datos locales; producción (Postgres) no se afectaba, pero el desarrollo y las pruebas sí |
+| 2026-10-07 | Fase 6 (pruebas reales) al final, por decisión del dueño | Quiere probar a fondo la versión completa; la app actual sigue disponible para postular mientras tanto |
 | 2026-10-07 | No purgar el historial git de los `.md` personales | Solo contenido de CV (sin contacto ni IDs); purgar exige force push a `main` público y GitHub mantiene accesibles los commits huérfanos por SHA |
 
 ## Próximo paso
 
-1. Usuarios: rutina diaria con la bandeja (buscar → pegar enlaces → preparar las mejores → enviar en el portal → "Ya la envié") y actualizar estados; revisar "Mi mercado" tras ~10 envíos.
-2. Ajustes según el uso real (calidad de los cargos sugeridos, del mensaje al reclutador, portales que fallen al traer).
-3. Fase 5 — SaaS (FastAPI + React, extensión de navegador, auth gestionada, pagos, Ley 1581).
+1. Fase 5a (API) → 5b (motor por API) → 5c (React) → 5d (cuentas reales y despliegue) → 5e (operación y Ley 1581) → 5f (cobros).
+2. Fase 6: pruebas reales y retroalimentación (decisión del dueño: probar a fondo cuando la versión SaaS esté lista; la app de Streamlit sigue disponible mientras tanto).
