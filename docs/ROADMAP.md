@@ -1,7 +1,7 @@
 # Roadmap y estado del proyecto
 
 > Documento vivo. Se actualiza al terminar cada cambio relevante: qué existe, qué se hizo, qué sigue.
-> Última actualización: 2026-10-07 (paso 1 de la Fase 1)
+> Última actualización: 2026-10-07 (entrega 2a de la Fase 1)
 
 ## Prioridad actual
 
@@ -27,16 +27,16 @@
 - [x] Timeouts en llamadas a Gemini; reintentos 5 → 3
 - [x] Prompts honestos: se conservan los cargos reales (antes se reemplazaban por el de la vacante)
 - [x] Sacar datos personales del árbol del repo; `requirements-dev.txt` separado
-- [ ] **(usuario)** Configurar `APP_ACCESS_PASSWORD` en Streamlit Cloud **antes** de desplegar
-- [ ] **(usuario)** Rotar token de Turso y API key de Gemini (estuvieron expuestos a la vulnerabilidad del PDF)
+- [x] **(usuario)** Configurar `APP_ACCESS_PASSWORD` en Streamlit Cloud **antes** de desplegar
+- [ ] **(usuario, sin confirmar)** Rotar token de Turso y API key de Gemini (estuvieron expuestos a la vulnerabilidad del PDF)
 - [x] ~~Purgar datos personales del historial git~~ → descartado (ver decisiones)
 - [x] Commit + PR
-- [ ] Merge a `main` (despliegue) — **después** de configurar `APP_ACCESS_PASSWORD`
-- [ ] CI en GitHub Actions (ruff + pytest)
+- [x] Merge a `main` y despliegue (PR #1)
+- [x] CI en GitHub Actions (ruff + pytest) — entrega 2a
 
 ### Fase 1 — Motor de CV (dirección aprobada el 2026-10-07)
 
-**Paso 1 — Mejoras rápidas sobre el código actual** (rama `claude/cv-multiprofesion`)
+**Paso 1 — Mejoras rápidas sobre el código actual** (PR #2, fusionado y desplegado)
 - [x] Prompts universales (cualquier profesión): el análisis detecta `AREA` e `LANGUAGE` de la vacante y se inyectan en el prompt del CV
 - [x] CV en el idioma de la vacante, con títulos de sección en ese idioma ("Habilidades" en vez de "Technical Skills")
 - [x] Prompts sin invención: 8–12 viñetas según material real (antes "exactamente 12"), cifras solo si existen, sin repetir keywords artificialmente
@@ -44,17 +44,36 @@
 - [x] API key de Gemini del servidor (`GEMINI_API_KEY`); la de la barra lateral es opcional
 - [x] Descarga en DOCX además de PDF (una columna, sin tablas: legible por ATS)
 - [x] Arreglos: "Extraer skills" no funcionaba tras generar; caché de skills no se invalidaba entre vacantes; la imagen de la vacante se leía vacía en el segundo intento
-- [ ] Validar con vacantes reales de un perfil administrativo/operativo
+- [ ] Validar con vacantes reales de un perfil administrativo/operativo (en curso, lo hace el usuario en la app)
 
-**Paso 2 — Núcleo nuevo (motor por etapas)**
-- [ ] Perfil maestro estructurado: logros atómicos (texto, habilidades, métricas), no Markdown
-- [ ] Postgres (Neon o Supabase) + pgvector + SQLAlchemy/Alembic, migrando datos desde Turso
-- [ ] Cliente de IA único compatible con OpenAI (Gemini, DeepSeek, otros) + salidas validadas con Pydantic + modelo por tarea + caché por contenido
-- [ ] Etapas: entender vacante (JSON) → medir match requisito↔evidencia (ESCO + embeddings) → seleccionar logros (mochila + MMR) → redactar (solo viñetas y resumen) → verificar respaldo → render con ajuste medido a 1 página
-- [ ] Puntaje de match y brechas visibles antes de generar; edición de viñetas antes de exportar
+**Paso 2 — Núcleo nuevo (motor por etapas)**, en entregas pequeñas, cada una en su PR
+
+*2a — Cimientos* (rama `claude/motor-2a-cimientos`)
+- [x] CI en GitHub Actions
+- [x] `core/llm/`: cliente único compatible con OpenAI (Gemini, DeepSeek), modelo por tarea (`LLM_EXTRACT` / `LLM_WRITE`), reintentos, timeouts, caché por contenido
+- [x] `generate_structured()`: JSON validado con Pydantic + 1 intento de corrección
+- [x] `core/vacancy.py`: análisis estructurado (requisitos obligatorios vs deseables, categoría, años, modalidad, keywords) con puente al formato actual
+- [ ] Prueba real contra Gemini y DeepSeek (requiere API keys locales)
+
+*2b — Perfil maestro estructurado*
+- [ ] Modelo de datos: experiencia (cargo, empresa, fechas reales, país, modalidad) + logros atómicos (texto, habilidades, cifras) + habilidades + educación
+- [ ] SQLAlchemy + Alembic sobre SQLite (local/tests) y Postgres (Neon) en producción
+- [ ] Migración determinista desde las tablas actuales (los encabezados `###` y viñetas ya tienen estructura), sin borrar las tablas viejas
+- [ ] Pestañas de experiencia / habilidades / educación sobre el modelo nuevo; logros editables uno por uno
+
+*2c — Motor de CV*
+- [ ] Match requisito ↔ evidencia (léxico + embeddings), puntaje y brechas visibles antes de generar
+- [ ] Selección de logros (mochila + MMR) con límite de espacio
+- [ ] Redacción controlada (solo viñetas y resumen; cargos/empresas/fechas salen de los datos)
+- [ ] Verificación de respaldo (herramientas y cifras deben existir en el logro original)
+- [ ] Render con ajuste medido a 1 página (conteo real de páginas)
+- [ ] Edición de viñetas antes de exportar
+
+*2d — Extras*
 - [ ] Entrevista guiada para extraer logros con cifras reales
 - [ ] Set de vacantes de prueba con métricas automáticas (evals) para comparar prompts y proveedores
-- [ ] Separar núcleo de Streamlit; `pydantic-settings`; `uv` + lockfile; tipado
+- [ ] Normalización con ESCO (sinónimos y sugerencias de habilidades)
+- [ ] Retirar `services/gemini_client.py` y `config.py` cuando todo use `core/`
 
 ### Fase 2 — Seguimiento de postulaciones (tracker)
 - [ ] Entidad Postulación: vacante, plataforma, estado, fechas, contacto, notas
@@ -95,12 +114,14 @@
 | 2026-10-07 | Postgres + pgvector en lugar de Turso (en el paso 2) | Texto completo en español, embeddings y JSON en un solo lugar; es la base que necesitará el SaaS |
 | 2026-10-07 | Un cliente compatible con OpenAI para todos los proveedores | Gemini y DeepSeek exponen esa API; cambiar de IA = cambiar URL y modelo |
 | 2026-10-07 | 8–12 viñetas según material real (no "exactamente 12") | Forzar un número obliga a la IA a inventar cuando hay poco material |
+| 2026-10-07 | Salida estructurada con JSON simple (`json_object`) + esquema en el prompt + validación Pydantic, no `json_schema` | DeepSeek solo soporta `json_object`; así el mismo código sirve para todos los proveedores |
+| 2026-10-07 | Configuración de IA por variables `LLM_EXTRACT` / `LLM_WRITE` (`proveedor:modelo`), sin `pydantic-settings` | Una dependencia menos; lectura perezosa evita depender del orden de importación |
+| 2026-10-07 | Postgres en Neon (recomendado sobre Supabase) | El plan gratuito de Neon escala a cero sin pausar el proyecto; Supabase pausa tras 7 días sin uso |
 | 2026-10-07 | No purgar el historial git de los `.md` personales | Solo contenido de CV (sin contacto ni IDs); purgar exige force push a `main` público y GitHub mantiene accesibles los commits huérfanos por SHA |
 
 ## Próximo paso
 
-1. Usuario: configurar `APP_ACCESS_PASSWORD` y `GEMINI_API_KEY` en Streamlit Cloud (y no fijar `PROMPT_VERSION`, o dejarlo en `v3`); rotar token de Turso + API key de Gemini.
-2. Merge del PR de la Fase 0 y luego del PR del paso 1.
-3. Validar el paso 1 con vacantes reales (perfil administrativo/operativo).
-4. CI en GitHub Actions (ruff + pytest).
-5. Paso 2 del motor: empezar por el perfil maestro estructurado + Postgres.
+1. Usuario: validar el paso 1 en la app con vacantes reales; confirmar rotación de claves.
+2. Usuario: crear un proyecto gratuito en Neon (para 2b) y, si quiere pruebas reales del motor, dejar las API keys en un `.env` local.
+3. Revisar y fusionar el PR de 2a (cimientos).
+4. Entrega 2b: perfil maestro estructurado + base de datos nueva + migración.
