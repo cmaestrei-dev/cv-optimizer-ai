@@ -1,7 +1,7 @@
 # Roadmap y estado del proyecto
 
 > Documento vivo. Se actualiza al terminar cada cambio relevante: qué existe, qué se hizo, qué sigue.
-> Última actualización: 2026-10-07 (fase 5a: API sobre el núcleo)
+> Última actualización: 2026-10-07 (fase 5b.1: motor por API)
 
 ## Prioridad actual
 
@@ -126,7 +126,18 @@ La app de Streamlit sigue funcionando sobre la misma base durante toda la fase; 
 - [x] 16 pruebas de la API (tokens falsos, vencidos, de otro emisor o audiencia, `alg: none`, cabecera manipulada, JWKS con RSA, aislamiento entre cuentas en cada ruta) y prueba con servidor real
 - [x] Revisión independiente aplicada: la migración 0004 en SQLite habría borrado en cascada los datos de todos los perfiles locales (ahora índice único sin recrear la tabla + `env.py` apaga las llaves foráneas mientras migra, con prueba que lo demuestra); audiencia del token obligatoria (con Google, otra app podría reutilizar el token de una persona); tokens manipulados ya no dan error 500; cuentas `saas:` con contraseña local inutilizable; las listas ya no traen los PDF de cada CV
 
-*5b — Motor por API*: agregar vacante (texto o enlace) con análisis y match; bandeja por lotes como trabajo en segundo plano (tabla de trabajos + proceso aparte); CV con documento estructurado guardado (editar viñetas y volver a generar el PDF); preguntas de filtro; mensaje al reclutador; importar CV en PDF; completar perfil. Límites de uso de IA por cuenta (costos)
+*5b.1 — Motor por API* (rama `claude/fase5b-motor`)
+- [x] Casos de uso sin interfaz (`core/applying.py`): agregar vacante por texto o enlace (con repetidas → 409 y el id existente), análisis, preparar desde la bandeja, CV, edición, preguntas de filtro, mensaje al reclutador y brechas ("Sí lo he hecho" → logros verificados)
+- [x] El análisis guarda el mapa de evidencias de la IA: consultar la compatibilidad no llama a la IA (se recalcula con el perfil de hoy, descartando logros borrados) y se marca "desactualizado" cuando el perfil cambia
+- [x] Cola de trabajos en la base (`core/jobs/`): bandeja por lotes y generación de CV en segundo plano, con progreso; se reanuda tras reinicios, reintenta lo que quedó colgado (máx. 3) y en Postgres reparte sin duplicar (`SKIP LOCKED`, probado con 5 trabajadores). Corre dentro de la API o aparte
+- [x] CV con documento estructurado guardado: editar viñetas/resumen crea una versión nueva; el CV enviado nunca cambia
+- [x] Límite diario de llamadas a la IA por cuenta (`AI_DAILY_CALLS`, 200 por defecto): se cuentan solo las exitosas; errores del proveedor no se cobran
+- [x] Errores con una sola tabla (`core/errors.py`): mensajes para la persona sin detalles internos, en la API y en los trabajos
+- [x] Streamlit también guarda evidencias y documentos, así lo que se postule allí queda editable en la versión nueva
+- [x] Probado de punta a punta con servidor real, Gemini y vacantes reales (bandeja 3 enlaces en 14 s, CV en 5 s, edición, preguntas, mensaje, envío); migración 0005 probada en Postgres
+- [x] Revisión independiente aplicada: el trabajador ya no consulta la base cada segundo (mantenía Neon despierto y gastaba su cómputo gratuito, afectando también a Streamlit): se despierta al encolar y en reposo revisa cada hora; la API no arranca con Postgres sin proveedor de identidad (un `uvicorn` local con el `.env` real habría aplicado migraciones sin fusionar a producción); Streamlit guarda la vacante releída junto con sus evidencias (antes podían quedar cruzadas); máx. 3 trabajos activos por cuenta; latido de los trabajos largos y escrituras solo del intento vigente (sin ejecuciones dobles); las ediciones de CV cuentan en el cupo; enlaces mal formados y caídas del proveedor dan 422/503 en vez de 500
+
+*5b.2 — Perfil asistido por API*: importar CV en PDF (extracción + verificación + plan), completar experiencia (texto libre, tareas típicas, detalle) y entrevista guiada
 
 *5c — Frontend React* (Vite + TypeScript), en español y pensado primero para el celular: entrar, perfil, bandeja, preparar/CV, postulaciones, mercado. Actualizar `PRODUCT.md` (hoy dice "sector tecnológico") y `DESIGN.md`
 
@@ -189,6 +200,9 @@ La app de Streamlit sigue funcionando sobre la misma base durante toda la fase; 
 | 2026-10-07 | "Mi mercado" cuenta también las vacantes de la bandeja y las descartadas | Son datos de qué pide el mercado aunque no se postule; las métricas de envío y avance solo cuentan las enviadas |
 | 2026-10-07 | La API verifica tokens de un proveedor de identidad (JWKS) en vez de manejar contraseñas | Verificación de correo, recuperación de contraseña, login con Google y protección contra fuerza bruta ya resueltos; cambiar de proveedor = cambiar 3 variables |
 | 2026-10-07 | La API reutiliza los servicios del núcleo; Streamlit y API conviven sobre la misma base | Sin lógica duplicada ni migración de datos; los usuarios no pierden nada mientras se construye la versión nueva |
+| 2026-10-07 | Guardar el mapa de evidencias de la IA y recalcular el match sin IA | Ver la compatibilidad es lo más frecuente; así es instantáneo y gratis, y las referencias a logros borrados se descartan solas. La IA solo se vuelve a llamar cuando la persona actualiza tras cambiar su perfil |
+| 2026-10-07 | Cola de trabajos en Postgres (no Redis/Celery) | Una pieza menos que desplegar y pagar; `SKIP LOCKED` reparte sin duplicar; el volumen (decenas de trabajos al día) está muy lejos de sus límites |
+| 2026-10-07 | Cupo de IA por llamadas reales (envoltorio del cliente), no por "unidades" estimadas | Exacto para cualquier operación presente o futura y no cobra los errores del proveedor |
 | 2026-10-07 | Migraciones sin recrear tablas en SQLite (índices únicos en vez de restricciones) y llaves foráneas apagadas solo durante la migración | Recrear `users` con cascadas activas borraba todos los datos locales; producción (Postgres) no se afectaba, pero el desarrollo y las pruebas sí |
 | 2026-10-07 | Fase 6 (pruebas reales) al final, por decisión del dueño | Quiere probar a fondo la versión completa; la app actual sigue disponible para postular mientras tanto |
 | 2026-10-07 | No purgar el historial git de los `.md` personales | Solo contenido de CV (sin contacto ni IDs); purgar exige force push a `main` público y GitHub mantiene accesibles los commits huérfanos por SHA |
