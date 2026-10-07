@@ -22,6 +22,7 @@ from ui.tab_cv_inteligente import render_tab_cv_inteligente
 from ui.tab_educacion import render_tab_educacion
 from ui.tab_experiencia import render_tab_experiencia
 from ui.tab_habilidades import render_tab_habilidades
+from ui.tab_postulaciones import due_count, render_tab_postulaciones
 from ui.tab_vacante import render_tab_vacante
 
 logging.basicConfig(level=logging.INFO, format="%(asctime)s [%(levelname)s] %(message)s")
@@ -216,8 +217,10 @@ def main():
 
     client = GeminiClient(api_key=gemini_api_key.strip()) if gemini_api_key else None
 
-    tab0, tab1, tab2, tab3, tab4 = st.tabs([
+    due = due_count(profile)
+    tab0, tab_track, tab1, tab2, tab3, tab4 = st.tabs([
         ":material/auto_awesome: CV inteligente (nuevo)",
+        ":material/work_history: Mis postulaciones" + (f" ({due} por hacer)" if due else ""),
         ":material/inbox: Generador clásico",
         ":material/description: Mi experiencia (importar CV)",
         ":material/build: Gestionar Habilidades",
@@ -227,6 +230,9 @@ def main():
     overrides = {"gemini": user_api_key.strip()} if user_api_key.strip() else {}
     with tab0:
         render_tab_cv_inteligente(profile, overrides)
+
+    with tab_track:
+        render_tab_postulaciones(profile)
 
     with tab1:
         render_tab_vacante(client, profile)

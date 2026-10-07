@@ -1,7 +1,7 @@
 # Roadmap y estado del proyecto
 
 > Documento vivo. Se actualiza al terminar cada cambio relevante: qué existe, qué se hizo, qué sigue.
-> Última actualización: 2026-10-07 (entrega 2d de la Fase 1)
+> Última actualización: 2026-10-07 (fase 2: seguimiento de postulaciones)
 
 ## Prioridad actual
 
@@ -88,12 +88,15 @@
 - [ ] (Idea) Generar el texto de LinkedIn ("Acerca de" y experiencias) desde el perfil completo
 - [ ] Retirar el generador clásico, `services/gemini_client.py`, `storage/` y Turso cuando el motor nuevo esté validado por los usuarios
 
-### Fase 2 — Seguimiento de postulaciones (tracker)
-- [ ] Entidad Postulación: vacante, plataforma, estado, fechas, contacto, notas
-- [ ] Estados: guardada → CV generado → postulada → en revisión → entrevista → oferta / rechazada / retirada
-- [ ] Historial de eventos inmutable (trazabilidad de punta a punta)
-- [ ] Copia exacta del CV enviado + hash (garantía de "CV correcto por vacante")
-- [ ] Recordatorios de seguimiento
+### Fase 2 — Seguimiento de postulaciones (tracker) (rama `claude/fase2-postulaciones`)
+- [x] Postulación: cargo, empresa, plataforma, enlace, texto y análisis de la vacante (JSON, para la fase 3), puntaje, estado, fechas, contacto
+- [x] Estados: guardada → CV listo → postulada → en revisión → entrevista → oferta / rechazada / retirada
+- [x] Historial de eventos de solo-agregar (creada, CV generado, CV enviado, cambio de estado con nota, nota, recordatorio, datos)
+- [x] Copia exacta de cada CV (PDF + DOCX) con huella SHA-256; "Ya la envié" solo acepta un CV generado para esa misma vacante; verificación de integridad al mostrarlo
+- [x] Recordatorios en la app: seguimiento a 7 días al enviar, "Para hacer hoy", contador en la pestaña
+- [x] Integración con "CV inteligente": guardar la vacante, registrar el CV (guardado o enviado), detectar versiones editadas
+- [x] Registrar postulaciones hechas por fuera de la app; métricas (enviadas, en proceso, ofertas, tasa de respuesta)
+- [ ] Recordatorios fuera de la app (correo / WhatsApp) — requiere un servicio de envío; evaluar en la fase 5
 
 ### Fase 3 — Inteligencia por plataforma (LinkedIn, Computrabajo, Magneto, elempleo)
 - [ ] Captura de vacantes sin scraping masivo: extensión de navegador, JSON-LD `JobPosting`, correos de alertas
@@ -143,11 +146,12 @@
 | 2026-10-07 | ESCO pospuesto | El mapa de evidencias ya resuelve sinónimos del oficio (100 % de acierto en los evals); ESCO aporta sobre todo a escala (SaaS: normalizar miles de perfiles, sugerir habilidades por ocupación). Reevaluar si los evals muestran fallos de sinónimos o en la Fase 5 |
 | 2026-10-07 | Evals con casos ficticios y expectativas por palabra clave, fuera de la CI | Miden calidad real con IA real (cuesta cuota); la CI solo prueba las métricas. Son la base para elegir proveedor del SaaS con datos |
 | 2026-10-07 | Tareas típicas generadas por IA solo como recordatorio: la persona marca lo que hizo | Reconocer es más fácil que recordar; la confirmación explícita mantiene la honestidad (nada entra sin que la persona lo marque) |
+| 2026-10-07 | Los CV (PDF/DOCX) se guardan en Postgres junto a su huella | ~60 KB por CV: miles caben en el plan gratuito; una sola fuente de verdad y respaldos simples. Pasar a almacenamiento de objetos (S3/R2) si crece en la fase 5 |
+| 2026-10-07 | Una postulación por vacante analizada; cada CV generado se adjunta a ella | Evita duplicados y permite ver todas las versiones; solo un CV de esa misma vacante puede marcarse como enviado |
 | 2026-10-07 | No purgar el historial git de los `.md` personales | Solo contenido de CV (sin contacto ni IDs); purgar exige force push a `main` público y GitHub mantiene accesibles los commits huérfanos por SHA |
 
 ## Próximo paso
 
-1. Usuarios: importar el PDF de LinkedIn de la pareja, usar la entrevista guiada y probar "CV inteligente" con vacantes reales; reportar lo que no convenza.
-2. Ampliar los evals con casos más difíciles (vacantes ambiguas, perfiles con poca experiencia, otras profesiones) y medir costo por CV.
-3. Retirar el generador clásico y el almacenamiento anterior cuando el motor esté validado.
-4. Fase 2: seguimiento de postulaciones (cada CV generado se guarda con su vacante y su estado).
+1. Usuarios: registrar sus postulaciones reales (desde "CV inteligente" con "Ya la envié", o manualmente) y actualizar estados cuando haya respuesta.
+2. Fase 3 — inteligencia por plataforma: con las vacantes y resultados que ya se guardan (análisis JSON + estados), medir qué palabras y requisitos piden más en cada portal y qué CVs consiguen respuesta; captura de vacantes con extensión de navegador / JSON-LD.
+3. Ampliar evals (casos difíciles, costo por CV) y retirar el generador clásico y el almacenamiento anterior.
