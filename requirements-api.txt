@@ -1,0 +1,5 @@
+# API (fase 5). Streamlit Cloud sigue usando requirements.txt.
+-r requirements.txt
+fastapi>=0.115.0,<1.0.0
+uvicorn[standard]>=0.30.0,<1.0.0
+pyjwt[crypto]>=2.15.0,<3.0.0  # enfría la relectura del JWKS ante llaves desconocidas
