@@ -11,7 +11,7 @@ from core.usage import metered
 
 
 def _llm(task: str, username: str):
-    return metered(llm_module.get_llm(task), username)
+    return metered(lambda: llm_module.get_llm(task), username)
 
 
 def generate_cv(job: ClaimedJob, report: Callable[[dict], None]) -> dict:

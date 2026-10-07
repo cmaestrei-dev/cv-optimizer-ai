@@ -78,20 +78,29 @@ def add(username: str, calls: int = 1) -> None:
 
 
 class MeteredLLM:
-    """Mismo contrato que LLMClient; cuenta cada llamada exitosa contra el cupo de la cuenta."""
+    """Mismo contrato que LLMClient; cuenta cada llamada exitosa contra el cupo de la cuenta.
+
+    Acepta el cliente o una función que lo crea: así el cliente (y su configuración) solo se exige
+    cuando de verdad se llama, después de validar lo que mandó la persona.
+    """
 
     def __init__(self, llm, username: str):
         self._llm = llm
         self._username = username
 
+    def _client(self):
+        if callable(self._llm) and not hasattr(self._llm, "complete"):
+            self._llm = self._llm()
+        return self._llm
+
     def complete(self, *args, **kwargs):
         check(self._username)
-        result = self._llm.complete(*args, **kwargs)
+        result = self._client().complete(*args, **kwargs)
         add(self._username)
         return result
 
     def __getattr__(self, name):
-        return getattr(self._llm, name)
+        return getattr(self._client(), name)
 
 
 def metered(llm, username: str) -> MeteredLLM:

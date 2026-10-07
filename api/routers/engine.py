@@ -47,7 +47,7 @@ router = APIRouter(tags=["motor"])
 
 
 def _llm(task: str, account: CurrentAccount):
-    return usage.metered(llm_module.get_llm(task), account.username)
+    return usage.metered(lambda: llm_module.get_llm(task), account.username)  # perezoso: valida antes
 
 
 def _label(ref: str, snapshot: ProfileSnapshot) -> str | None:
