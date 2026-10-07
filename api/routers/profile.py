@@ -10,6 +10,7 @@ from api.schemas import (
     AchievementOut,
     AchievementsIn,
     Contact,
+    ContactOut,
     EducationIn,
     EducationOut,
     ExperienceIn,
@@ -21,15 +22,16 @@ from api.schemas import (
 )
 from core.profile import service
 from core.profile.interview import strength
+from core.profile.links import safe_link
 
 router = APIRouter(tags=["perfil"])
 
 
-def _contact(username: str) -> Contact:
+def _contact(username: str) -> ContactOut:
     user = service.get_user(username)
-    return Contact(
+    return ContactOut(
         full_name=user.full_name, email=user.email, phone=user.phone,
-        linkedin_url=user.linkedin_url, github_url=user.github_url,
+        linkedin_url=safe_link(user.linkedin_url), github_url=safe_link(user.github_url),
     )
 
 
@@ -63,8 +65,8 @@ def me(account: CurrentAccount) -> MeOut:
                  has_skills=has_skills, has_education=has_education)
 
 
-@router.put("/me/contact", response_model=Contact)
-def update_contact(body: Contact, account: CurrentAccount) -> Contact:
+@router.put("/me/contact", response_model=ContactOut)
+def update_contact(body: Contact, account: CurrentAccount) -> ContactOut:
     service.update_user(account.username, **body.model_dump())
     return _contact(account.username)
 

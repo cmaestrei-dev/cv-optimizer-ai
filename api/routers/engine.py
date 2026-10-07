@@ -216,7 +216,7 @@ def gap(application_id: int, body: GapIn, account: CurrentAccount) -> GapOut:
     added, candidates = applying.gap_story(account.username, application_id, body.requirement, body.experience_id,
                                            body.story, _llm("extract", account))
     return GapOut(added=added, candidates=[
-        CandidateOut(text=c.text, problems=c.problems, duplicate_of=c.duplicate_of, added=c.suggested)
+        CandidateOut(text=c.text, problems=c.problems, duplicate_of=c.duplicate_of, suggested=c.suggested)
         for c in candidates
     ])
 

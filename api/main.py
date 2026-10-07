@@ -17,7 +17,8 @@ from fastapi.responses import JSONResponse
 from sqlalchemy import text
 
 import config  # noqa: F401  (carga .env antes de leer variables)
-from api.routers import applications, engine, market, profile
+from api.limits import BodySizeLimit
+from api.routers import applications, assist, engine, market, profile
 from core.applying import DuplicateVacancyError
 from core.capture import CaptureError
 from core.db import database_url, session_scope
@@ -63,6 +64,7 @@ async def _lifespan(_app: FastAPI):
 def create_app() -> FastAPI:
     app = FastAPI(title="CV Optimizer AI", version="0.1.0", lifespan=_lifespan)
 
+    app.add_middleware(BodySizeLimit)  # se agrega antes que CORS: así CORS lo envuelve y el 413 lleva sus cabeceras
     origins = [o.strip() for o in os.environ.get("API_CORS_ORIGINS", "").split(",") if o.strip()]
     if origins:
         app.add_middleware(  # tokens en la cabecera Authorization, no cookies: sin credenciales de CORS
@@ -97,7 +99,7 @@ def create_app() -> FastAPI:
             s.execute(text("select 1"))
         return {"status": "ok"}
 
-    for router in (profile.router, applications.router, market.router, engine.router):
+    for router in (profile.router, assist.router, applications.router, market.router, engine.router):
         app.include_router(router)
     return app
 

@@ -182,7 +182,7 @@ class TestHelpers:
         exp_id = client.get("/profile", headers=h).json()["experiences"][0]["id"]
         r = client.post(f"/applications/{app_id}/gaps", headers=h, json={
             "requirement": 3, "experience_id": exp_id, "story": "registraba las facturas de proveedores en SAP"})
-        assert r.json()["added"] == 1 and r.json()["candidates"][0]["added"] is True
+        assert r.json()["added"] == 1 and r.json()["candidates"][0]["suggested"] is True
         assert client.get(f"/applications/{app_id}/analysis", headers=h).json()["stale"] is True
         assert client.post(f"/applications/{app_id}/gaps", headers=h, json={
             "requirement": 99, "experience_id": exp_id, "story": "x"}).status_code == 422
