@@ -416,3 +416,23 @@ class TestGenerateDocx:
         assert ("Heading 2", "Auxiliar - ACME | 2022 - 2024") in styled
         assert ("List Bullet", "Gestioné facturación") in styled
         assert build_docx_filename("Ana_Auxiliar.pdf") == "Ana_Auxiliar.docx"
+
+
+class TestCssTemplate:
+    def test_css_is_valid_for_replace_filling(self):
+        from services.pdf_generator import CSS_TEMPLATE
+
+        # Se rellena con .replace(): llaves dobles llegarían tal cual y WeasyPrint ignoraría reglas (p. ej. @page).
+        assert "{{" not in CSS_TEMPLATE and "}}" not in CSS_TEMPLATE
+
+    def test_page_margins_and_bullets_render(self):
+        from weasyprint import HTML
+
+        from services.pdf_generator import CSS_TEMPLATE
+        from utils.pdf_extractor import extract_text_from_pdf
+
+        css = CSS_TEMPLATE.replace("{page_size}", "A4")
+        doc = HTML(string=f"<html><head><style>{css}</style></head><body><ul><li>Logro</li></ul></body></html>")
+        rendered = doc.render()
+        assert round(rendered.pages[0]._page_box.margin_left) == 48  # 0.5in
+        assert "– Logro" in (extract_text_from_pdf(rendered.write_pdf()) or "")
