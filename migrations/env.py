@@ -24,10 +24,21 @@ def run_migrations_offline() -> None:
 
 def run_migrations_online() -> None:
     with get_engine().connect() as connection:
-        # render_as_batch: permite ALTER TABLE en SQLite (local/tests) con el mismo script.
-        context.configure(connection=connection, target_metadata=target_metadata, render_as_batch=True)
-        with context.begin_transaction():
-            context.run_migrations()
+        sqlite = connection.dialect.name == "sqlite"
+        if sqlite:
+            # El modo batch recrea tablas (crea la nueva, copia y BORRA la vieja). Con las llaves
+            # foráneas activas, ese borrado eliminaría en cascada todo lo que cuelga de la tabla.
+            connection.exec_driver_sql("PRAGMA foreign_keys=OFF")
+            connection.commit()
+        try:
+            # render_as_batch: permite ALTER TABLE en SQLite (local/tests) con el mismo script.
+            context.configure(connection=connection, target_metadata=target_metadata, render_as_batch=True)
+            with context.begin_transaction():
+                context.run_migrations()
+        finally:
+            if sqlite:  # la conexión vuelve al pool: debe quedar como las demás
+                connection.exec_driver_sql("PRAGMA foreign_keys=ON")
+                connection.commit()
 
 
 if context.is_offline_mode():

@@ -154,7 +154,7 @@ def _process(text: str, profile: UserProfile, overrides: dict[str, str]) -> None
 
 def _render_inbox(profile: UserProfile, overrides: dict[str, str]) -> None:
     items = sorted(
-        tracking.list_applications(profile.username, TRIAGE_STATUSES),
+        tracking.list_applications(profile.username, TRIAGE_STATUSES, with_files=False),
         key=lambda a: (a.match_score if a.match_score is not None else -1, a.id), reverse=True,
     )
     st.markdown(f"##### :material/inbox: 3. Por revisar ({len(items)})")
@@ -237,7 +237,7 @@ def _prepare(a: Application, vacancy: VacancyAnalysis | None, profile: UserProfi
 
 
 def _render_discarded(username: str) -> None:
-    items = tracking.list_applications(username, ("descartada",))
+    items = tracking.list_applications(username, ("descartada",), with_files=False)
     if not items:
         return
     with st.expander(f":material/delete_sweep: Descartadas ({len(items)})"):

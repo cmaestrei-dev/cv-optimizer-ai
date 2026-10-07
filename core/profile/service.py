@@ -5,10 +5,13 @@ mantiene una sesión abierta: st.rerun() lanza una BaseException que, dentro de 
 descartaría los cambios sin avisar.
 """
 
+import hashlib
 import logging
+import secrets
 import threading
 
 from sqlalchemy import func, select
+from sqlalchemy.exc import IntegrityError
 
 from core.db import session_scope, upgrade_schema
 from core.profile import repository as repo
@@ -43,6 +46,32 @@ def ensure_ready() -> None:
 def list_usernames() -> list[str]:
     with session_scope() as s:
         return repo.list_usernames(s)
+
+
+SAAS_PREFIX = "saas:"
+
+
+def account_username(subject: str, *, email: str = "", full_name: str = "") -> str:
+    """Usuario interno de una cuenta del SaaS ("emisor|sub"); se crea la primera vez que entra."""
+    for _ in range(2):  # dos primeras peticiones simultáneas: la segunda choca con la única y relee
+        try:
+            with session_scope() as s:
+                user = s.scalar(select(User).where(User.auth_subject == subject))
+                if user is None:
+                    user = User(
+                        # ":" no es válido en los nombres de perfil de Streamlit: nadie puede ocupar este antes.
+                        username=SAAS_PREFIX + hashlib.sha256(subject.encode()).hexdigest()[:20], auth_subject=subject,
+                        email=email.strip()[:200], full_name=full_name.strip()[:200],
+                        # Contraseña local inutilizable: si una versión de Streamlit sin el filtro la listara,
+                        # pediría una contraseña que nadie conoce en vez de abrirla.
+                        password_hash=secrets.token_hex(32), salt=secrets.token_hex(32),
+                    )
+                    s.add(user)
+                    s.flush()
+                return user.username
+        except IntegrityError:
+            continue
+    raise RuntimeError("No se pudo crear la cuenta")
 
 
 def get_user(username: str) -> User | None:

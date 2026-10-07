@@ -115,12 +115,18 @@ def exists(username: str, application_id: int) -> bool:
     return True
 
 
-def list_applications(username: str, statuses: tuple[str, ...] | None = None) -> list[Application]:
+def list_applications(
+    username: str, statuses: tuple[str, ...] | None = None, *, with_files: bool = True
+) -> list[Application]:
+    """with_files=False no trae el PDF/DOCX de cada CV (listas, resumen, mercado): solo sus datos."""
     with session_scope() as s:
         query = select(Application).where(Application.user_id == _user_id(s, username))
         if statuses:
             query = query.where(Application.status.in_(statuses))
-        query = query.options(selectinload(Application.events), selectinload(Application.cvs))
+        cvs = selectinload(Application.cvs)
+        if not with_files:
+            cvs = cvs.defer(CVDocumentRecord.pdf).defer(CVDocumentRecord.docx)
+        query = query.options(selectinload(Application.events), cvs)
         return list(s.scalars(query.order_by(Application.updated_at.desc(), Application.id.desc())))
 
 
@@ -212,6 +218,18 @@ def mark_sent(username: str, application_id: int, cv_id: int | None, *, sent_on:
         application.next_action = "Hacer seguimiento si no hay respuesta"
 
 
+def get_cv(username: str, cv_id: int) -> CVDocumentRecord:
+    """Un CV guardado, solo si pertenece a una postulación del usuario."""
+    with session_scope() as s:
+        record = s.scalar(
+            select(CVDocumentRecord).join(Application)
+            .where(CVDocumentRecord.id == cv_id, Application.user_id == _user_id(s, username))
+        )
+        if record is None:
+            raise NotFoundError(f"CV {cv_id}")
+        return record
+
+
 def verify_cv(record: CVDocumentRecord) -> bool:
     """True si el PDF guardado es exactamente el mismo que se registró (no fue alterado)."""
     return sha256(record.pdf) == record.pdf_sha256 and sha256(record.docx) == record.docx_sha256
@@ -275,7 +293,7 @@ def summary(username: str, on: date | None = None) -> Summary:
     on = on or today()
     # La bandeja (por revisar) y lo descartado sin enviar no son postulaciones.
     applications = [
-        a for a in list_applications(username)
+        a for a in list_applications(username, with_files=False)
         if a.status not in TRIAGE_STATUSES and not (a.status == "descartada" and a.applied_on is None)
     ]
     by_status = dict.fromkeys(STATUSES, 0)
