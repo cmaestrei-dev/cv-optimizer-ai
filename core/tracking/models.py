@@ -8,6 +8,7 @@ from sqlalchemy.orm import Mapped, mapped_column, relationship
 from core.db import Base
 
 STATUSES: dict[str, tuple[str, str]] = {
+    "por_revisar": ("Por revisar", ":material/inbox:"),
     "guardada": ("Guardada", ":material/bookmark:"),
     "cv_generado": ("CV listo", ":material/description:"),
     "postulada": ("Postulada", ":material/send:"),
@@ -16,7 +17,9 @@ STATUSES: dict[str, tuple[str, str]] = {
     "oferta": ("Oferta", ":material/celebration:"),
     "rechazada": ("Rechazada", ":material/block:"),
     "retirada": ("Retirada", ":material/logout:"),
+    "descartada": ("Descartada", ":material/delete_sweep:"),
 }
+TRIAGE_STATUSES = ("por_revisar",)  # en la bandeja: aún no es una postulación
 ACTIVE_STATUSES = ("guardada", "cv_generado", "postulada", "en_revision", "entrevista")
 APPLIED_STATUSES = ("postulada", "en_revision", "entrevista", "oferta", "rechazada")  # ya se envió
 PLATFORMS = ["LinkedIn", "Computrabajo", "Magneto", "elempleo", "Página de la empresa", "Correo o referido", "Otra"]
@@ -34,6 +37,7 @@ class Application(Base):
     status: Mapped[str] = mapped_column(String(30), default="guardada", index=True)
     vacancy_text: Mapped[str] = mapped_column(Text, default="")
     analysis_json: Mapped[str] = mapped_column(Text, default="")  # VacancyAnalysis para la analítica (fase 3)
+    match_json: Mapped[str] = mapped_column(Text, default="", server_default="")  # resumen del match (bandeja)
     match_score: Mapped[int | None] = mapped_column(Integer)
     applied_on: Mapped[date | None] = mapped_column(Date)
     next_action_on: Mapped[date | None] = mapped_column(Date, index=True)

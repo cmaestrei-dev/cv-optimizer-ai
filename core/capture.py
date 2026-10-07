@@ -13,7 +13,7 @@ import re
 import socket
 from dataclasses import dataclass
 from html.parser import HTMLParser
-from urllib.parse import urljoin, urlparse
+from urllib.parse import parse_qs, urljoin, urlparse
 
 import requests
 
@@ -32,6 +32,24 @@ _PLATFORMS = {
 
 class CaptureError(RuntimeError):
     pass
+
+
+_LINKEDIN_JOB = re.compile(r"/jobs/view/(?:[^/]*-)?(\d{6,})/?$")
+
+
+def canonical_url(url: str) -> str:
+    """Una URL por vacante. En LinkedIn, la vista de búsqueda (?currentJobId=) y los enlaces con
+    nombre (/jobs/view/cargo-en-empresa-123) son la misma oferta: /jobs/view/123."""
+    url = url.strip()
+    parsed = urlparse(url)
+    host = (parsed.hostname or "").lower()
+    if host == "linkedin.com" or host.endswith(".linkedin.com"):
+        job_id = parse_qs(parsed.query).get("currentJobId", [""])[0]
+        if not job_id and (match := _LINKEDIN_JOB.search(parsed.path)):
+            job_id = match.group(1)
+        if job_id.isdigit():
+            return f"https://www.linkedin.com/jobs/view/{job_id}"
+    return url
 
 
 @dataclass
@@ -88,12 +106,18 @@ def _download(url: str) -> tuple[str, str]:
                 f"El sitio respondió {response.status_code}: quizá pide iniciar sesión. Copia y pega el texto de la vacante."
             )
         body = b""
-        for chunk in response.iter_content(65536):
-            body += chunk
-            if len(body) > MAX_BYTES:
-                response.close()
-                raise CaptureError("La página es demasiado grande. Copia y pega el texto de la vacante.")
-        return url, body.decode(response.encoding or "utf-8", errors="replace")
+        try:
+            for chunk in response.iter_content(65536):
+                body += chunk
+                if len(body) > MAX_BYTES:
+                    response.close()
+                    raise CaptureError("La página es demasiado grande. Copia y pega el texto de la vacante.")
+        except requests.RequestException as e:
+            raise CaptureError("La página tardó demasiado en cargar. Intenta de nuevo o pega el texto de la vacante.") from e
+        try:
+            return url, body.decode(response.encoding or "utf-8", errors="replace")
+        except LookupError:  # el sitio declara una codificación desconocida
+            return url, body.decode("utf-8", errors="replace")
     raise CaptureError("Demasiadas redirecciones. Copia y pega el texto de la vacante.")
 
 
@@ -195,7 +219,7 @@ def _posting_text(posting: dict) -> str:
 
 
 def capture_vacancy(url: str) -> CapturedVacancy:
-    url = url.strip()
+    url = canonical_url(url)
     final_url, html = _download(url)
     platform = detect_platform(final_url)
     postings = _job_postings(html)
