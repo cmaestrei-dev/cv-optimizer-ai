@@ -10,7 +10,7 @@ from core.tracking import service as tracking
 @pytest.fixture(autouse=True)
 def _db(monkeypatch):
     monkeypatch.setattr(profiles, "_ready", False)
-    profiles.ensure_ready(lambda: [], lambda u: {}, migrate_legacy=False)
+    profiles.ensure_ready()
     profiles.create_user("ana")
     profiles.create_user("eve")
 

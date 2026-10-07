@@ -21,7 +21,7 @@ cp .streamlit/secrets.toml.example .streamlit/secrets.toml
 streamlit run app.py
 ```
 
-Para persistencia local (SQLite), no se requiere configuración adicional. La base de datos se crea automáticamente en `data/cv_optimizer.db`.
+Para desarrollo local no se requiere base de datos: se crea `data/cv_core.db` (SQLite) automáticamente.
 
 ## Despliegue en Streamlit Cloud
 
@@ -30,31 +30,25 @@ Para persistencia local (SQLite), no se requiere configuración adicional. La ba
 3. Configura los siguientes secretos en el dashboard de Streamlit Cloud:
    - `GEMINI_API_KEY` — tu API key de Google Gemini
    - `DATABASE_URL` — cadena de conexión de Postgres ([Neon](https://neon.tech), gratuito): **obligatoria** en despliegue
-   - `TURSO_DB_URL` / `TURSO_AUTH_TOKEN` — solo mientras se migran los datos del modelo anterior
    - Opcional, motor nuevo: `LLM_EXTRACT` / `LLM_WRITE` (`proveedor` o `proveedor:modelo`, p. ej. `deepseek:deepseek-flash`) y `DEEPSEEK_API_KEY`
-   - `APP_ACCESS_PASSWORD` — contraseña de acceso a la app (**obligatoria** si usas Turso: sin ella la app queda cerrada)
+   - `APP_ACCESS_PASSWORD` — contraseña de acceso a la app (**obligatoria** con `DATABASE_URL`: sin ella la app queda cerrada)
 
-### Base de datos en Turso (gratuito)
+### Base de datos (Postgres en Neon, gratuito)
 
-Para que los datos persistan entre deploys:
-
-1. Crea una cuenta en [Turso](https://turso.tech)
-2. Crea una base de datos: `turso db create cv-optimizer`
-3. Obtén la URL: `turso db show cv-optimizer --url`
-4. Genera un token: `turso db tokens create cv-optimizer`
-5. Configura `TURSO_DB_URL` y `TURSO_AUTH_TOKEN` como secretos en Streamlit Cloud
+1. Crea un proyecto en [Neon](https://neon.tech) y copia la cadena de conexión (botón «Connect»).
+2. Configúrala como `DATABASE_URL` en los secretos de Streamlit Cloud (y en tu `.env` local si quieres usarla).
+3. Las tablas se crean y actualizan solas al arrancar la app (Alembic). En local, sin `DATABASE_URL`, se usa `data/cv_core.db`.
 
 ## Estructura del proyecto
 
 ```
-app.py              # Entry point de Streamlit
-config.py           # Configuración y constantes
-core/               # Núcleo sin UI: cliente de IA multi-proveedor, análisis de vacantes
-services/           # Cliente de Gemini (legado), generadores de PDF y DOCX
-storage/            # Capa de persistencia (SQLite local / Turso remoto)
-ui/                 # Componentes de la interfaz (tabs, formularios)
-models/             # Dataclasses (UserProfile)
-utils/              # Utilidades (extracción de PDF, retry)
+app.py              # Entrada de Streamlit: puerta de acceso, barra lateral y pestañas
+config.py           # Constantes y categorías
+core/               # Núcleo sin UI: IA multi-proveedor, perfil, motor de CV, postulaciones, captura
+migrations/         # Migraciones de esquema (Alembic)
+services/           # Plantilla y utilidades de PDF/DOCX
+ui/                 # Pestañas y componentes de Streamlit
+evals/, scripts/    # Evaluación del motor con IA real
 ```
 
 Plan, estado y decisiones del proyecto: [`docs/ROADMAP.md`](docs/ROADMAP.md).

@@ -72,7 +72,7 @@ class TestApplyImport:
         monkeypatch.setattr(service, "_ready", False)  # cada test usa una base temporal nueva
 
     def test_atomic_import_and_contact_fill(self):
-        service.ensure_ready(lambda: [], lambda u: {}, migrate_legacy=False)
+        service.ensure_ready()
         service.create_user("laura", full_name="Laura G.")
         plan = plan_import(ImportedCV.model_validate(EXTRACTED), PDF_TEXT, ProfileSnapshot("laura"))
         counts = service.apply_import(
@@ -86,7 +86,7 @@ class TestApplyImport:
         assert exps[0].is_current and exps[0].start_year == 2023
 
     def test_failure_saves_nothing(self):
-        service.ensure_ready(lambda: [], lambda u: {}, migrate_legacy=False)
+        service.ensure_ready()
         service.create_user("laura")
         plan = plan_import(ImportedCV.model_validate(EXTRACTED), PDF_TEXT, ProfileSnapshot("laura"))
         with pytest.raises(IndexError):
@@ -108,11 +108,3 @@ class TestInvalidKeyMessages:
         with patch("core.llm.client.requests.post", return_value=resp), pytest.raises(LLMAuthError) as exc:
             LLMClient(PROVIDERS["gemini"], "AQ.mala", "m").complete("x")
         assert "GEMINI_API_KEY" in str(exc.value) and "AQ.mala" not in str(exc.value)
-
-    def test_legacy_client(self):
-        from services.gemini_client import GeminiClient
-
-        resp = MagicMock(status_code=401, text='{"error":{"code":401}}')
-        with patch("services.gemini_client.requests.post", return_value=resp), pytest.raises(RuntimeError) as exc:
-            GeminiClient(api_key="AQ.mala").extract_skills_from_vacancy("x")
-        assert "no es válida o fue revocada" in str(exc.value)

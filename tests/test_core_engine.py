@@ -218,6 +218,15 @@ class TestDocument:
         html = render_html(doc, UserProfile(username="u", full_name="Ana"))
         assert "<script>" not in html and "<link" not in html and "<b>hola" not in html
 
+    def test_pdf_never_embeds_local_files(self, tmp_path):
+        secret = tmp_path / "secret.txt"
+        secret.write_text("SECRETO_DE_PRUEBA")
+        injection = f'<link rel="attachment" href="file://{secret}"><img src="file://{secret}">'
+        doc = CVDocument("es", injection, [CVExperience("Rol", "Empresa", "2020", "", [CVBullet(1, injection, "x", 1.0)])], [], [])
+        contact = UserProfile(username="u", full_name="Ana", email=f'a@b.co"><link rel="attachment" href="file://{secret}">')
+        pdf = render(doc, contact).pdf
+        assert pdf.startswith(b"%PDF") and b"/EmbeddedFile" not in pdf
+
     def test_fits_one_page_by_trimming_least_relevant(self):
         bullets = [CVBullet(i, f"Logro número {i} " + "con mucho detalle " * 12, "x", score=i) for i in range(40)]
         doc = CVDocument("es", "Resumen", [CVExperience("Rol", "Empresa", "2020", "", bullets)], [], [])
