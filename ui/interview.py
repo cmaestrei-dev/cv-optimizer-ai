@@ -52,7 +52,8 @@ def render_interview(profile: UserProfile, api_key_overrides: dict[str, str]) ->
     label = ":material/forum: Mejorar mis logros con una entrevista guiada"
     if total:
         label += f" · {with_metrics} de {total} logros tienen cifras"
-    with st.expander(label, expanded=state is not None):
+    weak = total == 0 or with_metrics / total < 0.5 or any(not e.achievements for e in experiences)
+    with st.expander(label, expanded=state is not None or weak):
         st.markdown(
             "Los reclutadores se fijan en **cifras y resultados**. Te haremos unas preguntas cortas sobre un "
             "empleo y, con tus respuestas, propondremos viñetas más fuertes. Solo se usa lo que tú respondas."

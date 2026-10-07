@@ -10,6 +10,7 @@ from core.engine.matching import MatchResult
 from core.llm import LLMConfigError, StructuredOutputError, get_llm
 from core.llm.client import Image
 from core.profile import service
+from core.profile.interview import strength
 from core.profile.snapshot import ProfileSnapshot
 from core.vacancy import NotAVacancyError
 from models import UserProfile
@@ -179,6 +180,14 @@ def render_tab_cv_inteligente(profile: UserProfile | None, api_key_overrides: di
             ":material/upload_file: **Tu perfil todavía no tiene experiencias.** Ve a la pestaña "
             "«Mi experiencia (importar CV)» y sube tu CV o el PDF de LinkedIn: se llena solo y tú revisas."
         )
+    else:
+        snap = service.snapshot(profile.username)
+        with_metrics, total = (sum(x) for x in zip(*(strength(e) for e in snap.experiences), strict=True))
+        if total == 0 or with_metrics / total < 0.5:
+            st.info(
+                f":material/forum: **Solo {with_metrics} de {total} logros tienen cifras.** Para un CV más fuerte, "
+                "haz primero la entrevista guiada en la pestaña «Mi experiencia (importar CV)» (5 minutos)."
+            )
 
     image = st.file_uploader("Captura de la vacante (opcional)", type=["png", "jpg", "jpeg", "webp"], key="ci_image")
     text = st.text_area("Texto de la vacante", placeholder="Pega aquí la oferta completa...", key="ci_text", height=180)

@@ -192,9 +192,9 @@ def render_tab_experiencia(
         st.success(f":material/check: {flash}")
 
     empty = profile is not None and not service.profile_status(profile.username)[0]
-    render_import(profile, api_key_overrides, expanded=empty)
     if profile is not None and not empty:
-        render_interview(profile, api_key_overrides)
+        render_interview(profile, api_key_overrides)  # el siguiente paso natural tras importar
+    render_import(profile, api_key_overrides, expanded=empty)
     st.markdown("**O agrega una experiencia a mano**")
     _render_new_experience_form(client, profile)
     if profile:
