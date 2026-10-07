@@ -130,6 +130,11 @@ class TestProfile:
         r = client.put("/me/contact", headers=h, json={"full_name": "Ana Pérez", "linkedin_url": "https://linkedin.com/in/ana"})
         assert r.json()["full_name"] == "Ana Pérez"
         assert client.put("/me/contact", headers=h, json={"linkedin_url": "javascript:alert(1)"}).status_code == 422
+        r = client.put("/me/contact", headers=h, json={"linkedin_url": "www.linkedin.com/in/ana"})
+        assert r.json()["linkedin_url"] == "https://www.linkedin.com/in/ana"
+        # Un enlace guardado en otro formato (Streamlit, importación vieja) no rompe la lectura del perfil
+        profiles.update_user(_username(client, "ana"), linkedin_url="mi perfil de linkedin")
+        assert client.get("/me", headers=h).status_code == 200 and client.get("/profile", headers=h).status_code == 200
 
         client.delete(f"/skills/{skill_id}", headers=h)
         client.delete(f"/education/{edu_id}", headers=h)

@@ -3,7 +3,7 @@
 from collections.abc import Callable
 from dataclasses import asdict
 
-from core import applying, discovery
+from core import applying, discovery, onboarding
 from core import llm as llm_module
 from core.jobs.service import ClaimedJob
 from core.profile import service as profiles
@@ -34,7 +34,14 @@ def triage(job: ClaimedJob, report: Callable[[dict], None]) -> dict:
     return state
 
 
+def read_cv(job: ClaimedJob, report: Callable[[dict], None]) -> dict:
+    return onboarding.read_import(job.username, str(job.payload["pdf_text"]), _llm("extract", job.username))
+
+
 HANDLERS: dict[str, Callable[[ClaimedJob, Callable[[dict], None]], dict]] = {
     "cv": generate_cv,
     "bandeja": triage,
+    "importar": read_cv,
 }
+# Su entrada tiene datos personales que no se necesitan después (el texto del CV): se borra al terminar.
+PRIVATE_PAYLOAD = {"importar"}

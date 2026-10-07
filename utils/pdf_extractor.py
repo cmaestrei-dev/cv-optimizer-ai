@@ -12,8 +12,10 @@ def extract_text_from_pdf(file_bytes: bytes) -> str | None:
         with tempfile.NamedTemporaryFile(suffix=".pdf", delete=False) as tmp:
             tmp.write(file_bytes)
             tmp_path = tmp.name
-        result = pdf_inspector.process_pdf(tmp_path)
-        os.unlink(tmp_path)
+        try:
+            result = pdf_inspector.process_pdf(tmp_path)
+        finally:  # el CV no debe quedarse en disco aunque el PDF esté dañado
+            os.unlink(tmp_path)
 
         if result.markdown:
             return result.markdown

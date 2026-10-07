@@ -1,7 +1,7 @@
 # Roadmap y estado del proyecto
 
 > Documento vivo. Se actualiza al terminar cada cambio relevante: qué existe, qué se hizo, qué sigue.
-> Última actualización: 2026-10-07 (fase 5b.1: motor por API)
+> Última actualización: 2026-10-07 (fase 5b.2: perfil asistido por API)
 
 ## Prioridad actual
 
@@ -137,7 +137,15 @@ La app de Streamlit sigue funcionando sobre la misma base durante toda la fase; 
 - [x] Probado de punta a punta con servidor real, Gemini y vacantes reales (bandeja 3 enlaces en 14 s, CV en 5 s, edición, preguntas, mensaje, envío); migración 0005 probada en Postgres
 - [x] Revisión independiente aplicada: el trabajador ya no consulta la base cada segundo (mantenía Neon despierto y gastaba su cómputo gratuito, afectando también a Streamlit): se despierta al encolar y en reposo revisa cada hora; la API no arranca con Postgres sin proveedor de identidad (un `uvicorn` local con el `.env` real habría aplicado migraciones sin fusionar a producción); Streamlit guarda la vacante releída junto con sus evidencias (antes podían quedar cruzadas); máx. 3 trabajos activos por cuenta; latido de los trabajos largos y escrituras solo del intento vigente (sin ejecuciones dobles); las ediciones de CV cuentan en el cupo; enlaces mal formados y caídas del proveedor dan 422/503 en vez de 500
 
-*5b.2 — Perfil asistido por API*: importar CV en PDF (extracción + verificación + plan), completar experiencia (texto libre, tareas típicas, detalle) y entrevista guiada
+*5b.1 fusionada (PR #15)*
+
+*5b.2 — Perfil asistido por API* (rama `claude/fase5b2-perfil`)
+- [x] Importar CV o PDF de LinkedIn: lectura en segundo plano (la IA copia, el código descarta lo que no está en el PDF y marca lo repetido); la persona elige qué guardar y se aplica UNA vez desde lo que leyó el servidor (nunca datos enviados por el cliente). El texto del CV se borra de la cola al terminar
+- [x] Completar experiencia: texto libre → logros verificados, tareas típicas del cargo, tareas + detalle (sin detalle no se usa la IA). Nada se guarda hasta que la persona acepta
+- [x] Entrevista guiada: preguntas, propuestas verificadas contra las respuestas y aceptar → reemplaza en su lugar o agrega
+- [x] Enlaces sin `https://` (como los trae el PDF de LinkedIn) se normalizan; las respuestas ya no validan datos guardados (un enlace raro guardado daba error 500 al leer el perfil: encontrado con el PDF ficticio de LinkedIn y Gemini real)
+- [x] Probado con servidor real y Gemini: importación de un PDF de LinkedIn (3 experiencias, 5 logros, 5 habilidades, 2 estudios), entrevista, tareas típicas y texto libre
+- [x] Revisión independiente aplicada: subir el PDF ya no congela la API (se procesa en el pool de hilos); los PDF que fallaban quedaban en disco con datos personales (ahora se borran siempre, con prueba que lo demuestra); importar nunca duplica (índices repetidos o dos lecturas del mismo CV) y se guarda en la misma transacción que marca la lectura como usada; al aceptar en la entrevista el servidor vuelve a verificar contra las respuestas (antes dependía del cliente); límite global de 6 MB por petición (FastAPI lee los archivos antes de verificar el token); enlaces guardados que no son http(s) no salen hacia el frontend; los trabajos viejos se borran (lecturas de CV a los 2 días, el resto a los 30)
 
 *5c — Frontend React* (Vite + TypeScript), en español y pensado primero para el celular: entrar, perfil, bandeja, preparar/CV, postulaciones, mercado. Actualizar `PRODUCT.md` (hoy dice "sector tecnológico") y `DESIGN.md`
 

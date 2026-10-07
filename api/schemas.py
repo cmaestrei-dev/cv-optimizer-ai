@@ -6,12 +6,14 @@ from urllib.parse import urlsplit
 
 from pydantic import AfterValidator, BaseModel, Field, StringConstraints
 
+from core.profile.links import with_scheme
 from core.tracking.models import PLATFORMS, STATUSES, TRIAGE_STATUSES
 
 
 def _http_or_empty(value: str) -> str:
     if not value:
         return value
+    value = with_scheme(value)
     if not value.startswith(("https://", "http://")):
         raise ValueError("El enlace debe empezar por https:// o http://")
     try:
@@ -37,11 +39,23 @@ Platform = Literal[("", *PLATFORMS)]
 
 
 class Contact(BaseModel):
+    """Entrada: valida los enlaces (acepta "www.linkedin.com/in/..." y le agrega https://)."""
+
     full_name: Text = ""
     email: Text = ""
     phone: Text = ""
     linkedin_url: Url = ""
     github_url: Url = ""
+
+
+class ContactOut(BaseModel):
+    """Salida: tal como está guardado (perfiles de Streamlit o importados pueden tener otros formatos)."""
+
+    full_name: str
+    email: str
+    phone: str
+    linkedin_url: str
+    github_url: str
 
 
 class AchievementOut(BaseModel):
@@ -99,7 +113,7 @@ class EducationIn(BaseModel):
 
 
 class ProfileOut(BaseModel):
-    contact: Contact
+    contact: ContactOut
     experiences: list[ExperienceOut]
     skills: list[SkillOut]
     education: list[EducationOut]
@@ -109,7 +123,7 @@ class ProfileOut(BaseModel):
 
 class MeOut(BaseModel):
     email: str
-    contact: Contact
+    contact: ContactOut
     has_experience: bool
     has_skills: bool
     has_education: bool
@@ -365,7 +379,7 @@ class CandidateOut(BaseModel):
     text: str
     problems: list[str]
     duplicate_of: str | None
-    added: bool
+    suggested: bool = Field(description="Verificado y no repetido (en /gaps: ya se agregó al perfil)")
 
 
 class GapOut(BaseModel):
@@ -385,3 +399,69 @@ class SearchLinkOut(BaseModel):
 class UsageOut(BaseModel):
     used_today: int
     daily_limit: int
+
+
+# ── perfil asistido: importar, completar, entrevista ──────────────────
+
+
+class ImportApplyIn(BaseModel):
+    experiences: list[int] = Field(default_factory=list, max_length=60, description="Índices de la lectura")
+    skills: list[int] = Field(default_factory=list, max_length=200)
+    education: list[int] = Field(default_factory=list, max_length=60)
+    fill_contact: bool = Field(default=True, description="Completar nombre, correo, teléfono y LinkedIn vacíos")
+
+
+class ImportApplyOut(BaseModel):
+    counts: dict[str, int]
+    profile: ProfileOut
+
+
+class FreeTextIn(BaseModel):
+    text: Annotated[str, StringConstraints(strip_whitespace=True, min_length=1, max_length=5000)]
+
+
+class TasksOut(BaseModel):
+    tasks: list[str]
+
+
+class TaskItem(BaseModel):
+    task: Annotated[str, StringConstraints(strip_whitespace=True, min_length=1, max_length=300)]
+    detail: Annotated[str, StringConstraints(strip_whitespace=True, max_length=1000)] = ""
+
+
+class TasksIn(BaseModel):
+    items: list[TaskItem] = Field(min_length=1, max_length=20)
+
+
+class QuestionOut(BaseModel):
+    achievement_id: int | None
+    question: str
+    example: str
+
+
+class AnswerIn(BaseModel):
+    achievement_id: int | None = None
+    question: Annotated[str, StringConstraints(strip_whitespace=True, min_length=1, max_length=500)]
+    answer: Annotated[str, StringConstraints(strip_whitespace=True, max_length=2000)] = ""
+
+
+class AnswersIn(BaseModel):
+    answers: list[AnswerIn] = Field(min_length=1, max_length=12)
+
+
+class ProposalOut(BaseModel):
+    achievement_id: int | None = Field(description="Logro que mejora; null si es uno nuevo")
+    original: str
+    proposed: str
+    problems: list[str] = Field(description="Datos que no salen de tus respuestas: no se recomienda aceptarla")
+
+
+class AcceptedIn(BaseModel):
+    achievement_id: int | None = None
+    text: Annotated[str, StringConstraints(strip_whitespace=True, min_length=1, max_length=1000)]
+
+
+class AcceptIn(BaseModel):
+    accepted: list[AcceptedIn] = Field(min_length=1, max_length=30)
+    answers: list[Annotated[str, StringConstraints(strip_whitespace=True, max_length=2000)]] = Field(
+        min_length=1, max_length=12, description="Las respuestas de la entrevista: el servidor verifica contra ellas")

@@ -6,7 +6,7 @@ import threading
 
 from core.errors import describe
 from core.jobs import service
-from core.jobs.handlers import HANDLERS
+from core.jobs.handlers import HANDLERS, PRIVATE_PAYLOAD
 
 logger = logging.getLogger(__name__)
 
@@ -27,12 +27,13 @@ def run_once() -> bool:
         handler = HANDLERS.get(job.kind)
         if handler is None:
             raise RuntimeError(f"Tipo de trabajo desconocido: {job.kind}")
-        service.finish(job, handler(job, report))
+        service.finish(job, handler(job, report), clear_payload=job.kind in PRIVATE_PAYLOAD)
     except Exception as e:  # el trabajo falla con un mensaje para la persona; el proceso sigue
         known = describe(e)
         if known is None:
             logger.exception("Falló el trabajo %s (%s)", job.id, job.kind)
-        service.fail(job, known[1] if known else "Error inesperado. Intenta de nuevo.", last or None)
+        service.fail(job, known[1] if known else "Error inesperado. Intenta de nuevo.", last or None,
+                     clear_payload=job.kind in PRIVATE_PAYLOAD)
     return True
 
 
@@ -47,8 +48,16 @@ def run_forever(stop: threading.Event, idle_seconds: float) -> None:
             logger.exception("Error leyendo la cola de trabajos")
             busy = False
         if not busy:
+            _purge()
             service.new_job.wait(idle_seconds)
             service.new_job.clear()
+
+
+def _purge() -> None:
+    try:
+        service.purge()
+    except Exception:
+        logger.exception("No se pudieron borrar los trabajos viejos")
 
 
 def start_thread(idle_seconds: float = 3600) -> tuple[threading.Thread, threading.Event]:
