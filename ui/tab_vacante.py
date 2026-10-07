@@ -1,20 +1,13 @@
 import logging
-import re
 
 import streamlit as st
 
+from core.profile import service
+from core.profile.repository import skill_key
 from models import UserProfile
 from services.docx_generator import build_docx_filename, generate_docx
 from services.gemini_client import GeminiClient, JobParsingError
 from services.pdf_generator import build_pdf_filename, generate_pdf, parse_vacancy_header
-from storage import (
-    all_data_files_exist,
-    append_skill,
-    get_skills_lines,
-    read_education,
-    read_knowledge_base,
-    read_skills,
-)
 from utils.retry import RetryableError, retry_with_backoff
 
 logger = logging.getLogger(__name__)
@@ -101,11 +94,6 @@ def _build_multimodal_call(client: GeminiClient, archivo_imagen, texto_plano: st
     return _call()
 
 
-def _extract_skill_name_from_line(line: str) -> str:
-    match = re.search(r"\*\*(.+?)\*\*", line)
-    return match.group(1).strip().lower() if match else ""
-
-
 def _store_vacancy_analysis(resultado: str) -> None:
     st.session_state["vacante_analizada"] = resultado
     st.session_state.pop("cv_result", None)
@@ -120,11 +108,9 @@ def _render_skills_from_vacancy(client: GeminiClient, profile: UserProfile) -> N
     if not vacancy_result:
         return
 
-    existing_lines = get_skills_lines(profile.slug)
-    existing_names = {_extract_skill_name_from_line(line) for line in existing_lines}
-    existing_names.discard("")
+    existing_keys = {skill_key(s.name) for s in service.list_skills(profile.username)}
 
-    cache_key = f"_extracted_skills_{profile.slug}"
+    cache_key = f"_extracted_skills_{profile.username}"
     if cache_key not in st.session_state:
         with st.spinner("Extrayendo skills de la vacante..."):
             try:
@@ -142,7 +128,7 @@ def _render_skills_from_vacancy(client: GeminiClient, profile: UserProfile) -> N
             line.strip() for line in raw_skills.split("\n")
             if line.strip() and not line.strip().startswith("#")
         }
-        st.session_state[cache_key] = sorted(s for s in extracted if s.lower() not in existing_names)
+        st.session_state[cache_key] = sorted(s for s in extracted if skill_key(s) not in existing_keys)
 
     missing = st.session_state[cache_key]
     if not missing:
@@ -154,17 +140,17 @@ def _render_skills_from_vacancy(client: GeminiClient, profile: UserProfile) -> N
         selected = st.multiselect(
             f"Se encontraron {len(missing)} skills que no tienes registradas. ¿Cuáles quieres agregar?",
             options=missing,
-            key=f"skills_select_{profile.slug}",
+            key=f"skills_select_{profile.username}",
         )
         if selected and st.button(
             f":material/add: Agregar {len(selected)} skill(s) a mi perfil",
             type="primary",
-            key=f"add_skills_btn_{profile.slug}",
+            key=f"add_skills_btn_{profile.username}",
         ):
             for skill in selected:
-                append_skill(profile.slug, f"- **{skill}** -> [Otros]\n")
+                service.add_skill(profile.username, skill, "Otros")
             st.session_state[cache_key] = [s for s in missing if s not in selected]
-            st.session_state.pop(f"skills_select_{profile.slug}", None)
+            st.session_state.pop(f"skills_select_{profile.username}", None)
             st.rerun()
 
 
@@ -195,7 +181,7 @@ def _procesar_y_generar(
     if profile is None:
         st.error(":material/warning: Primero crea o selecciona un perfil en la barra lateral.")
         return
-    if not all_data_files_exist(profile.slug):
+    if not all(service.profile_status(profile.username)):
         st.warning(":material/warning: Primero registra al menos una Experiencia, una Habilidad y Educación en las otras pestañas.")
         return
 
@@ -230,9 +216,7 @@ def _procesar_y_generar(
         st.write(f":material/check_circle: Vacante analizada{f' ({detected})' if detected else ''}.")
 
         st.write(":material/description: Generando CV adaptado...")
-        experiencias = read_knowledge_base(profile.slug)
-        habilidades = read_skills(profile.slug)
-        educacion = read_education(profile.slug)
+        experiencias, habilidades, educacion = service.legacy_markdown(profile.username)
 
         @retry_with_backoff()
         def _generate():
@@ -273,7 +257,7 @@ def _procesar_y_generar(
             return
 
         st.session_state["cv_result"] = {
-            "slug": profile.slug,
+            "slug": profile.username,
             "cv_markdown": cv_final,
             "pdf_filename": filename,
             "pdf": pdf_bytes,
@@ -285,7 +269,7 @@ def _procesar_y_generar(
 
 def _render_results(client: GeminiClient | None, profile: UserProfile | None) -> None:
     result = st.session_state.get("cv_result")
-    if result and profile and result["slug"] == profile.slug:
+    if result and profile and result["slug"] == profile.username:
         st.divider()
         with st.expander(":material/preview: Vista previa del CV", expanded=True):
             st.markdown(result["cv_markdown"])

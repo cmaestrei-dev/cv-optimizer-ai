@@ -5,22 +5,18 @@ import time
 
 import streamlit as st
 
+# Los secretos de Streamlit Cloud pasan a variables de entorno ANTES de importar módulos que las leen.
 try:
-    for _key in (
-        "TURSO_DB_URL",
-        "TURSO_AUTH_TOKEN",
-        "GEMINI_API_KEY",
-        "GEMINI_MODEL",
-        "PROMPT_VERSION",
-        "APP_ACCESS_PASSWORD",
-    ):
-        if _key in st.secrets:
-            _os.environ[_key] = str(st.secrets[_key])
+    for _key, _value in st.secrets.items():
+        if isinstance(_value, str | int | float | bool):
+            _os.environ[_key] = str(_value)
 except Exception:
     pass
 
+import storage
+from core.db import database_url
+from core.profile import service as profile_service
 from services.gemini_client import GeminiClient
-from storage import get_storage_info
 from ui.profile_form import render_profile_sidebar
 from ui.tab_educacion import render_tab_educacion
 from ui.tab_experiencia import render_tab_experiencia
@@ -54,6 +50,32 @@ def _has_app_access() -> bool:
             time.sleep(1)
             st.error("Contraseña incorrecta.")
     return False
+
+
+def _ensure_profile_store() -> bool:
+    """Prepara la base del perfil estructurado y migra (una sola vez) los datos del modelo anterior."""
+    if _os.environ.get("TURSO_DB_URL") and not _os.environ.get("DATABASE_URL"):
+        st.error(
+            "Falta el secreto DATABASE_URL (Postgres de Neon). Sin él, los perfiles se guardarían "
+            "en un archivo temporal que se borra al reiniciar la app."
+        )
+        return False
+    # A Postgres solo se migra desde Turso (los datos de producción). Si alguien corre la app en
+    # local con la DATABASE_URL de producción, su SQLite local (más viejo) no debe colarse.
+    legacy_is_turso = bool(_os.environ.get("TURSO_DB_URL") and _os.environ.get("TURSO_AUTH_TOKEN"))
+    migrate_legacy = legacy_is_turso or not database_url().startswith("postgresql")
+    try:
+        reports = profile_service.ensure_ready(
+            storage.list_profiles, storage.export_profile_rows, migrate_legacy=migrate_legacy
+        )
+    except Exception:
+        logger.exception("No se pudo preparar la base de datos del perfil")
+        st.error("No se pudo conectar con la base de datos. Revisa DATABASE_URL e inténtalo de nuevo.")
+        return False
+    migrated = [r for r in reports if not r.skipped]
+    if migrated:
+        st.toast(f"Se migraron {len(migrated)} perfil(es) al nuevo modelo de datos.")
+    return True
 
 
 def main():
@@ -159,23 +181,16 @@ def main():
 
     st.title("CV Optimizer AI")
 
-    if not _has_app_access():
+    if not _has_app_access() or not _ensure_profile_store():
         return
 
     with st.sidebar:
         st.header("Configuración")
 
-        storage_info = get_storage_info()
-        has_turso_secrets = bool(_os.environ.get("TURSO_DB_URL"))
-        if storage_info["mode"] == "turso":
-            if storage_info["connected"]:
-                st.success(":material/cloud_done:  Turso (nube) — datos persisten")
-            else:
-                st.error(":material/cloud_off:  Turso sin conexion — revisa credenciales")
-        elif has_turso_secrets:
-            st.error(":material/cloud_off:  Turso configurado pero NO se cargo a tiempo")
+        if database_url().startswith("postgresql"):
+            st.success(":material/cloud_done:  Postgres (nube) — datos persisten")
         else:
-            st.warning(":material/folder_data:  SQLite local — datos se pierden al dormir")
+            st.warning(":material/folder_data:  SQLite local — solo para desarrollo")
 
         server_api_key = _os.environ.get("GEMINI_API_KEY", "").strip()
         if server_api_key:

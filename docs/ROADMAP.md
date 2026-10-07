@@ -1,7 +1,7 @@
 # Roadmap y estado del proyecto
 
 > Documento vivo. Se actualiza al terminar cada cambio relevante: qué existe, qué se hizo, qué sigue.
-> Última actualización: 2026-10-07 (entrega 2a de la Fase 1)
+> Última actualización: 2026-10-07 (entrega 2b de la Fase 1)
 
 ## Prioridad actual
 
@@ -48,18 +48,22 @@
 
 **Paso 2 — Núcleo nuevo (motor por etapas)**, en entregas pequeñas, cada una en su PR
 
-*2a — Cimientos* (rama `claude/motor-2a-cimientos`)
+*2a — Cimientos* (PR #3, fusionado)
 - [x] CI en GitHub Actions
 - [x] `core/llm/`: cliente único compatible con OpenAI (Gemini, DeepSeek), modelo por tarea (`LLM_EXTRACT` / `LLM_WRITE`), reintentos, timeouts, caché por contenido
 - [x] `generate_structured()`: JSON validado con Pydantic + 1 intento de corrección
 - [x] `core/vacancy.py`: análisis estructurado (requisitos obligatorios vs deseables, categoría, años, modalidad, keywords) con puente al formato actual
-- [ ] Prueba real contra Gemini y DeepSeek (requiere API keys locales)
+- [x] Prueba real contra Gemini (2,3 s) y DeepSeek (8,4 s): ambos extraen bien cargo, área, años y separan obligatorios de deseables
 
-*2b — Perfil maestro estructurado*
-- [ ] Modelo de datos: experiencia (cargo, empresa, fechas reales, país, modalidad) + logros atómicos (texto, habilidades, cifras) + habilidades + educación
-- [ ] SQLAlchemy + Alembic sobre SQLite (local/tests) y Postgres (Neon) en producción
-- [ ] Migración determinista desde las tablas actuales (los encabezados `###` y viñetas ya tienen estructura), sin borrar las tablas viejas
-- [ ] Pestañas de experiencia / habilidades / educación sobre el modelo nuevo; logros editables uno por uno
+*2b — Perfil maestro estructurado* (rama `claude/motor-2b-perfil`)
+- [x] Modelo de datos: usuarios, experiencias (cargo, empresa, periodo con fechas interpretadas, país, modalidad), logros atómicos, habilidades (sin duplicados ignorando mayúsculas/tildes), educación
+- [x] SQLAlchemy + Alembic sobre SQLite (local/tests) y Postgres (producción); probado contra Postgres real
+- [x] Capa de servicio (`core/profile/service.py`): cada operación con su propia transacción y verificación de dueño
+- [x] Migración determinista y única desde el modelo anterior al arrancar la app (las tablas viejas quedan como respaldo); probada con datos reales: 38/38 logros idénticos, 100% de fechas interpretadas
+- [x] Pestañas de perfil, experiencia, habilidades, educación y vacante sobre el modelo nuevo; logros editables uno por uno; "Guardar tal cual" sin IA
+- [x] La app se niega a arrancar desplegada sin `DATABASE_URL` (evita guardar en un archivo temporal)
+- [ ] **(usuario)** Poner `DATABASE_URL` de Neon en los secretos de Streamlit Cloud antes del merge
+- [ ] Retirar Turso y `storage/` cuando la migración en producción esté confirmada
 
 *2c — Motor de CV*
 - [ ] Match requisito ↔ evidencia (léxico + embeddings), puntaje y brechas visibles antes de generar
@@ -117,11 +121,16 @@
 | 2026-10-07 | Salida estructurada con JSON simple (`json_object`) + esquema en el prompt + validación Pydantic, no `json_schema` | DeepSeek solo soporta `json_object`; así el mismo código sirve para todos los proveedores |
 | 2026-10-07 | Configuración de IA por variables `LLM_EXTRACT` / `LLM_WRITE` (`proveedor:modelo`), sin `pydantic-settings` | Una dependencia menos; lectura perezosa evita depender del orden de importación |
 | 2026-10-07 | Postgres en Neon (recomendado sobre Supabase) | El plan gratuito de Neon escala a cero sin pausar el proyecto; Supabase pausa tras 7 días sin uso |
+| 2026-10-07 | Base nueva separada de Turso; migración automática una sola vez (marca en `app_meta`) y tablas viejas como respaldo | Siempre hay vuelta atrás; un perfil borrado no "resucita" en el siguiente arranque |
+| 2026-10-07 | A Postgres solo se migra automáticamente desde Turso (producción); el SQLite local solo a un SQLite local | Correr la app en local con la `DATABASE_URL` de producción no debe colar datos viejos ni marcar la migración como hecha |
+| 2026-10-07 | La UI nunca mantiene una sesión de BD abierta: capa de servicio con una transacción por operación | `st.rerun()` lanza una `BaseException` que descartaría los cambios en silencio dentro de una sesión |
+| 2026-10-07 | Columnas de texto libre sin límite de longitud | Postgres rechaza textos más largos que la columna; SQLite no, y los tests no lo detectarían |
+| 2026-10-07 | No usar el CLI/MCP de Neon (`neon deploy`, `neon.ts`) | Solo se necesita la cadena de conexión; el despliegue es Streamlit Cloud |
 | 2026-10-07 | No purgar el historial git de los `.md` personales | Solo contenido de CV (sin contacto ni IDs); purgar exige force push a `main` público y GitHub mantiene accesibles los commits huérfanos por SHA |
 
 ## Próximo paso
 
-1. Usuario: validar el paso 1 en la app con vacantes reales; confirmar rotación de claves.
-2. Usuario: crear un proyecto gratuito en Neon (para 2b) y, si quiere pruebas reales del motor, dejar las API keys en un `.env` local.
-3. Revisar y fusionar el PR de 2a (cimientos).
-4. Entrega 2b: perfil maestro estructurado + base de datos nueva + migración.
+1. Usuario: poner `DATABASE_URL` (Neon) en los secretos de Streamlit Cloud (el `.env` local ya está listo y la conexión a Neon verificada); confirmar rotación de claves.
+2. Fusionar el PR de 2b → la app migra los perfiles de Turso a Neon al arrancar; verificar en la app.
+3. Validar el paso 1 con vacantes reales (en curso).
+4. Entrega 2c: motor de CV (match y brechas, selección, redacción controlada, verificación, ajuste a 1 página).

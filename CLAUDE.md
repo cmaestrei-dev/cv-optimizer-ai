@@ -15,10 +15,12 @@ streamlit run app.py
 
 ## Mapa
 
-- `core/` — núcleo sin dependencias de UI (destino de toda la lógica nueva). `core/llm/`: cliente único compatible con OpenAI (Gemini, DeepSeek), `get_llm(task)` con `LLM_EXTRACT`/`LLM_WRITE`, `generate_structured()` (JSON validado con Pydantic + 1 corrección). `core/vacancy.py`: análisis estructurado de vacantes.
+- `core/` — núcleo sin dependencias de UI (destino de toda la lógica nueva). `core/llm/`: cliente único compatible con OpenAI (Gemini, DeepSeek), `get_llm(task)` con `LLM_EXTRACT`/`LLM_WRITE`, `generate_structured()` (JSON validado con Pydantic + 1 corrección). `core/vacancy.py`: análisis estructurado de vacantes. `core/db.py`: motor SQLAlchemy (`DATABASE_URL` → Postgres; si no, `data/cv_core.db`), `session_scope()`, `upgrade_schema()` (Alembic). `core/profile/`: modelos, `repository.py` (consultas con verificación de dueño), `service.py` (lo que usa la UI), `legacy.py` (puente con el Markdown anterior), `migration.py`, `periods.py`.
 - `app.py` — entrada, inyecta `st.secrets` en `os.environ` antes de importar el resto, puerta de acceso.
 - `services/` — legado en transición hacia `core/`: `gemini_client.py` (prompts por versión, `PROMPT_VERSION`; v3 es la vigente y universal), `pdf_generator.py`, `docx_generator.py`.
-- `storage/_db.py` — SQLite o Turso (cliente HTTP propio), según `TURSO_DB_URL`/`TURSO_AUTH_TOKEN`.
+- `storage/_db.py` — **legado (solo lectura para migrar)**: SQLite o Turso (cliente HTTP propio). Retirar tras confirmar la migración.
+- `migrations/` — Alembic. Cambio de modelo = nueva revisión (`DATABASE_URL=sqlite:///tmp.db alembic revision --autogenerate -m ...`); el test `test_alembic_schema_matches_models` falla si falta.
+- `scripts/migrate_legacy.py` — simula/aplica la migración del modelo anterior.
 - `ui/` — una función `render_*` por pestaña; `profile_form.py` maneja perfiles y login. Los resultados que deben sobrevivir reruns (CV generado, skills extraídas) van en `st.session_state`.
 - `models/profile.py` — `UserProfile` y hashing de contraseñas.
 
@@ -29,6 +31,9 @@ streamlit run app.py
 - Acciones destructivas o de cuenta solo si `_is_authenticated(perfil)`.
 - Comparaciones de contraseñas con `hmac.compare_digest`.
 - Toda llamada HTTP con `timeout`.
+- La UI nunca abre sesiones de BD: usa `core/profile/service.py` (st.rerun() es una BaseException y descartaría cambios).
+- Toda consulta por id filtra también por el usuario dueño.
+- Los tests nunca tocan bases reales: `tests/conftest.py` fuerza un SQLite temporal y anula Turso.
 - Nunca versionar datos personales ni secretos (`.streamlit/secrets.toml`, `.env`, `data/`).
 
 ## Reglas de producto
