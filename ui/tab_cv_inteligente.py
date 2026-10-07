@@ -1,11 +1,14 @@
 """Pestaña del motor nuevo: analizar → ver compatibilidad y brechas → generar → editar → descargar."""
 
 import logging
+import uuid
 
 import streamlit as st
 
+from core.capture import CaptureError, capture_vacancy
 from core.engine import pipeline
 from core.engine.document import render
+from core.engine.screening import answer_screening
 from core.llm import LLMConfigError, StructuredOutputError, get_llm
 from core.llm.client import Image
 from core.profile import service
@@ -246,6 +249,7 @@ def render_tab_cv_inteligente(profile: UserProfile | None, api_key_overrides: di
                 "fuerte, completa primero tu experiencia en la pestaña «Mi experiencia (importar CV)» (5 minutos)."
             )
 
+    _render_capture()
     image = st.file_uploader("Captura de la vacante (opcional)", type=["png", "jpg", "jpeg", "webp"], key="ci_image")
     text = st.text_area("Texto de la vacante", placeholder="Pega aquí la oferta completa...", key="ci_text", height=180)
     focus = st.text_input(
@@ -269,7 +273,8 @@ def render_tab_cv_inteligente(profile: UserProfile | None, api_key_overrides: di
                 if analysis is not None:
                     st.session_state["ci_analysis"] = {
                         "username": profile.username, "analysis": analysis, "snap": snap,
-                        "text": text, "images": images,
+                        "text": text, "images": images, "token": uuid.uuid4().hex,
+                        "source": captured if (captured := st.session_state.get("ci_captured")) and captured["text"] == text else None,
                     }
                     st.session_state.pop("ci_cv", None)
                     st.session_state.pop("ci_stale", None)
@@ -288,6 +293,7 @@ def render_tab_cv_inteligente(profile: UserProfile | None, api_key_overrides: di
             _reanalyze(state, profile, api_key_overrides)
     _render_match(state["analysis"], state["snap"])
     _render_gaps(state, profile, api_key_overrides)
+    _render_screening(state, api_key_overrides)
     _render_save_vacancy(state, profile)
 
     if st.button(":material/description: Generar CV", type="primary", key="ci_generate"):
@@ -320,6 +326,8 @@ def _ensure_application(state: dict, profile: UserProfile, platform: str = "", u
     """Una postulación por análisis: se crea la primera vez y se reutiliza."""
     if state.get("application_id"):
         return state["application_id"]
+    source = state.get("source") or {}
+    platform, url = platform or source.get("platform", ""), url or source.get("url", "")
     vacancy = state["analysis"].vacancy
     state["application_id"] = tracking.create_application(
         profile.username, role=vacancy.role, company=vacancy.company, platform=platform, url=url,
@@ -358,8 +366,12 @@ def _render_tracking(state: dict, cv_state: dict, profile: UserProfile) -> None:
         st.info(":material/edit: Editaste el CV después de guardarlo: registra esta versión si es la que vas a enviar.")
     with st.form("ci_track_form"):
         col_platform, col_url = st.columns([1, 2])
-        platform = col_platform.selectbox("¿Por dónde vas a postular?", PLATFORMS, key="ci_track_platform")
-        url = col_url.text_input("Enlace de la vacante (opcional)", key="ci_track_url")
+        source = state.get("source") or {}
+        platform = col_platform.selectbox(
+            "¿Por dónde vas a postular?", PLATFORMS, key="ci_track_platform",
+            index=PLATFORMS.index(source["platform"]) if source.get("platform") in PLATFORMS else 0,
+        )
+        url = col_url.text_input("Enlace de la vacante (opcional)", value=source.get("url", ""), key="ci_track_url")
         col_save, col_sent = st.columns(2)
         save = col_save.form_submit_button(":material/bookmark: Guardar en mis postulaciones", use_container_width=True)
         sent = col_sent.form_submit_button(":material/send: Ya la envié", type="primary", use_container_width=True)
@@ -374,3 +386,64 @@ def _render_tracking(state: dict, cv_state: dict, profile: UserProfile) -> None:
             tracking.mark_sent(profile.username, application_id, cv_state["cv_record_id"], platform=platform)
         cv_state["saved_hash"], cv_state["sent"] = current_hash, sent
         st.rerun()
+
+
+# ── captura por enlace y preguntas de filtro (fase 3) ─────────────────
+
+
+def _render_capture() -> None:
+    col_url, col_btn = st.columns([4, 1], vertical_alignment="bottom")
+    url = col_url.text_input(
+        "Enlace de la vacante (LinkedIn, Computrabajo, Magneto, elempleo o la página de la empresa)",
+        key="ci_url", placeholder="https://...",
+    )
+    if col_btn.button(":material/download: Traer", key="ci_fetch", use_container_width=True):
+        if not url.strip():
+            st.warning("Pega primero el enlace de la vacante.")
+            return
+        try:
+            with st.spinner("Leyendo la vacante..."):
+                captured = capture_vacancy(url)
+        except CaptureError as e:
+            st.warning(f":material/link_off: {e}")
+            return
+        st.session_state["ci_text"] = captured.text
+        st.session_state["ci_captured"] = {"text": captured.text, "url": captured.url, "platform": captured.platform}
+        how = "datos estructurados del portal" if captured.source == "jobposting" else "el texto de la página"
+        st.session_state["ci_flash"] = f"Vacante traída de {captured.platform} ({how}). Revisa el texto y analízala."
+        st.rerun()
+    flash = st.session_state.get("ci_flash")
+    if flash and "Vacante traída" in flash:
+        st.session_state.pop("ci_flash")
+        st.success(f":material/check: {flash}")
+
+
+def _render_screening(state: dict, overrides: dict[str, str]) -> None:
+    results = st.session_state.get("ci_screening")
+    if results and results["token"] != state.get("token"):
+        results = None
+    with st.expander(":material/quiz: Preguntas del formulario del portal", expanded=results is not None):
+        st.caption(
+            "Muchos portales hacen preguntas al postular (años de experiencia, herramientas, disponibilidad). "
+            "Pégalas aquí, una por línea: respondemos con los datos de tu perfil y marcamos lo que solo tú sabes."
+        )
+        with st.form("ci_screening_form"):
+            questions = st.text_area("Preguntas (una por línea)", key="ci_screening_q", height=110,
+                                     placeholder="¿Cuántos años de experiencia tiene en facturación?\n¿Cuál es su aspiración salarial?")
+            go = st.form_submit_button(":material/auto_awesome: Proponer respuestas")
+        if go and questions.strip():
+            answers = _run(
+                lambda: answer_screening(get_llm("write", overrides), questions.splitlines(), state["snap"], state["analysis"].vacancy),
+                "Respondiendo con tu perfil...",
+            )
+            if answers is not None:
+                st.session_state["ci_screening"] = results = {"token": state.get("token"), "answers": answers}
+        if results:
+            for a in results["answers"]:
+                st.markdown(f"**{a.question}**")
+                if a.answer.strip():
+                    st.code(a.answer, language=None, wrap_lines=True)
+                if a.needs_you:
+                    st.caption(f":material/person: Respóndela tú: {a.note or 'depende de ti'}")
+                elif a.note:
+                    st.caption(a.note)
