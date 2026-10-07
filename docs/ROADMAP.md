@@ -1,7 +1,7 @@
 # Roadmap y estado del proyecto
 
 > Documento vivo. Se actualiza al terminar cada cambio relevante: qué existe, qué se hizo, qué sigue.
-> Última actualización: 2026-10-07 (fase 5b.2: perfil asistido por API)
+> Última actualización: 2026-10-07 (fase 5c: frontend React)
 
 ## Prioridad actual
 
@@ -147,7 +147,17 @@ La app de Streamlit sigue funcionando sobre la misma base durante toda la fase; 
 - [x] Probado con servidor real y Gemini: importación de un PDF de LinkedIn (3 experiencias, 5 logros, 5 habilidades, 2 estudios), entrevista, tareas típicas y texto libre
 - [x] Revisión independiente aplicada: subir el PDF ya no congela la API (se procesa en el pool de hilos); los PDF que fallaban quedaban en disco con datos personales (ahora se borran siempre, con prueba que lo demuestra); importar nunca duplica (índices repetidos o dos lecturas del mismo CV) y se guarda en la misma transacción que marca la lectura como usada; al aceptar en la entrevista el servidor vuelve a verificar contra las respuestas (antes dependía del cliente); límite global de 6 MB por petición (FastAPI lee los archivos antes de verificar el token); enlaces guardados que no son http(s) no salen hacia el frontend; los trabajos viejos se borran (lecturas de CV a los 2 días, el resto a los 30)
 
-*5c — Frontend React* (Vite + TypeScript), en español y pensado primero para el celular: entrar, perfil, bandeja, preparar/CV, postulaciones, mercado. Actualizar `PRODUCT.md` (hoy dice "sector tecnológico") y `DESIGN.md`
+*5b.2 fusionada (PR #16)*
+
+*5c — Frontend React* (rama `claude/fase5c-web`, carpeta `web/`)
+- [x] Vite + React 19 + TypeScript estricto + React Router + TanStack Query; pocas dependencias, sin librería de componentes (estilos propios con los tokens de `DESIGN.md`)
+- [x] Tipos generados desde la API (`web/openapi.json` → `src/api/schema.d.ts`); una prueba en Python y la CI fallan si la API cambia sin regenerarlos
+- [x] Entrada de desarrollo (`POST /dev/token`, solo con secreto de desarrollo, sin JWKS y sin Postgres) mientras se elige el proveedor de identidad (5d); al salir o cambiar de cuenta se borra la caché de datos
+- [x] Pantallas: Perfil (importar CV/LinkedIn con revisión, experiencias, «Completar con IA»: cuéntame, tareas típicas y entrevista; habilidades, educación, contacto), Bandeja (buscar en portales, pegar enlaces con avance en vivo, preparar/descartar), Postulación (compatibilidad con evidencias y «Sí lo he hecho», CV en segundo plano con versiones, descarga y edición, preguntas, mensaje, «Antes de enviar», «Ya la envié», seguimiento), Mis postulaciones, Mi mercado
+- [x] Primero el celular (barra inferior; pestañas arriba en escritorio), enlaces de terceros solo http(s), contador de IA en el encabezado
+- [x] Probado en el navegador con la API real, Gemini y vacantes reales (importar el PDF de LinkedIn ficticio, bandeja con 3 enlaces, preparar, CV, descarga, editor) en escritorio y celular; arreglos de lo visto (texto pegado, mensaje que desaparecía, contador de IA, símbolo «a medias», decimales con coma, pestañas cortadas en el celular)
+- [x] CI: trabajo `web` (tipos al día, `tsc`, Vitest, build); `PRODUCT.md` y `DESIGN.md` actualizados (cualquier profesión, React)
+- [x] Revisión independiente aplicada: «Ya la envié» podía registrar una versión del CV distinta de la más reciente (ahora usa la elegida o la más reciente de ese momento, con versiones distinguibles); la entrada de desarrollo exige `AUTH_DEV_LOGIN=1` explícito (un despliegue sin `DATABASE_URL` cae en SQLite y la habría dejado abierta); nombres sin letras latinas ya no comparten cuenta; contrato OpenAPI reproducible; LinkedIn sin `https://` ya no bloquea el formulario; doble toque no agrega logros dos veces; fechas sin zona tratadas como UTC; el portal de envío ya no queda en «LinkedIn» por defecto; una caché de datos por sesión
 
 *5d — Cuentas reales y despliegue*: proveedor de identidad (Google y correo), vincular los perfiles de Streamlit con su contraseña actual, despliegue (backend en contenedor por WeasyPrint, frontend estático), dominio; retirar Streamlit
 
@@ -211,6 +221,10 @@ La app de Streamlit sigue funcionando sobre la misma base durante toda la fase; 
 | 2026-10-07 | Guardar el mapa de evidencias de la IA y recalcular el match sin IA | Ver la compatibilidad es lo más frecuente; así es instantáneo y gratis, y las referencias a logros borrados se descartan solas. La IA solo se vuelve a llamar cuando la persona actualiza tras cambiar su perfil |
 | 2026-10-07 | Cola de trabajos en Postgres (no Redis/Celery) | Una pieza menos que desplegar y pagar; `SKIP LOCKED` reparte sin duplicar; el volumen (decenas de trabajos al día) está muy lejos de sus límites |
 | 2026-10-07 | Cupo de IA por llamadas reales (envoltorio del cliente), no por "unidades" estimadas | Exacto para cualquier operación presente o futura y no cobra los errores del proveedor |
+| 2026-10-07 | Frontend sin librería de componentes ni Tailwind | Pocas pantallas y un sistema de diseño ya definido: CSS con tokens es más liviano, sin dependencias extra que mantener o auditar |
+| 2026-10-07 | Tipos del frontend generados desde OpenAPI y comprobados en la CI | El backend es la fuente de verdad; un cambio en la API que rompa el frontend lo detecta `tsc`, no la persona usuaria |
+| 2026-10-07 | TypeScript 5.9 (no 7) en `web/` | `openapi-typescript` usa la API JS del compilador, que TypeScript 7 (nativo) ya no ofrece |
+| 2026-10-07 | Entrada de desarrollo por nombre hasta elegir proveedor de identidad | Permite construir y probar todo el frontend sin decidir aún el proveedor (decisión del dueño en la 5d); nunca existe con Postgres ni con JWKS |
 | 2026-10-07 | Migraciones sin recrear tablas en SQLite (índices únicos en vez de restricciones) y llaves foráneas apagadas solo durante la migración | Recrear `users` con cascadas activas borraba todos los datos locales; producción (Postgres) no se afectaba, pero el desarrollo y las pruebas sí |
 | 2026-10-07 | Fase 6 (pruebas reales) al final, por decisión del dueño | Quiere probar a fondo la versión completa; la app actual sigue disponible para postular mientras tanto |
 | 2026-10-07 | No purgar el historial git de los `.md` personales | Solo contenido de CV (sin contacto ni IDs); purgar exige force push a `main` público y GitHub mantiene accesibles los commits huérfanos por SHA |
