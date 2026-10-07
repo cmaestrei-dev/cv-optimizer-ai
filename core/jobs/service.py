@@ -2,10 +2,12 @@
 
 import json
 import threading
+from collections.abc import Callable
 from dataclasses import dataclass
 from datetime import UTC, datetime, timedelta
 
-from sqlalchemy import and_, func, or_, select, update
+from sqlalchemy import and_, delete, func, or_, select, update
+from sqlalchemy.orm import Session
 
 from core.db import session_scope
 from core.errors import UserInputError
@@ -69,7 +71,7 @@ def claim() -> ClaimedJob | None:
         s.execute(  # colgados que ya agotaron sus intentos: fallidos, para que no bloqueen la cola
             update(Job)
             .where(Job.status == "running", Job.started_at < now - STALE_AFTER, Job.attempts >= MAX_ATTEMPTS)
-            .values(status="failed", error="El trabajo se interrumpió varias veces", finished_at=now)
+            .values(status="failed", error="El trabajo se interrumpió varias veces", finished_at=now, payload="{}")
         )
         job = s.scalar(
             select(Job)
@@ -97,12 +99,51 @@ def progress(job: ClaimedJob, result: dict) -> None:
     _set(job, result=json.dumps(result, ensure_ascii=False), started_at=_now())
 
 
-def finish(job: ClaimedJob, result: dict) -> None:
-    _set(job, status="done", result=json.dumps(result, ensure_ascii=False), finished_at=_now())
+def finish(job: ClaimedJob, result: dict, *, clear_payload: bool = False) -> None:
+    """clear_payload: borra la entrada (p. ej. el texto de un CV) cuando ya no se necesita."""
+    values = {"status": "done", "result": json.dumps(result, ensure_ascii=False), "finished_at": _now()}
+    _set(job, **values, **({"payload": "{}"} if clear_payload else {}))
 
 
-def fail(job: ClaimedJob, message: str, result: dict | None = None) -> None:
+def fail(job: ClaimedJob, message: str, result: dict | None = None, *, clear_payload: bool = False) -> None:
     values = {"status": "failed", "error": message, "finished_at": _now()}
     if result is not None:
         values["result"] = json.dumps(result, ensure_ascii=False)
+    if clear_payload:
+        values["payload"] = "{}"
     _set(job, **values)
+
+
+# ── importación de CV: el resultado se aplica una sola vez ────────────
+
+
+def apply_import_result(username: str, job_id: int, apply: Callable[[Session, dict], dict]) -> dict:
+    """Aplica una lectura de CV UNA sola vez: en la misma transacción se bloquea la lectura, se guarda
+    en el perfil y se marca como usada (sin quedar a medias si algo falla). Al aplicarla se borran los
+    datos leídos (nombre, contacto, historial): ya están en el perfil."""
+    with session_scope() as s:
+        job = s.scalar(
+            select(Job).where(Job.id == job_id, Job.user_id == _user_id(s, username), Job.kind == "importar")
+            .with_for_update()
+        )
+        if job is None:
+            raise NotFoundError(f"Trabajo {job_id}")
+        if job.status != "done":
+            raise UserInputError("La lectura del CV todavía no termina (o falló).")
+        result = json.loads(job.result or "{}")
+        if result.get("applied"):
+            raise UserInputError("Ya guardaste esta importación.")
+        counts = apply(s, result)
+        job.result = json.dumps({"applied": True, "counts": counts}, ensure_ascii=False)
+        return counts
+
+
+def purge(*, keep_days: int = 30, keep_import_days: int = 2) -> int:
+    """Borra trabajos viejos que no estén corriendo. Las lecturas de CV (datos personales) duran menos."""
+    now = _now()
+    with session_scope() as s:
+        result = s.execute(delete(Job).where(Job.status != "running", or_(
+            Job.created_at < now - timedelta(days=keep_days),
+            and_(Job.kind == "importar", Job.created_at < now - timedelta(days=keep_import_days)),
+        )))
+        return result.rowcount or 0

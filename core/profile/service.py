@@ -16,6 +16,7 @@ from sqlalchemy.exc import IntegrityError
 from core.db import session_scope, upgrade_schema
 from core.profile import repository as repo
 from core.profile.importer import ImportedCV
+from core.profile.links import with_scheme
 from core.profile.models import Education, Experience, Skill, User
 from core.profile.snapshot import (
     AchievementSnap,
@@ -217,26 +218,48 @@ def apply_import(
     fill_contact: bool = False,
 ) -> dict[str, int]:
     """Guarda lo elegido de una importación en una sola transacción (todo o nada)."""
-    counts = {"experiencias": 0, "logros": 0, "habilidades": 0, "estudios": 0}
     with session_scope() as s:
-        user = _require_user(s, username)
-        for i in experiences:
-            e = data.experiences[i]
-            repo.add_experience(
-                s, user, role=e.role, company=e.company, period_text=e.period_text,
-                country=e.country, modality=e.modality, achievements=e.achievements,
-            )
-            counts["experiencias"] += 1
-            counts["logros"] += len(e.achievements)
-        for i in skills:
-            if repo.add_skill(s, user, data.skills[i].name, data.skills[i].category):
-                counts["habilidades"] += 1
-        for i in education:
-            e = data.education[i]
-            repo.add_education(s, user, title=e.title, institution=e.institution, period_text=e.period_text)
-            counts["estudios"] += 1
-        if fill_contact:
+        return apply_import_in(s, username, data, experiences=experiences, skills=skills, education=education,
+                               fill_contact=fill_contact)
+
+
+def apply_import_in(
+    s, username: str, data: ImportedCV, *, experiences: list[int], skills: list[int], education: list[int],
+    fill_contact: bool = False,
+) -> dict[str, int]:
+    """Lo mismo que `apply_import` dentro de una transacción ajena. Nunca duplica: compara con el perfil
+    ACTUAL (no con el de cuando se leyó el PDF), así dos lecturas del mismo CV no suman dos veces."""
+    counts = {"experiencias": 0, "logros": 0, "habilidades": 0, "estudios": 0}
+    user = _require_user(s, username)
+    have_exp = {(repo.skill_key(e.role), repo.skill_key(e.company)) for e in repo.list_experiences(s, user)}
+    have_edu = {(repo.skill_key(e.title), repo.skill_key(e.institution)) for e in repo.list_education(s, user)}
+    for i in dict.fromkeys(experiences):
+        e = data.experiences[i]
+        key = (repo.skill_key(e.role), repo.skill_key(e.company))
+        if key in have_exp:
+            continue
+        have_exp.add(key)
+        repo.add_experience(
+            s, user, role=e.role, company=e.company, period_text=e.period_text,
+            country=e.country, modality=e.modality, achievements=e.achievements,
+        )
+        counts["experiencias"] += 1
+        counts["logros"] += len(e.achievements)
+    for i in dict.fromkeys(skills):
+        if repo.add_skill(s, user, data.skills[i].name, data.skills[i].category):
+            counts["habilidades"] += 1
+    for i in dict.fromkeys(education):
+        e = data.education[i]
+        key = (repo.skill_key(e.title), repo.skill_key(e.institution))
+        if key in have_edu:
+            continue
+        have_edu.add(key)
+        repo.add_education(s, user, title=e.title, institution=e.institution, period_text=e.period_text)
+        counts["estudios"] += 1
+    if fill_contact:
             for key in ("full_name", "email", "phone", "linkedin_url"):
                 if not getattr(user, key) and getattr(data, key).strip():
-                    setattr(user, key, getattr(data, key).strip())
+                    value = getattr(data, key).strip()
+                    setattr(user, key, with_scheme(value) if key == "linkedin_url" else value)
+    s.flush()
     return counts
