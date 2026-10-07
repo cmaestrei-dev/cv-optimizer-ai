@@ -22,3 +22,22 @@ jobs:
       - run: pip install -r requirements-dev.txt
       - run: ruff check .
       - run: pytest tests/ -q
+
+  web:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: web
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "24"
+          cache: npm
+          cache-dependency-path: web/package-lock.json
+      - run: npm ci
+      - name: Tipos generados al día con web/openapi.json
+        run: npm run api:types && git diff --exit-code src/api/schema.d.ts
+      - run: npm run typecheck
+      - run: npm test
+      - run: npm run build
