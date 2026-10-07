@@ -20,6 +20,13 @@ from core.profile.legacy import (
 )
 from core.profile.migration import UserMigrationReport, migrate_all
 from core.profile.models import AppMeta, Education, Experience, Skill, User
+from core.profile.snapshot import (
+    AchievementSnap,
+    EducationSnap,
+    ExperienceSnap,
+    ProfileSnapshot,
+    SkillSnap,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -177,4 +184,30 @@ def legacy_markdown(username: str) -> tuple[str, str, str]:
             render_experiences_markdown(repo.list_experiences(s, user)),
             render_skills_markdown(repo.list_skills(s, user)),
             render_education_markdown(repo.list_education(s, user)),
+        )
+
+
+def snapshot(username: str) -> ProfileSnapshot:
+    """Foto del perfil para el motor de CV (sin objetos de base de datos)."""
+    with session_scope() as s:
+        user = _require_user(s, username)
+        return ProfileSnapshot(
+            username=user.username,
+            full_name=user.full_name,
+            experiences=tuple(
+                ExperienceSnap(
+                    id=e.id, role=e.role, company=e.company, period_text=e.period_text,
+                    period=e.period, country=e.country, modality=e.modality,
+                    achievements=tuple(AchievementSnap(a.id, a.text) for a in e.achievements),
+                )
+                for e in repo.list_experiences(s, user)
+            ),
+            skills=tuple(SkillSnap(k.id, k.name, k.category) for k in repo.list_skills(s, user)),
+            education=tuple(
+                EducationSnap(
+                    id=d.id, title=d.title, institution=d.institution,
+                    period_text=d.period_text, period=d.period, description=d.description,
+                )
+                for d in repo.list_education(s, user)
+            ),
         )
