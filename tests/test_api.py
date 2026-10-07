@@ -2,16 +2,12 @@ import json
 import time
 
 import jwt
-import pytest
 from cryptography.hazmat.primitives.asymmetric import rsa
-from fastapi.testclient import TestClient
 
 from api import auth
-from api.main import create_app
 from core.profile import service as profiles
 from core.tracking import service as tracking
-
-SECRET = "x" * 40
+from tests.conftest import API_TEST_SECRET as SECRET
 
 
 def _token(sub: str, *, email: str = "", secret: str = SECRET, iss: str = auth.DEV_ISSUER, ttl: int = 600, **extra) -> str:
@@ -21,16 +17,6 @@ def _token(sub: str, *, email: str = "", secret: str = SECRET, iss: str = auth.D
 
 def _h(sub: str, **kw) -> dict:
     return {"Authorization": f"Bearer {_token(sub, **kw)}"}
-
-
-@pytest.fixture
-def client(monkeypatch):
-    for name in ("AUTH_JWKS_URL", "AUTH_ISSUER", "AUTH_AUDIENCE"):
-        monkeypatch.delenv(name, raising=False)
-    monkeypatch.setenv("AUTH_DEV_SECRET", SECRET)
-    monkeypatch.setattr(profiles, "_ready", False)
-    with TestClient(create_app()) as c:
-        yield c
 
 
 def _username(client, sub: str) -> str:

@@ -226,7 +226,8 @@ def _prepare(a: Application, vacancy: VacancyAnalysis | None, profile: UserProfi
     for key in ("ci_cv", "ci_stale", "ci_screening", "ci_cover"):
         st.session_state.pop(key, None)
     tracking.set_match(profile.username, a.id, analysis.match.score,
-                       json.dumps(pipeline.match_summary(analysis.match), ensure_ascii=False))
+                       json.dumps(pipeline.match_summary(analysis.match), ensure_ascii=False),
+                       pipeline.evidence_json(analysis.evidence, snap))
     tracking.change_status(profile.username, a.id, "guardada", "Elegida en la bandeja para postular")
     st.session_state["ci_flash"] = "Vacante de tu bandeja lista: revisa los requisitos y genera el CV."
     st.session_state["bandeja_flash"] = (

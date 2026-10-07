@@ -163,7 +163,9 @@ def _reanalyze(state: dict, profile: UserProfile, overrides: dict[str, str]) -> 
         state.update(analysis=analysis, snap=snap)
         if state.get("application_id"):
             tracking.set_match(profile.username, state["application_id"], analysis.match.score,
-                               json.dumps(pipeline.match_summary(analysis.match), ensure_ascii=False))
+                               json.dumps(pipeline.match_summary(analysis.match), ensure_ascii=False),
+                               pipeline.evidence_json(analysis.evidence, snap),
+                               analysis_json=analysis.vacancy.model_dump_json())  # se releyó la vacante
         st.session_state.pop("ci_cv", None)
         st.session_state.pop("ci_stale", None)
         st.rerun()
@@ -357,6 +359,9 @@ def _ensure_application(state: dict, profile: UserProfile, platform: str = "", u
     state["application_id"] = tracking.create_application(
         profile.username, role=vacancy.role, company=vacancy.company, platform=platform, url=url,
         vacancy_text=state.get("text", ""), analysis_json=vacancy.model_dump_json(),
+        match_json=json.dumps(pipeline.match_summary(state["analysis"].match), ensure_ascii=False),
+        evidence_json=pipeline.evidence_json(state["analysis"].evidence, state["snap"])
+        if state["analysis"].evidence is not None else "",
         match_score=state["analysis"].match.score,
     )
     return state["application_id"]
@@ -408,6 +413,7 @@ def _render_tracking(state: dict, cv_state: dict, profile: UserProfile) -> None:
         cv_state["cv_record_id"] = tracking.attach_cv(
             profile.username, application_id, pdf=output.pdf, docx=output.docx,
             markdown=cv_state["cv"].document.to_markdown(), language=cv_state["cv"].document.language, filename=filename,
+            document_json=json.dumps(cv_state["cv"].document.to_dict(), ensure_ascii=False),
         )
         if sent:
             tracking.mark_sent(profile.username, application_id, cv_state["cv_record_id"], platform=platform)
