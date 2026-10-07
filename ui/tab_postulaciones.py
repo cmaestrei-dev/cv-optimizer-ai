@@ -5,8 +5,16 @@ from datetime import timedelta
 import streamlit as st
 
 from core.tracking import service as tracking
-from core.tracking.models import ACTIVE_STATUSES, PLATFORMS, STATUSES, Application
+from core.tracking.models import (
+    ACTIVE_STATUSES,
+    APPLIED_STATUSES,
+    PLATFORMS,
+    STATUSES,
+    TRIAGE_STATUSES,
+    Application,
+)
 from models import UserProfile
+from ui.text import md
 
 _EVENT_LABELS = {
     "creada": ":material/add_circle: Creada",
@@ -43,7 +51,7 @@ def _render_summary(username: str) -> None:
     cols[4].metric("Respuesta", "—" if s.response_rate is None else f"{s.response_rate:.0%}")
     if s.due:
         lines = "\n".join(
-            f"- **{a.role} — {a.company or 'empresa sin nombre'}**: {a.next_action or 'hacer seguimiento'} "
+            f"- **{md(a.role)} — {md(a.company or 'empresa sin nombre')}**: {md(a.next_action or 'hacer seguimiento')} "
             f"(desde el {a.next_action_on.strftime('%d/%m')})"
             for a in s.due
         )
@@ -57,7 +65,8 @@ def _render_new(username: str) -> None:
         company = col_b.text_input("Empresa")
         platform = col_a.selectbox("Plataforma", PLATFORMS)
         url = col_b.text_input("Enlace (opcional)")
-        status = col_a.selectbox("Estado", list(STATUSES), index=2, format_func=_status_label)
+        options = [s for s in STATUSES if s not in TRIAGE_STATUSES]
+        status = col_a.selectbox("Estado", options, index=options.index("postulada"), format_func=_status_label)
         applied_on = col_b.date_input("Fecha de envío", value=tracking.today(), format="DD/MM/YYYY")
         if st.form_submit_button("Registrar", type="primary"):
             if not role.strip():
@@ -65,19 +74,19 @@ def _render_new(username: str) -> None:
             else:
                 tracking.create_application(
                     username, role=role, company=company, platform=platform, url=url, status=status,
-                    applied_on=applied_on if status in ("postulada", "en_revision", "entrevista", "oferta", "rechazada") else None,
+                    applied_on=applied_on if status in APPLIED_STATUSES else None,
                 )
                 st.rerun()
 
 
 def _render_application(username: str, a: Application) -> None:
     date_text = a.applied_on.strftime("%d/%m/%Y") if a.applied_on else a.created_at.strftime("%d/%m/%Y")
-    title = f"{_status_label(a.status)} · **{a.role}** — {a.company or 'sin empresa'} · {a.platform or 'sin plataforma'} · {date_text}"
+    title = f"{_status_label(a.status)} · **{md(a.role)}** — {md(a.company or 'sin empresa')} · {md(a.platform or 'sin plataforma')} · {date_text}"
     if a.match_score is not None:
         title += f" · {a.match_score}/100"
     with st.expander(title):
         if a.next_action_on and a.status in ACTIVE_STATUSES:
-            st.caption(f":material/alarm: {a.next_action_on.strftime('%d/%m/%Y')}: {a.next_action or 'seguimiento'}")
+            st.caption(f":material/alarm: {a.next_action_on.strftime('%d/%m/%Y')}: {md(a.next_action or 'seguimiento')}")
 
         with st.form(f"track_status_{a.id}"):
             col_s, col_n = st.columns([1, 2])
@@ -103,11 +112,11 @@ def _render_application(username: str, a: Application) -> None:
                 )
                 col_pdf, col_docx = st.columns(2)
                 col_pdf.download_button("PDF", cv.pdf, file_name=cv.filename, mime="application/pdf",
-                                        key=f"track_pdf_{cv.id}", on_click="ignore", use_container_width=True)
+                                        key=f"track_pdf_{cv.id}", on_click="ignore", width="stretch")
                 col_docx.download_button(
                     "DOCX", cv.docx, file_name=cv.filename.rsplit(".", 1)[0] + ".docx",
                     mime="application/vnd.openxmlformats-officedocument.wordprocessingml.document",
-                    key=f"track_docx_{cv.id}", on_click="ignore", use_container_width=True,
+                    key=f"track_docx_{cv.id}", on_click="ignore", width="stretch",
                 )
             if not any(cv.sent_at for cv in a.cvs) and a.status in ("guardada", "cv_generado"):
                 with st.form(f"track_send_{a.id}"):
@@ -146,8 +155,8 @@ def _render_application(username: str, a: Application) -> None:
             if st.form_submit_button("Guardar datos"):
                 tracking.update_details(username, a.id, contact=contact, url=url)
                 st.rerun()
-        if a.url:
-            st.markdown(f"[Abrir la vacante]({a.url})")
+        if a.url.startswith(("https://", "http://")):
+            st.link_button(":material/open_in_new: Abrir la vacante", a.url)
 
         if a.vacancy_text and st.toggle("Ver el texto de la vacante", key=f"track_vt_{a.id}"):
             st.text(a.vacancy_text)
@@ -158,7 +167,7 @@ def _render_application(username: str, a: Application) -> None:
             if e.kind == "estado":
                 change = f"{STATUSES.get(e.from_status, ('?', ''))[0]} → {STATUSES.get(e.to_status, ('?', ''))[0]}"
             detail = " · ".join(p for p in (change, e.detail) if p)
-            st.caption(f"{e.created_at.strftime('%d/%m/%Y %H:%M')} · {_EVENT_LABELS.get(e.kind, e.kind)}" + (f" · {detail}" if detail else ""))
+            st.caption(f"{e.created_at.strftime('%d/%m/%Y %H:%M')} · {_EVENT_LABELS.get(e.kind, e.kind)}" + (f" · {md(detail)}" if detail else ""))
 
         confirm_key = f"track_del_{a.id}"
         if st.session_state.get(confirm_key):
@@ -189,10 +198,17 @@ def render_tab_postulaciones(profile: UserProfile | None) -> None:
     _render_new(profile.username)
 
     view = st.radio("Mostrar", ["Activas", "Cerradas", "Todas"], horizontal=True, key="track_view")
-    closed = tuple(s for s in STATUSES if s not in ACTIVE_STATUSES)
-    statuses = {"Activas": ACTIVE_STATUSES, "Cerradas": closed, "Todas": None}[view]
-    applications = tracking.list_applications(profile.username, statuses)
+    # La bandeja (por revisar) vive en su propia pestaña; aquí solo lo que ya se decidió preparar.
+    closed = tuple(s for s in STATUSES if s not in ACTIVE_STATUSES and s not in TRIAGE_STATUSES)
+    statuses = {"Activas": ACTIVE_STATUSES, "Cerradas": closed, "Todas": ACTIVE_STATUSES + closed}[view]
+    applications = [  # lo descartado sin enviar vive en la bandeja, no aquí
+        a for a in tracking.list_applications(profile.username, statuses)
+        if not (a.status == "descartada" and a.applied_on is None)
+    ]
     if not applications:
-        st.info("Aún no hay postulaciones aquí. Analiza una vacante en «CV inteligente» y guárdala o regístrala al enviarla.")
+        st.info(
+            "Aún no hay postulaciones aquí. Prepara una desde la «Bandeja de vacantes» o analiza una en "
+            "«CV inteligente» y guárdala o regístrala al enviarla."
+        )
     for a in applications:
         _render_application(profile.username, a)

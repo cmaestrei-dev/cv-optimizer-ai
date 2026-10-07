@@ -90,9 +90,9 @@ def _render_review(profile: UserProfile, plan: ImportPlan) -> None:
         )
         col_save, col_cancel = st.columns(2)
         with col_save:
-            save = st.form_submit_button(":material/save: 4. Guardar en mi perfil", type="primary", use_container_width=True)
+            save = st.form_submit_button(":material/save: 4. Guardar en mi perfil", type="primary", width="stretch")
         with col_cancel:
-            cancel = st.form_submit_button("Descartar", use_container_width=True)
+            cancel = st.form_submit_button("Descartar", width="stretch")
 
     if save:
         counts = service.apply_import(

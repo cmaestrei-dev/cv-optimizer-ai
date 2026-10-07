@@ -51,7 +51,7 @@ def render_tab_mercado(profile: UserProfile | None) -> None:
                  "¿La tienes en tu perfil?": "Sí" if k.owned else "Te falta"}
                 for k in insights.keywords
             ],
-            hide_index=True, use_container_width=True,
+            hide_index=True, width="stretch",
             column_config={
                 "Vacantes que la piden": st.column_config.ProgressColumn(format="percent", min_value=0, max_value=1),
             },
@@ -74,7 +74,7 @@ def render_tab_mercado(profile: UserProfile | None) -> None:
                  "Compatibilidad promedio": None if p.avg_score is None else round(p.avg_score)}
                 for p in insights.platforms
             ],
-            hide_index=True, use_container_width=True,
+            hide_index=True, width="stretch",
             column_config={"Tasa de avance": st.column_config.ProgressColumn(format="percent", min_value=0, max_value=1)},
         )
 
@@ -84,7 +84,7 @@ def render_tab_mercado(profile: UserProfile | None) -> None:
             [{"Compatibilidad del CV": label, "Enviadas": sent, "Avanzaron": progressed,
               "Tasa de avance": progressed / sent if sent else 0.0}
              for label, sent, progressed in insights.score_buckets],
-            hide_index=True, use_container_width=True,
+            hide_index=True, width="stretch",
             column_config={"Tasa de avance": st.column_config.ProgressColumn(format="percent", min_value=0, max_value=1)},
         )
 
@@ -93,4 +93,4 @@ def render_tab_mercado(profile: UserProfile | None) -> None:
     if len(areas) > 1:
         st.subheader("Áreas de las vacantes")
         st.dataframe([{"Área": area, "Vacantes": count} for area, count in areas.items()],
-                     hide_index=True, use_container_width=True)
+                     hide_index=True, width="stretch")

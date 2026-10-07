@@ -1,0 +1,7 @@
+# Tema fijo: el CSS de app.py asume fondo oscuro. Sin esto, en equipos con modo claro los botones
+# secundarios quedan blancos con texto claro (ilegibles).
+[theme]
+base = "dark"
+backgroundColor = "#0d1117"
+secondaryBackgroundColor = "#151b24"
+textColor = "#c9d1d9"

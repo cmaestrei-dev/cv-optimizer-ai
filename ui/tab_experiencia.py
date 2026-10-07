@@ -43,9 +43,9 @@ def _render_new_experience_form(profile: UserProfile | None, api_key_overrides: 
 
     col_ai, col_raw = st.columns(2)
     with col_ai:
-        save_polished = st.button("Pulir con IA y guardar", type="primary", use_container_width=True)
+        save_polished = st.button("Pulir con IA y guardar", type="primary", width="stretch")
     with col_raw:
-        save_raw = st.button("Guardar tal cual", use_container_width=True)
+        save_raw = st.button("Guardar tal cual", width="stretch")
     if not (save_polished or save_raw):
         return
 
