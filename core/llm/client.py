@@ -16,6 +16,10 @@ logger = logging.getLogger(__name__)
 _RETRYABLE_STATUS = {429, 500, 502, 503, 504}
 
 
+class LLMUnavailableError(RuntimeError):
+    """El proveedor no respondió bien (tiempo agotado, error HTTP no reintentable, respuesta rara)."""
+
+
 class LLMAuthError(RuntimeError):
     """La API key no es válida, fue revocada o no tiene permisos."""
 
@@ -137,7 +141,7 @@ class LLMClient:
         except requests.ConnectionError as e:
             raise RetryableError(f"Error de conexión con {self.spec.name}: {e}") from e
         except requests.Timeout as e:
-            raise RuntimeError(f"{self.spec.name} tardó demasiado en responder.") from e
+            raise LLMUnavailableError(f"{self.spec.name} tardó demasiado en responder.") from e
 
         if is_auth_failure(response.status_code, response.text):
             raise LLMAuthError(
@@ -147,12 +151,12 @@ class LLMClient:
         if response.status_code in _RETRYABLE_STATUS:
             raise RetryableError(f"{self.spec.name} HTTP {response.status_code}: {response.text[:200]}")
         if response.status_code != 200:
-            raise RuntimeError(f"{self.spec.name} HTTP {response.status_code}: {response.text[:500]}")
+            raise LLMUnavailableError(f"{self.spec.name} HTTP {response.status_code}: {response.text[:500]}")
 
         try:
             text = response.json()["choices"][0]["message"]["content"] or ""
         except (ValueError, KeyError, IndexError, TypeError) as e:
-            raise RuntimeError(f"Respuesta inesperada de {self.spec.name}: {response.text[:300]}") from e
+            raise LLMUnavailableError(f"Respuesta inesperada de {self.spec.name}: {response.text[:300]}") from e
         if not text.strip():
             # DeepSeek documenta respuestas vacías ocasionales en modo JSON.
             raise RetryableError(f"{self.spec.name} devolvió una respuesta vacía.")

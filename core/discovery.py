@@ -12,18 +12,19 @@ import re
 import unicodedata
 from collections.abc import Callable, Iterator
 from dataclasses import dataclass
-from urllib.parse import quote
+from urllib.parse import quote, urlsplit
 
 from pydantic import BaseModel, Field
 
 from core.capture import CaptureError, canonical_url, capture_vacancy
-from core.engine.pipeline import analyze, match_summary
+from core.engine.pipeline import analyze, evidence_json, match_summary
 from core.llm.client import LLMAuthError, LLMClient
 from core.llm.providers import LLMConfigError
 from core.llm.structured import generate_structured
 from core.profile.snapshot import ProfileSnapshot
 from core.tracking import service as tracking
 from core.tracking.models import STATUSES
+from core.usage import QuotaExceededError
 from core.vacancy import NotAVacancyError
 from utils.retry import RetryableError
 
@@ -91,7 +92,15 @@ class TriageResult:
 def parse_links(text: str) -> list[str]:
     """Enlaces http(s) de un bloque de texto (uno por línea o mezclados), sin repetir la misma vacante."""
     urls = (canonical_url(u.rstrip(").,;")) for u in re.findall(r"https?://[^\s<>\"']+", text))
-    return list(dict.fromkeys(urls))
+    return list(dict.fromkeys(u for u in urls if _valid(u)))
+
+
+def _valid(url: str) -> bool:
+    try:
+        parsed = urlsplit(url)
+        return bool(parsed.hostname) and (parsed.port or 0) >= 0
+    except ValueError:
+        return False
 
 
 def triage(
@@ -110,7 +119,7 @@ def triage(
         url = canonical_url(url)
         try:
             yield _triage_one(username, url, llm, profile, capture)
-        except (LLMAuthError, LLMConfigError):
+        except (LLMAuthError, LLMConfigError, QuotaExceededError):
             raise
         except Exception:  # un enlace raro (o un corte de la BD) no tumba el lote ni su reporte
             logger.exception("Error inesperado en la bandeja con %s", url)
@@ -129,7 +138,7 @@ def _triage_one(username: str, url: str, llm: LLMClient, profile: ProfileSnapsho
         return _repeated(url, existing)
     try:
         result = analyze(llm, profile, text=captured.text)
-    except (LLMAuthError, LLMConfigError):
+    except (LLMAuthError, LLMConfigError, QuotaExceededError):
         raise
     except NotAVacancyError:
         return TriageResult(url, "error", "La página no parece una oferta de empleo.")
@@ -141,7 +150,7 @@ def _triage_one(username: str, url: str, llm: LLMClient, profile: ProfileSnapsho
         username, role=vacancy.role or captured.title, company=vacancy.company or captured.company,
         platform=captured.platform, url=final_url, vacancy_text=captured.text,
         analysis_json=vacancy.model_dump_json(), match_json=json.dumps(match_summary(match), ensure_ascii=False),
-        match_score=match.score, status="por_revisar",
+        evidence_json=evidence_json(result.evidence, profile), match_score=match.score, status="por_revisar",
     )
     label = " — ".join(p for p in (vacancy.role, vacancy.company) if p)
     return TriageResult(url, "agregada", label, application_id, match.score)

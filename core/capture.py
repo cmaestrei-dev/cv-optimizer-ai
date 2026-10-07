@@ -41,8 +41,11 @@ def canonical_url(url: str) -> str:
     """Una URL por vacante. En LinkedIn, la vista de búsqueda (?currentJobId=) y los enlaces con
     nombre (/jobs/view/cargo-en-empresa-123) son la misma oferta: /jobs/view/123."""
     url = url.strip()
-    parsed = urlparse(url)
-    host = (parsed.hostname or "").lower()
+    try:
+        parsed = urlparse(url)
+        host = (parsed.hostname or "").lower()
+    except ValueError:  # p. ej. "https://[::1" : se deja igual y la validación lo rechaza
+        return url
     if host == "linkedin.com" or host.endswith(".linkedin.com"):
         job_id = parse_qs(parsed.query).get("currentJobId", [""])[0]
         if not job_id and (match := _LINKEDIN_JOB.search(parsed.path)):
@@ -69,11 +72,15 @@ def detect_platform(url: str) -> str:
 
 
 def _check_public(url: str) -> None:
-    parsed = urlparse(url)
-    if parsed.scheme not in ("http", "https") or not parsed.hostname:
+    try:
+        parsed = urlparse(url)
+        hostname, port = parsed.hostname, parsed.port
+    except ValueError as e:
+        raise CaptureError("El enlace no es válido.") from e
+    if parsed.scheme not in ("http", "https") or not hostname:
         raise CaptureError("El enlace debe empezar por https:// o http://")
     try:
-        infos = socket.getaddrinfo(parsed.hostname, parsed.port or (443 if parsed.scheme == "https" else 80))
+        infos = socket.getaddrinfo(hostname, port or (443 if parsed.scheme == "https" else 80))
     except socket.gaierror as e:
         raise CaptureError("No encontramos ese sitio. Revisa el enlace.") from e
     for info in infos:

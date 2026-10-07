@@ -38,6 +38,7 @@ class Application(Base):
     vacancy_text: Mapped[str] = mapped_column(Text, default="")
     analysis_json: Mapped[str] = mapped_column(Text, default="")  # VacancyAnalysis para la analítica (fase 3)
     match_json: Mapped[str] = mapped_column(Text, default="", server_default="")  # resumen del match (bandeja)
+    evidence_json: Mapped[str] = mapped_column(Text, default="", server_default="")  # mapa de evidencias de la IA
     match_score: Mapped[int | None] = mapped_column(Integer)
     applied_on: Mapped[date | None] = mapped_column(Date)
     next_action_on: Mapped[date | None] = mapped_column(Date, index=True)
@@ -81,6 +82,7 @@ class CVDocumentRecord(Base):
     application_id: Mapped[int] = mapped_column(ForeignKey("applications.id", ondelete="CASCADE"), index=True)
     language: Mapped[str] = mapped_column(String(10), default="es")
     markdown: Mapped[str] = mapped_column(Text, default="")
+    document_json: Mapped[str] = mapped_column(Text, default="", server_default="")  # CVDocument: permite editar
     pdf: Mapped[bytes] = mapped_column(LargeBinary)
     docx: Mapped[bytes] = mapped_column(LargeBinary)
     pdf_sha256: Mapped[str] = mapped_column(String(64))
