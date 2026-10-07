@@ -54,6 +54,23 @@ class TestBuildHtml:
         html = build_html(cv_md, profile)
         assert "content" in html
 
+    def test_build_html_neutralizes_raw_html_from_llm(self):
+        profile = UserProfile(username="test")
+        cv_md = '## Perfil\n<link rel="attachment" href="file:///etc/passwd">'
+        html = build_html(cv_md, profile)
+        assert "<link" not in html
+
+
+class TestGeneratePdfSecurity:
+    def test_pdf_does_not_embed_local_files(self, tmp_path):
+        secret = tmp_path / "secret.txt"
+        secret.write_text("SECRETO_DE_PRUEBA")
+        injection = f'"><link rel="attachment" href="file://{secret}"><a href="'
+        profile = UserProfile(username="test", full_name="X", email=f"a@b.co{injection}")
+        pdf = generate_pdf(f'## Perfil\n<link rel="attachment" href="file://{secret}">', profile)
+        assert pdf.startswith(b"%PDF")
+        assert b"/EmbeddedFile" not in pdf
+
 
 class TestGeneratePdf:
     @patch("services.pdf_generator.HTML")
@@ -221,3 +238,58 @@ class TestGeminiClientVersioning:
 
         client = GeminiClient(api_key="test")
         assert client.prompt_version == "v3"
+
+
+class TestGeminiClientNetworkErrors:
+    @patch("services.gemini_client.requests.post")
+    def test_request_uses_timeout(self, mock_post):
+        from services.gemini_client import GeminiClient
+
+        mock_response = MagicMock()
+        mock_response.status_code = 200
+        mock_response.json.return_value = {
+            "candidates": [{"content": {"parts": [{"text": "ok"}]}}]
+        }
+        mock_post.return_value = mock_response
+
+        GeminiClient(api_key="test").extract_skills_from_vacancy("vacante")
+        assert mock_post.call_args[1]["timeout"]
+
+    @patch("services.gemini_client.requests.post")
+    def test_timeout_is_not_retried(self, mock_post):
+        import requests
+
+        from services.gemini_client import GeminiClient
+
+        mock_post.side_effect = requests.Timeout()
+        with pytest.raises(RuntimeError):
+            GeminiClient(api_key="test").extract_skills_from_vacancy("vacante")
+
+    @patch("services.gemini_client.requests.post")
+    def test_connection_error_is_retryable(self, mock_post):
+        import requests
+
+        from services.gemini_client import GeminiClient
+        from utils.retry import RetryableError
+
+        mock_post.side_effect = requests.ConnectionError()
+        with pytest.raises(RetryableError):
+            GeminiClient(api_key="test").extract_skills_from_vacancy("vacante")
+
+
+class TestCvPromptKeepsRealTitles:
+    @patch("services.gemini_client.requests.post")
+    def test_v3_prompt_forbids_replacing_job_titles(self, mock_post):
+        from services.gemini_client import GeminiClient
+
+        mock_response = MagicMock()
+        mock_response.status_code = 200
+        mock_response.json.return_value = {
+            "candidates": [{"content": {"parts": [{"text": "## CV"}]}}]
+        }
+        mock_post.return_value = mock_response
+
+        GeminiClient(api_key="test", prompt_version="v3").generate_cv("vac", "exp", "sk", "edu")
+        prompt_sent = mock_post.call_args[1]["json"]["contents"][0]["parts"][0]["text"]
+        assert "CARGOS REALES" in prompt_sent
+        assert "TODAS las experiencias deben titularse" not in prompt_sent

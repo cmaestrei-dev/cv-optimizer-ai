@@ -1,6 +1,17 @@
 import hashlib
+import hmac
+import html
 import os
 from dataclasses import dataclass
+
+
+def _link_html(url: str) -> str:
+    text = html.escape(url.replace("https://", "").replace("http://", ""))
+    if ":" not in url:
+        url = f"https://{url}"
+    if not url.lower().startswith(("https://", "http://")):
+        return text
+    return f'<a href="{html.escape(url)}">{text}</a>'
 
 
 @dataclass
@@ -34,27 +45,20 @@ class UserProfile:
         candidate = hashlib.pbkdf2_hmac(
             "sha256", password.encode("utf-8"), bytes.fromhex(self.salt), 600_000
         ).hex()
-        return candidate == self.password_hash
+        return hmac.compare_digest(candidate, self.password_hash)
 
     @property
     def contact_line_html(self) -> str:
         parts = []
         if self.email:
-            parts.append(
-                f'<a href="mailto:{self.email}">{self.email}</a>'
-            )
+            email = html.escape(self.email)
+            parts.append(f'<a href="mailto:{email}">{email}</a>')
         if self.phone:
-            parts.append(self.phone)
+            parts.append(html.escape(self.phone))
         if self.linkedin_url:
-            display_linkedin = self.linkedin_url.replace("https://", "").replace("http://", "")
-            parts.append(
-                f'<a href="{self.linkedin_url}">{display_linkedin}</a>'
-            )
+            parts.append(_link_html(self.linkedin_url))
         if self.github_url:
-            display_github = self.github_url.replace("https://", "").replace("http://", "")
-            parts.append(
-                f'<a href="{self.github_url}">{display_github}</a>'
-            )
+            parts.append(_link_html(self.github_url))
         return " | ".join(parts)
 
     def to_dict(self) -> dict:

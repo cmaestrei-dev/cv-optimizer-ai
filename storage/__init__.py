@@ -1,12 +1,12 @@
 from storage._db import (
     all_data_files_exist,
-    get_storage_info,
     append_skill,
     delete_education_entry,
     delete_experience_entry,
     delete_profile,
     get_experience_list,
     get_skills_lines,
+    get_storage_info,
     has_education,
     has_knowledge_base,
     has_skills,

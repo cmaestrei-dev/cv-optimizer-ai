@@ -64,7 +64,7 @@ def _render_profile_details(profile: UserProfile) -> UserProfile:
         new_password = st.text_input(
             "Nueva contraseña (dejar vacío para no cambiar)",
             type="password",
-            placeholder="Mínimo 4 caracteres",
+            placeholder=f"Mínimo {MIN_PASSWORD_LENGTH} caracteres",
         )
         new_password_confirm = st.text_input(
             "Confirmar nueva contraseña",
@@ -129,7 +129,7 @@ def render_profile_sidebar() -> UserProfile | None:
             key="profile_selector",
         )
     with col2:
-        if profile_action != "+ Nuevo Perfil":
+        if profile_action != "+ Nuevo Perfil" and _is_authenticated(profile_action):
             delete_key = f"confirm_delete_{profile_action}"
             if delete_key not in st.session_state:
                 st.session_state[delete_key] = False
@@ -164,18 +164,20 @@ def render_profile_sidebar() -> UserProfile | None:
             phone = st.text_input("Teléfono", placeholder="ej: +57 300 123 4567")
             linkedin = st.text_input("LinkedIn URL", placeholder="https://linkedin.com/in/...")
             github = st.text_input("GitHub URL", placeholder="https://github.com/...")
-            password = st.text_input("Contraseña", type="password", placeholder="Mínimo 4 caracteres")
+            password = st.text_input("Contraseña", type="password", placeholder=f"Mínimo {MIN_PASSWORD_LENGTH} caracteres")
             password_confirm = st.text_input("Confirmar contraseña", type="password")
 
             if st.form_submit_button("Crear Perfil", type="primary"):
-                if not username.strip():
-                    st.error("El nombre de usuario es obligatorio.")
+                slug = re.sub(r"[^a-zA-Z0-9_\-]", "", username.strip().lower().replace(" ", "_"))
+                if not slug:
+                    st.error("El nombre de usuario es obligatorio (letras, números, _ o -).")
+                elif load_profile(slug) is not None:
+                    st.error("Ese nombre de usuario ya existe. Elige otro.")
                 elif not password or len(password) < MIN_PASSWORD_LENGTH:
                     st.error(f"La contraseña debe tener al menos {MIN_PASSWORD_LENGTH} caracteres.")
                 elif password != password_confirm:
                     st.error("Las contraseñas no coinciden.")
                 else:
-                    slug = re.sub(r"[^a-zA-Z0-9_\-]", "", username.strip().lower().replace(" ", "_"))
                     profile = UserProfile(
                         username=slug,
                         full_name=full_name.strip(),

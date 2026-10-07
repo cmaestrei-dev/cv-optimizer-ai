@@ -34,6 +34,24 @@ class TestUserProfile:
         profile = UserProfile(username="test")
         assert profile.contact_line_html == ""
 
+    def test_contact_line_escapes_html_injection(self):
+        profile = UserProfile(
+            username="test",
+            email='a@b.co"><link rel="attachment" href="file:///etc/passwd">',
+            phone="<script>x</script>",
+        )
+        line = profile.contact_line_html
+        assert "<link" not in line
+        assert "<script>" not in line
+
+    def test_contact_line_rejects_non_http_links(self):
+        profile = UserProfile(username="test", linkedin_url="javascript:alert(1)")
+        assert "href" not in profile.contact_line_html
+
+    def test_contact_line_adds_scheme_to_bare_domain(self):
+        profile = UserProfile(username="test", linkedin_url="linkedin.com/in/test")
+        assert 'href="https://linkedin.com/in/test"' in profile.contact_line_html
+
     def test_to_dict_and_from_dict(self):
         original = UserProfile(
             username="juan",

@@ -1,3 +1,5 @@
+import html
+
 import streamlit as st
 
 from config import SKILL_CATEGORIES
@@ -95,7 +97,7 @@ def render_tab_habilidades(profile: UserProfile | None) -> None:
                         f'font-size:13px;'
                         f'font-weight:500;'
                         f'white-space:nowrap;'
-                        f'">{name}</span> '
+                        f'">{html.escape(name)}</span> '
                     )
                 pills_html += '</div>'
                 st.markdown(pills_html, unsafe_allow_html=True)

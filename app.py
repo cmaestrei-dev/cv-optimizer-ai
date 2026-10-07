@@ -1,10 +1,19 @@
+import hmac
 import logging
 import os as _os
+import time
 
 import streamlit as st
 
 try:
-    for _key in ("TURSO_DB_URL", "TURSO_AUTH_TOKEN", "GEMINI_API_KEY", "GEMINI_MODEL", "PROMPT_VERSION"):
+    for _key in (
+        "TURSO_DB_URL",
+        "TURSO_AUTH_TOKEN",
+        "GEMINI_API_KEY",
+        "GEMINI_MODEL",
+        "PROMPT_VERSION",
+        "APP_ACCESS_PASSWORD",
+    ):
         if _key in st.secrets:
             _os.environ[_key] = str(st.secrets[_key])
 except Exception:
@@ -20,6 +29,31 @@ from ui.tab_vacante import render_tab_vacante
 
 logging.basicConfig(level=logging.INFO, format="%(asctime)s [%(levelname)s] %(message)s")
 logger = logging.getLogger(__name__)
+
+
+def _has_app_access() -> bool:
+    """Puerta de acceso a toda la app. Desplegada (Turso) sin contraseña => cerrada."""
+    expected = _os.environ.get("APP_ACCESS_PASSWORD", "")
+    if not expected:
+        if _os.environ.get("TURSO_DB_URL"):
+            st.error(
+                "La app está desplegada sin contraseña de acceso. "
+                "Configura el secreto APP_ACCESS_PASSWORD en Streamlit Cloud."
+            )
+            return False
+        return True
+    if st.session_state.get("app_access_granted"):
+        return True
+
+    with st.form("app_access_form"):
+        password = st.text_input("Contraseña de acceso", type="password")
+        if st.form_submit_button("Entrar", type="primary"):
+            if hmac.compare_digest(password.encode(), expected.encode()):
+                st.session_state["app_access_granted"] = True
+                st.rerun()
+            time.sleep(1)
+            st.error("Contraseña incorrecta.")
+    return False
 
 
 def main():
@@ -124,6 +158,9 @@ def main():
     )
 
     st.title("CV Optimizer AI")
+
+    if not _has_app_access():
+        return
 
     with st.sidebar:
         st.header("Configuración")
