@@ -1,7 +1,7 @@
 # Roadmap y estado del proyecto
 
 > Documento vivo. Se actualiza al terminar cada cambio relevante: qué existe, qué se hizo, qué sigue.
-> Última actualización: 2026-10-07 (fase 2: seguimiento de postulaciones)
+> Última actualización: 2026-10-07 (fase 3: inteligencia por plataforma)
 
 ## Prioridad actual
 
@@ -98,11 +98,13 @@
 - [x] Registrar postulaciones hechas por fuera de la app; métricas (enviadas, en proceso, ofertas, tasa de respuesta)
 - [ ] Recordatorios fuera de la app (correo / WhatsApp) — requiere un servicio de envío; evaluar en la fase 5
 
-### Fase 3 — Inteligencia por plataforma (LinkedIn, Computrabajo, Magneto, elempleo)
-- [ ] Captura de vacantes sin scraping masivo: extensión de navegador, JSON-LD `JobPosting`, correos de alertas
-- [ ] Análisis de palabras clave / requisitos por plataforma y por rol
-- [ ] Mapeo de campos y preguntas de filtro de cada plataforma
-- [ ] Analítica de resultados propios (qué CV / plataforma consigue respuesta)
+### Fase 3 — Inteligencia por plataforma (LinkedIn, Computrabajo, Magneto, elempleo) (rama `claude/fase3-mercado`)
+- [x] Captura de vacantes por enlace (una página que el usuario pide, no scraping masivo): schema.org `JobPosting` en LinkedIn público, elempleo y Magneto; texto de `<main>` en Computrabajo (verificado en los 4 portales el 2026-10-07). Portal y enlace se guardan solos en la postulación
+- [x] Protección SSRF: solo http(s), cada salto de redirección se valida, se rechazan IPs privadas/loopback/link-local/reservadas, límite de tamaño y tiempo
+- [x] "Mi mercado": palabras clave más pedidas (marcando si están en el perfil), por portal (guardadas, enviadas, tasa de avance, compatibilidad promedio), ¿más compatibilidad = más respuestas?, áreas; aviso honesto con pocos datos
+- [x] Preguntas de filtro de los portales: respuestas con datos del perfil (años sumados con las fechas reales), verificadas; lo que solo sabe la persona (salario, disponibilidad, licencia) se marca para que lo complete
+- [ ] Extensión de navegador para capturar con un clic y correos de alertas → requieren una API (fase 5)
+- [ ] Guías por portal (qué campos del perfil del portal pesan más) → necesita datos reales de resultados; reevaluar con 20+ postulaciones por portal
 
 ### Fase 4 — Descubrimiento y aplicación asistida
 - [ ] Búsqueda de vacantes objetivo + puntaje de afinidad
@@ -148,10 +150,13 @@
 | 2026-10-07 | Tareas típicas generadas por IA solo como recordatorio: la persona marca lo que hizo | Reconocer es más fácil que recordar; la confirmación explícita mantiene la honestidad (nada entra sin que la persona lo marque) |
 | 2026-10-07 | Los CV (PDF/DOCX) se guardan en Postgres junto a su huella | ~60 KB por CV: miles caben en el plan gratuito; una sola fuente de verdad y respaldos simples. Pasar a almacenamiento de objetos (S3/R2) si crece en la fase 5 |
 | 2026-10-07 | Una postulación por vacante analizada; cada CV generado se adjunta a ella | Evita duplicados y permite ver todas las versiones; solo un CV de esa misma vacante puede marcarse como enviado |
+| 2026-10-07 | Captura por enlace con `JobPosting` (schema.org) + respaldo de texto visible, en vez de scraping | Es lo que los portales publican para Google Empleos; una lectura por petición del usuario. No hay inicio de sesión ni recorrido de listados |
+| 2026-10-07 | "Mi mercado" en tablas con barras en la celda, no gráficos de colores | Pocos datos personales y varias medidas por portal: una tabla es legible con 3 o 300 filas, trae la vista de tabla y no depende del color |
 | 2026-10-07 | No purgar el historial git de los `.md` personales | Solo contenido de CV (sin contacto ni IDs); purgar exige force push a `main` público y GitHub mantiene accesibles los commits huérfanos por SHA |
 
 ## Próximo paso
 
-1. Usuarios: registrar sus postulaciones reales (desde "CV inteligente" con "Ya la envié", o manualmente) y actualizar estados cuando haya respuesta.
-2. Fase 3 — inteligencia por plataforma: con las vacantes y resultados que ya se guardan (análisis JSON + estados), medir qué palabras y requisitos piden más en cada portal y qué CVs consiguen respuesta; captura de vacantes con extensión de navegador / JSON-LD.
-3. Ampliar evals (casos difíciles, costo por CV) y retirar el generador clásico y el almacenamiento anterior.
+1. Usuarios: usar "Traer" con enlaces reales, registrar postulaciones y estados; revisar "Mi mercado" tras ~10 envíos.
+2. Retirar el generador clásico, `services/gemini_client.py`, `storage/` y Turso (el motor nuevo ya cubre todo).
+3. Fase 4 — descubrimiento y aplicación asistida: buscar vacantes objetivo y puntuarlas; cola de aprobación; la persona confirma cada envío.
+4. Fase 5 — SaaS (FastAPI + React, extensión de navegador, auth gestionada, pagos, Ley 1581).
