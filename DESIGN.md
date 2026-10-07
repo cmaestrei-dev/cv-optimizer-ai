@@ -47,6 +47,7 @@ El sistema rechaza explícitamente dos extremos: la saturación corporativa de d
 - Plano por defecto; las sombras solo aparecen como respuesta a la interacción (hover, focus, selección).
 - Tipografía Plus Jakarta Sans: amigable y moderna sin perder profesionalismo. Una sola familia para todo.
 - Componentes nativos de Streamlit con personalización mínima: no se reinventan affordances estándar.
+- Fase 5c: el frontend React (`web/src/styles.css`) implementa estos mismos tokens como variables CSS. Estados (cumple/a medias/falta) en verde/ámbar/rojo tenues, siempre con símbolo y texto (✓ ½ ✗), nunca solo color. Primero el celular: navegación inferior en pantallas pequeñas, pestañas arriba en escritorio; botones de al menos 44 px.
 
 ## 2. Colors
 

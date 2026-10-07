@@ -48,6 +48,7 @@ Para desarrollo local no se requiere base de datos: se crea `data/cv_core.db` (S
 ```
 app.py              # Entrada de Streamlit: puerta de acceso, barra lateral y pestañas
 api/                # API del SaaS (FastAPI) sobre el mismo núcleo; en construcción (fase 5)
+web/                # Frontend React + TypeScript de la versión SaaS (fase 5c)
 config.py           # Constantes y categorías
 core/               # Núcleo sin UI: IA multi-proveedor, perfil, motor de CV, postulaciones, captura
 migrations/         # Migraciones de esquema (Alembic)
@@ -58,13 +59,15 @@ evals/, scripts/    # Evaluación del motor con IA real
 
 Plan, estado y decisiones del proyecto: [`docs/ROADMAP.md`](docs/ROADMAP.md).
 
-## API (en construcción)
+## Versión nueva (API + web, en construcción)
 
 ```bash
-export AUTH_DEV_SECRET=$(python -c "import secrets; print(secrets.token_urlsafe(40))")
-uvicorn api.main:app --reload                 # documentación interactiva en http://localhost:8000/docs
-python scripts/dev_token.py ana               # token de prueba (solo con SQLite)
+export AUTH_DEV_SECRET=$(python -c "import secrets; print(secrets.token_urlsafe(40))") AUTH_DEV_LOGIN=1
+uvicorn api.main:app --reload                 # API; documentación en http://localhost:8000/docs
+cd web && npm install && npm run dev          # web en http://localhost:5173 (entra con tu nombre)
 ```
+
+Si cambias la API: `python scripts/export_openapi.py web/openapi.json && (cd web && npm run api:types)`.
 
 ## Tests
 
