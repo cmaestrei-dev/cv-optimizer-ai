@@ -1,7 +1,7 @@
 # Roadmap y estado del proyecto
 
 > Documento vivo. Se actualiza al terminar cada cambio relevante: qué existe, qué se hizo, qué sigue.
-> Última actualización: 2026-10-07 (entrega 2c de la Fase 1)
+> Última actualización: 2026-10-07 (entrega 2d de la Fase 1)
 
 ## Prioridad actual
 
@@ -76,13 +76,14 @@
 - [ ] Validación con vacantes y perfiles reales de los usuarios
 - [ ] Retirar el generador clásico cuando el nuevo esté validado
 
-*2d — Extras*
-- [x] Importación de CV / PDF de LinkedIn rediseñada: pasos numerados, visible cuando el perfil está vacío, la IA solo copia (JSON validado), cada logro y habilidad se verifica contra el texto del PDF, sin duplicados, guardado atómico, completa contacto vacío. Probada con un PDF de formato LinkedIn y Gemini real
+*2d — Extras* (PR #6 y rama `claude/motor-2d`)
+- [x] Importación de CV / PDF de LinkedIn rediseñada: pasos numerados, visible cuando el perfil está vacío, la IA solo copia (JSON validado), cada logro y habilidad se verifica contra el texto del PDF, sin duplicados, guardado atómico, completa contacto vacío
 - [x] Mensajes claros cuando la API key es inválida o fue revocada (incluye el formato nuevo `AQ.` de Google)
-- [ ] Entrevista guiada para extraer logros con cifras reales
-- [ ] Set de vacantes de prueba con métricas automáticas (evals) para comparar prompts y proveedores
-- [ ] Normalización con ESCO (sinónimos y sugerencias de habilidades)
-- [ ] Retirar `services/gemini_client.py` y `config.py` cuando todo use `core/`
+- [x] Entrevista guiada: la IA pregunta por cifras, herramientas y resultados de un cargo (empezando por el más débil); con las respuestas propone viñetas que se verifican contra el original + las respuestas; el usuario acepta una por una. Indicador "X de Y logros tienen cifras"
+- [x] PDF: la plantilla CSS tenía llaves dobles (`{{ }}`) que WeasyPrint no entendía → se ignoraban los márgenes de página (75 px en vez de 48) y los guiones de las viñetas. Corregido (más espacio útil por página) con test de regresión
+- [x] Evaluación del motor (`evals/`, `scripts/run_evals.py`): 3 perfiles y 5 vacantes ficticios (administrativo, desarrollo, ventas; una en inglés) con resultados esperados. Primera corrida: Gemini y DeepSeek 20/20 en match, 0 viñetas inventadas, 5/5 en una página e idioma; Gemini 7,5 s/CV vs DeepSeek 9,9 s y 1 resumen rechazado
+- [ ] Normalización con ESCO → **pospuesta** (ver decisiones)
+- [ ] Retirar el generador clásico, `services/gemini_client.py`, `storage/` y Turso cuando el motor nuevo esté validado por los usuarios
 
 ### Fase 2 — Seguimiento de postulaciones (tracker)
 - [ ] Entidad Postulación: vacante, plataforma, estado, fechas, contacto, notas
@@ -136,11 +137,13 @@
 | 2026-10-07 | El HTML del CV se arma desde datos estructurados, nunca desde Markdown de la IA | Elimina por diseño la inyección de HTML y permite medir/recortar por elemento |
 | 2026-10-07 | Generador nuevo en pestaña aparte; el clásico se mantiene hasta validar | Los usuarios están postulando ya; cero riesgo de romper lo que funciona |
 | 2026-10-07 | Importar CV: la IA extrae y el código verifica contra el texto del PDF; lo no encontrado se descarta y se muestra | Un importador que "infiere" habilidades llenaría el perfil de cosas falsas que luego el motor usaría como verdad |
+| 2026-10-07 | ESCO pospuesto | El mapa de evidencias ya resuelve sinónimos del oficio (100 % de acierto en los evals); ESCO aporta sobre todo a escala (SaaS: normalizar miles de perfiles, sugerir habilidades por ocupación). Reevaluar si los evals muestran fallos de sinónimos o en la Fase 5 |
+| 2026-10-07 | Evals con casos ficticios y expectativas por palabra clave, fuera de la CI | Miden calidad real con IA real (cuesta cuota); la CI solo prueba las métricas. Son la base para elegir proveedor del SaaS con datos |
 | 2026-10-07 | No purgar el historial git de los `.md` personales | Solo contenido de CV (sin contacto ni IDs); purgar exige force push a `main` público y GitHub mantiene accesibles los commits huérfanos por SHA |
 
 ## Próximo paso
 
-1. Revisar y fusionar el PR de 2c; probar "CV inteligente (nuevo)" con vacantes reales (perfil del usuario y de su pareja, que aún debe crear su perfil).
-2. Entrega 2d: entrevista guiada para extraer logros con cifras (también resuelve que usuarios nuevos no sepan usar la app), set de evaluación, ESCO.
-3. Retirar el generador clásico, `services/gemini_client.py`, `storage/` y Turso cuando el motor nuevo esté validado.
-4. Fase 2: seguimiento de postulaciones (cada CV generado se guarda con su vacante).
+1. Usuarios: importar el PDF de LinkedIn de la pareja, usar la entrevista guiada y probar "CV inteligente" con vacantes reales; reportar lo que no convenza.
+2. Ampliar los evals con casos más difíciles (vacantes ambiguas, perfiles con poca experiencia, otras profesiones) y medir costo por CV.
+3. Retirar el generador clásico y el almacenamiento anterior cuando el motor esté validado.
+4. Fase 2: seguimiento de postulaciones (cada CV generado se guarda con su vacante y su estado).
