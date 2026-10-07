@@ -100,7 +100,10 @@ def _render_review(profile: UserProfile, plan: ImportPlan) -> None:
             education=chosen_edu, fill_contact=fill_contact,
         )
         st.session_state.pop(_STATE, None)
-        st.session_state["exp_flash"] = "Importado: " + ", ".join(f"{v} {k}" for k, v in counts.items())
+        st.session_state["exp_flash"] = (
+            "Importado: " + ", ".join(f"{v} {k}" for k, v in counts.items())
+            + ". Siguiente paso: mejora tus logros con la entrevista guiada (justo aquí abajo)."
+        )
         st.rerun()
     if cancel:
         st.session_state.pop(_STATE, None)

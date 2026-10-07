@@ -82,6 +82,7 @@
 - [x] Entrevista guiada: la IA pregunta por cifras, herramientas y resultados de un cargo (empezando por el más débil); con las respuestas propone viñetas que se verifican contra el original + las respuestas; el usuario acepta una por una. Indicador "X de Y logros tienen cifras"
 - [x] PDF: la plantilla CSS tenía llaves dobles (`{{ }}`) que WeasyPrint no entendía → se ignoraban los márgenes de página (75 px en vez de 48) y los guiones de las viñetas. Corregido (más espacio útil por página) con test de regresión
 - [x] Evaluación del motor (`evals/`, `scripts/run_evals.py`): 3 perfiles y 5 vacantes ficticios (administrativo, desarrollo, ventas; una en inglés) con resultados esperados. Primera corrida: Gemini y DeepSeek 20/20 en match, 0 viñetas inventadas, 5/5 en una página e idioma; Gemini 7,5 s/CV vs DeepSeek 9,9 s y 1 resumen rechazado
+- [x] Entrevista más visible (feedback real: la usuaria no la encontró): va primero en la pestaña y se abre sola si menos de la mitad de los logros tienen cifras; avisos tras importar y en "CV inteligente"
 - [ ] Normalización con ESCO → **pospuesta** (ver decisiones)
 - [ ] Retirar el generador clásico, `services/gemini_client.py`, `storage/` y Turso cuando el motor nuevo esté validado por los usuarios
 
