@@ -174,6 +174,11 @@ def render_tab_cv_inteligente(profile: UserProfile | None, api_key_overrides: di
     if profile is None:
         st.info("Crea o selecciona un perfil en la barra lateral para empezar.")
         return
+    if not service.profile_status(profile.username)[0]:
+        st.info(
+            ":material/upload_file: **Tu perfil todavía no tiene experiencias.** Ve a la pestaña "
+            "«Mi experiencia (importar CV)» y sube tu CV o el PDF de LinkedIn: se llena solo y tú revisas."
+        )
 
     image = st.file_uploader("Captura de la vacante (opcional)", type=["png", "jpg", "jpeg", "webp"], key="ci_image")
     text = st.text_area("Texto de la vacante", placeholder="Pega aquí la oferta completa...", key="ci_text", height=180)

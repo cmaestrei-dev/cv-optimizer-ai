@@ -5,172 +5,14 @@ import streamlit as st
 
 from config import WORK_MODALITIES
 from core.profile import service
-from core.profile.legacy import parse_education_markdown, parse_experience_markdown
+from core.profile.legacy import parse_experience_markdown
 from models import UserProfile
 from services.gemini_client import GeminiClient
-from utils.pdf_extractor import extract_text_from_pdf
+from ui.importer import render_import
 from utils.retry import RetryableError, retry_with_backoff
 
 logger = logging.getLogger(__name__)
 
-_SKILL_LINE = re.compile(r"\*\*(.+?)\*\*\s*(?:->\s*\[?([^\]]+?)\]?)?\s*$")
-
-
-def _parse_cv_sections(raw: str) -> tuple[list[str], list[str], list[str]]:
-    experiences = []
-    skills = []
-    education = []
-    current_section = None
-    buf: list[str] = []
-
-    for line in raw.split("\n"):
-        stripped = line.strip()
-        upper = stripped.upper()
-        if upper.startswith("EXPERIENCIAS:") or upper.startswith("EXPERIENCIA"):
-            if current_section == "skills" and buf:
-                skills.extend(buf)
-            elif current_section == "education" and buf:
-                education.extend(buf)
-            current_section = "experience"
-            buf = []
-        elif upper.startswith("SKILLS:") or upper.startswith("HABILIDADES:"):
-            if current_section == "experience" and buf:
-                experiences.append("\n".join(buf).strip())
-            elif current_section == "education" and buf:
-                education.extend(buf)
-            current_section = "skills"
-            buf = []
-        elif upper.startswith("EDUCACION:") or upper.startswith("EDUCACIÓN:"):
-            if current_section == "experience" and buf:
-                experiences.append("\n".join(buf).strip())
-            elif current_section == "skills" and buf:
-                skills.extend(buf)
-            current_section = "education"
-            buf = []
-        elif stripped.startswith("### ") and current_section == "experience" and buf:
-            experiences.append("\n".join(buf).strip())
-            buf = [stripped]
-        elif current_section:
-            buf.append(stripped)
-
-    if current_section == "experience" and buf:
-        experiences.append("\n".join(buf).strip())
-    elif current_section == "skills" and buf:
-        skills.extend(buf)
-    elif current_section == "education" and buf:
-        education.extend(buf)
-
-    return experiences, skills, education
-
-
-def _render_cv_import(client: GeminiClient | None, profile: UserProfile | None) -> None:
-    if profile is None:
-        return
-
-    with st.expander(":material/upload_file: Importar desde CV o LinkedIn (PDF)", expanded=False):
-        pdf_file = st.file_uploader(
-            "Subí tu CV en PDF",
-            type=["pdf"],
-            key="cv_import_pdf",
-            label_visibility="collapsed",
-        )
-        if pdf_file is None:
-            return
-
-        if client is None:
-            st.error(":material/warning: Ingresá tu API Key en la barra lateral primero.")
-            return
-
-        file_bytes = pdf_file.read()
-        with st.spinner("Extrayendo texto del PDF..."):
-            cv_markdown = extract_text_from_pdf(file_bytes)
-        if not cv_markdown:
-            st.error(":material/cancel: No se pudo extraer texto del PDF. ¿Es un documento escaneado?")
-            return
-
-        with st.expander(":material/preview: Texto extraído del PDF", expanded=False):
-            st.text(cv_markdown[:5000] + ("..." if len(cv_markdown) > 5000 else ""))
-
-        if st.button(":material/magic_button: Analizar CV con IA", key="parse_cv_btn", type="primary"):
-            with st.spinner("Parseando CV con Gemini..."):
-                try:
-                    @retry_with_backoff()
-                    def _parse():
-                        return client.parse_cv_document(cv_markdown)
-
-                    raw = _parse()
-                except Exception as e:
-                    st.error(f":material/cancel: Error al procesar el CV: {e}")
-                    return
-
-            st.session_state["cv_parsed"] = raw
-            st.rerun()
-
-    parsed = st.session_state.get("cv_parsed", "")
-    if not parsed:
-        return
-
-    experiences, skills, education = _parse_cv_sections(parsed)
-
-    st.markdown("---")
-    st.subheader(":material/preview: Datos encontrados en el CV")
-
-    import_exp = import_skills = import_edu = False
-    if experiences:
-        import_exp = st.checkbox(f":material/check: Importar {len(experiences)} experiencia(s)", value=True, key="imp_exp")
-        if import_exp:
-            with st.expander(":material/preview: Vista previa de experiencias"):
-                for exp_text in experiences:
-                    st.markdown(exp_text)
-                    st.divider()
-    else:
-        st.info("No se encontraron experiencias en el CV.")
-
-    if skills:
-        import_skills = st.checkbox(f":material/check: Importar {len(skills)} skill(s)", value=True, key="imp_skills")
-        if import_skills:
-            with st.expander(":material/preview: Vista previa de skills"):
-                for s in skills:
-                    st.markdown(s)
-    else:
-        st.info("No se encontraron skills en el CV.")
-
-    if education:
-        import_edu = st.checkbox(f":material/check: Importar {len(education)} entrada(s) de educación", value=True, key="imp_edu")
-        if import_edu:
-            with st.expander(":material/preview: Vista previa de educación"):
-                for e in education:
-                    st.markdown(e)
-                    st.divider()
-
-    if not any([import_exp, import_skills, import_edu]):
-        return
-
-    if st.button(":material/check: Importar seleccionados a mi perfil", type="primary", key="do_import"):
-        imported = 0
-        if import_exp:
-            for parsed in parse_experience_markdown("\n".join(experiences)):
-                service.add_experience(
-                    profile.username, role=parsed.role, company=parsed.company,
-                    period_text=parsed.period_text, country=parsed.country,
-                    modality=parsed.modality, achievements=parsed.achievements,
-                )
-                imported += 1
-        if import_skills:
-            for skill_line in skills:
-                match = _SKILL_LINE.search(skill_line)
-                if match and service.add_skill(profile.username, match.group(1), match.group(2) or "Otros"):
-                    imported += 1
-        if import_edu:
-            for parsed in parse_education_markdown("\n".join(education)):
-                service.add_education(
-                    profile.username, title=parsed.title, institution=parsed.institution,
-                    period_text=parsed.period_text, description=parsed.description,
-                )
-                imported += 1
-        st.session_state.pop("cv_parsed", None)
-        st.session_state["exp_flash"] = f"{imported} elemento(s) importados correctamente."
-        st.rerun()
 
 
 def _lines(text: str) -> list[str]:
@@ -338,15 +180,19 @@ def _render_experience_editor(profile: UserProfile, exp, exp_key: str) -> None:
         st.rerun()
 
 
-def render_tab_experiencia(client: GeminiClient | None, profile: UserProfile | None) -> None:
-    st.header(":material/description: Registrar Nueva Experiencia")
-    st.markdown("Añade un empleo con sus logros. Cada logro se guarda por separado para elegir los mejores en cada CV.")
+def render_tab_experiencia(
+    client: GeminiClient | None, profile: UserProfile | None, api_key_overrides: dict[str, str]
+) -> None:
+    st.header(":material/description: Tu experiencia")
+    st.markdown("Cada logro se guarda por separado para elegir los mejores en cada CV.")
 
     flash = st.session_state.pop("exp_flash", None)
     if flash:
         st.success(f":material/check: {flash}")
 
-    _render_cv_import(client, profile)
+    empty = profile is not None and not service.profile_status(profile.username)[0]
+    render_import(profile, api_key_overrides, expanded=empty)
+    st.markdown("**O agrega una experiencia a mano**")
     _render_new_experience_form(client, profile)
     if profile:
         _render_existing_experiences(profile)

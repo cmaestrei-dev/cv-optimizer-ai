@@ -65,7 +65,7 @@
 - [x] **(usuario)** Poner `DATABASE_URL` de Neon en los secretos de Streamlit Cloud antes del merge
 - [ ] Retirar Turso y `storage/` cuando la migración en producción esté confirmada
 
-*2c — Motor de CV* (rama `claude/motor-2c`)
+*2c — Motor de CV* (PR #5, fusionado)
 - [x] Match requisito ↔ evidencia: la IA propone qué logro/habilidad/estudio respalda cada requisito (y cada función del cargo); el código valida las referencias, corrige años con las fechas reales y calcula el puntaje (obligatorio 1.0, deseable 0.4)
 - [x] Selección determinista: siempre el cargo más reciente, ≥1 logro por cargo, mochila por líneas + diversidad (MMR) + equilibrio entre cargos; habilidades y estudios citados primero
 - [x] Redacción controlada: la IA solo reescribe viñetas y resumen; cargos, empresas, fechas, estudios y habilidades salen de los datos
@@ -77,6 +77,8 @@
 - [ ] Retirar el generador clásico cuando el nuevo esté validado
 
 *2d — Extras*
+- [x] Importación de CV / PDF de LinkedIn rediseñada: pasos numerados, visible cuando el perfil está vacío, la IA solo copia (JSON validado), cada logro y habilidad se verifica contra el texto del PDF, sin duplicados, guardado atómico, completa contacto vacío. Probada con un PDF de formato LinkedIn y Gemini real
+- [x] Mensajes claros cuando la API key es inválida o fue revocada (incluye el formato nuevo `AQ.` de Google)
 - [ ] Entrevista guiada para extraer logros con cifras reales
 - [ ] Set de vacantes de prueba con métricas automáticas (evals) para comparar prompts y proveedores
 - [ ] Normalización con ESCO (sinónimos y sugerencias de habilidades)
@@ -133,6 +135,7 @@
 | 2026-10-07 | Las funciones del cargo suman relevancia a los logros pero no puntaje | El puntaje debe reflejar requisitos (lo que filtra un reclutador); las funciones ayudan a elegir qué contar |
 | 2026-10-07 | El HTML del CV se arma desde datos estructurados, nunca desde Markdown de la IA | Elimina por diseño la inyección de HTML y permite medir/recortar por elemento |
 | 2026-10-07 | Generador nuevo en pestaña aparte; el clásico se mantiene hasta validar | Los usuarios están postulando ya; cero riesgo de romper lo que funciona |
+| 2026-10-07 | Importar CV: la IA extrae y el código verifica contra el texto del PDF; lo no encontrado se descarta y se muestra | Un importador que "infiere" habilidades llenaría el perfil de cosas falsas que luego el motor usaría como verdad |
 | 2026-10-07 | No purgar el historial git de los `.md` personales | Solo contenido de CV (sin contacto ni IDs); purgar exige force push a `main` público y GitHub mantiene accesibles los commits huérfanos por SHA |
 
 ## Próximo paso
