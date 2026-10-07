@@ -1,7 +1,7 @@
 # Roadmap y estado del proyecto
 
 > Documento vivo. Se actualiza al terminar cada cambio relevante: qué existe, qué se hizo, qué sigue.
-> Última actualización: 2026-10-07
+> Última actualización: 2026-10-07 (paso 1 de la Fase 1)
 
 ## Prioridad actual
 
@@ -34,13 +34,27 @@
 - [ ] Merge a `main` (despliegue) — **después** de configurar `APP_ACCESS_PASSWORD`
 - [ ] CI en GitHub Actions (ruff + pytest)
 
-### Fase 1 — Núcleo y multi-profesión / multi-IA
-- [ ] Prompts genéricos para cualquier profesión (hoy asumen perfil TI: "Technical Skills", categorías de programación). Caso real a validar: perfil administrativo/operativo (sector automotriz, antes e-commerce)
-- [ ] Modelo de datos estructurado (experiencia con campos y viñetas, no Markdown parseado con regex)
-- [ ] Separar lógica de negocio de Streamlit (`core/` sin dependencias de UI)
-- [ ] Capa de IA con proveedores intercambiables (Gemini, DeepSeek) y salidas JSON validadas con Pydantic
-- [ ] Prompts en archivos versionados; eliminar versiones muertas (v1/v2)
-- [ ] Set de vacantes de prueba para comparar proveedores con datos
+### Fase 1 — Motor de CV (dirección aprobada el 2026-10-07)
+
+**Paso 1 — Mejoras rápidas sobre el código actual** (rama `claude/cv-multiprofesion`)
+- [x] Prompts universales (cualquier profesión): el análisis detecta `AREA` e `LANGUAGE` de la vacante y se inyectan en el prompt del CV
+- [x] CV en el idioma de la vacante, con títulos de sección en ese idioma ("Habilidades" en vez de "Technical Skills")
+- [x] Prompts sin invención: 8–12 viñetas según material real (antes "exactamente 12"), cifras solo si existen, sin repetir keywords artificialmente
+- [x] Categorías de habilidades universales, conservando las categorías que cada perfil ya usa
+- [x] API key de Gemini del servidor (`GEMINI_API_KEY`); la de la barra lateral es opcional
+- [x] Descarga en DOCX además de PDF (una columna, sin tablas: legible por ATS)
+- [x] Arreglos: "Extraer skills" no funcionaba tras generar; caché de skills no se invalidaba entre vacantes; la imagen de la vacante se leía vacía en el segundo intento
+- [ ] Validar con vacantes reales de un perfil administrativo/operativo
+
+**Paso 2 — Núcleo nuevo (motor por etapas)**
+- [ ] Perfil maestro estructurado: logros atómicos (texto, habilidades, métricas), no Markdown
+- [ ] Postgres (Neon o Supabase) + pgvector + SQLAlchemy/Alembic, migrando datos desde Turso
+- [ ] Cliente de IA único compatible con OpenAI (Gemini, DeepSeek, otros) + salidas validadas con Pydantic + modelo por tarea + caché por contenido
+- [ ] Etapas: entender vacante (JSON) → medir match requisito↔evidencia (ESCO + embeddings) → seleccionar logros (mochila + MMR) → redactar (solo viñetas y resumen) → verificar respaldo → render con ajuste medido a 1 página
+- [ ] Puntaje de match y brechas visibles antes de generar; edición de viñetas antes de exportar
+- [ ] Entrevista guiada para extraer logros con cifras reales
+- [ ] Set de vacantes de prueba con métricas automáticas (evals) para comparar prompts y proveedores
+- [ ] Separar núcleo de Streamlit; `pydantic-settings`; `uv` + lockfile; tipado
 
 ### Fase 2 — Seguimiento de postulaciones (tracker)
 - [ ] Entidad Postulación: vacante, plataforma, estado, fechas, contacto, notas
@@ -76,11 +90,17 @@
 | 2026-10-07 | Conservar cargos reales en el CV; el cargo de la vacante va en el Perfil Profesional | Falsificar cargos se descubre en verificación de referencias |
 | 2026-10-07 | Para el SaaS no usar el plan gratuito de Gemini ni DeepSeek sin revisar | Google puede usar datos del plan gratuito; DeepSeek almacena en China (transferencia internacional, Ley 1581) |
 | 2026-10-07 | Puerta de acceso con contraseña compartida (no OAuth) | 2 usuarios; mínimo esfuerzo; se reemplaza por auth real en Fase 5 |
+| 2026-10-07 | Sin prompts por profesión: un motor parametrizado por contexto ocupacional (área, idioma), taxonomía ESCO y ejemplos por familia | Infinitas profesiones; los prompts por perfil se duplican y divergen |
+| 2026-10-07 | Motor por etapas: algoritmos para lo medible (match, selección, verificación, 1 página), IA solo para entender y redactar | Un prompt que hace todo no se puede controlar, medir ni verificar |
+| 2026-10-07 | Postgres + pgvector en lugar de Turso (en el paso 2) | Texto completo en español, embeddings y JSON en un solo lugar; es la base que necesitará el SaaS |
+| 2026-10-07 | Un cliente compatible con OpenAI para todos los proveedores | Gemini y DeepSeek exponen esa API; cambiar de IA = cambiar URL y modelo |
+| 2026-10-07 | 8–12 viñetas según material real (no "exactamente 12") | Forzar un número obliga a la IA a inventar cuando hay poco material |
 | 2026-10-07 | No purgar el historial git de los `.md` personales | Solo contenido de CV (sin contacto ni IDs); purgar exige force push a `main` público y GitHub mantiene accesibles los commits huérfanos por SHA |
 
 ## Próximo paso
 
-1. Usuario: configurar `APP_ACCESS_PASSWORD` en Streamlit Cloud y rotar token de Turso + API key de Gemini.
-2. Merge del PR de la Fase 0.
-3. CI en GitHub Actions (ruff + pytest).
-4. Fase 1: prompts multi-profesión, validando con un perfil administrativo/operativo.
+1. Usuario: configurar `APP_ACCESS_PASSWORD` y `GEMINI_API_KEY` en Streamlit Cloud (y no fijar `PROMPT_VERSION`, o dejarlo en `v3`); rotar token de Turso + API key de Gemini.
+2. Merge del PR de la Fase 0 y luego del PR del paso 1.
+3. Validar el paso 1 con vacantes reales (perfil administrativo/operativo).
+4. CI en GitHub Actions (ruff + pytest).
+5. Paso 2 del motor: empezar por el perfil maestro estructurado + Postgres.
