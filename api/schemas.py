@@ -146,6 +146,8 @@ class ApplicationSummaryOut(BaseModel):
     next_action: str
     created_at: datetime
     updated_at: datetime
+    missing_musts: list[str] = Field(default_factory=list, description="Requisitos obligatorios que no cumples")
+    partial_musts: list[str] = Field(default_factory=list, description="Obligatorios que cumples a medias")
 
 
 class EventOut(BaseModel):

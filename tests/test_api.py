@@ -267,3 +267,52 @@ def test_market(client):
     assert r["applications"] == 1 and r["analyzed"] == 1 and r["enough_data"] is False
     assert {k["keyword"] for k in r["keywords"]} == {"Excel", "SAP"}
     assert r["platforms"][0]["platform"] == "LinkedIn" and r["platforms"][0]["sent"] == 1
+
+
+def test_dev_login_only_exists_in_local_development(client, monkeypatch):
+    r = client.post("/dev/token", json={"name": "Diana Rojas"})
+    assert r.status_code == 200
+    token = r.json()["token"]
+    me = client.get("/me", headers={"Authorization": f"Bearer {token}"}).json()
+    assert me["contact"]["full_name"] == "Diana Rojas"
+    assert profiles.account_username("dev|diana-rojas").startswith("saas:")
+    # Con proveedor de identidad (producción) o con Postgres, el endpoint no responde aunque la ruta exista
+    monkeypatch.setenv("AUTH_JWKS_URL", "https://idp.example/jwks")
+    assert client.post("/dev/token", json={"name": "x"}).status_code == 404
+    monkeypatch.delenv("AUTH_JWKS_URL")
+    monkeypatch.setattr("api.routers.dev.database_url", lambda: "postgresql+psycopg://prod")
+    assert client.post("/dev/token", json={"name": "x"}).status_code == 404
+    # Nunca monkeypatch.undo(): revertiría también el aislamiento de la base (conftest)
+    monkeypatch.setattr("api.routers.dev.database_url", lambda: "sqlite://")
+    monkeypatch.delenv("AUTH_DEV_LOGIN")  # sin permiso explícito (despliegue mal configurado): cerrado
+    assert client.post("/dev/token", json={"name": "x"}).status_code == 404
+
+
+def test_dev_login_names_without_latin_letters_get_their_own_account(client):
+    tokens = [client.post("/dev/token", json={"name": n}).json()["token"] for n in ("李雷", "Дмитрий", "Ana", "ana")]
+    usernames = [client.get("/me", headers={"Authorization": f"Bearer {t}"}).status_code and
+                 profiles.account_username(f"dev|{jwt.decode(t, options={'verify_signature': False})['sub']}") for t in tokens]
+    assert len(set(usernames[:2])) == 2 and usernames[2] == usernames[3]
+
+
+def test_dev_login_route_is_not_registered_without_dev_secret(monkeypatch):
+    from api.main import create_app
+
+    monkeypatch.setenv("AUTH_DEV_LOGIN", "1")
+    monkeypatch.delenv("AUTH_DEV_SECRET", raising=False)
+    assert "/dev/token" not in create_app().openapi()["paths"]
+
+
+def test_frontend_contract_is_up_to_date(monkeypatch):
+    """web/openapi.json (de donde salen los tipos del frontend) debe coincidir con la API."""
+    import pathlib
+
+    from api.main import create_app
+
+    for name, value in (("AUTH_DEV_SECRET", "x" * 40), ("AUTH_DEV_LOGIN", "1")):  # igual que scripts/export_openapi.py
+        monkeypatch.setenv(name, value)
+    monkeypatch.delenv("AUTH_JWKS_URL", raising=False)
+    committed = json.loads(pathlib.Path("web/openapi.json").read_text(encoding="utf-8"))
+    assert create_app().openapi() == committed, (
+        "La API cambió: python scripts/export_openapi.py web/openapi.json && (cd web && npm run api:types)"
+    )

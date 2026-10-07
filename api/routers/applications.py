@@ -20,6 +20,7 @@ from api.schemas import (
     StatusIn,
     SummaryOut,
 )
+from core.discovery import missing_musts
 from core.tracking import service as tracking
 from core.tracking.models import (
     ACTIVE_STATUSES,
@@ -47,6 +48,7 @@ def _summary(a: Application) -> ApplicationSummaryOut:
         id=a.id, role=a.role, company=a.company, platform=a.platform, url=a.url, status=a.status,
         status_label=STATUSES.get(a.status, (a.status, ""))[0], match_score=a.match_score, applied_on=a.applied_on,
         next_action_on=a.next_action_on, next_action=a.next_action, created_at=a.created_at, updated_at=a.updated_at,
+        missing_musts=missing_musts(a.match_json), partial_musts=missing_musts(a.match_json, "parcial"),
     )
 
 

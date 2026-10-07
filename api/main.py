@@ -18,7 +18,7 @@ from sqlalchemy import text
 
 import config  # noqa: F401  (carga .env antes de leer variables)
 from api.limits import BodySizeLimit
-from api.routers import applications, assist, engine, market, profile
+from api.routers import applications, assist, dev, engine, market, profile
 from core.applying import DuplicateVacancyError
 from core.capture import CaptureError
 from core.db import database_url, session_scope
@@ -101,6 +101,8 @@ def create_app() -> FastAPI:
 
     for router in (profile.router, assist.router, applications.router, market.router, engine.router):
         app.include_router(router)
+    if dev.enabled():  # entrar con un nombre: solo en desarrollo local (nunca con Postgres ni con JWKS)
+        app.include_router(dev.router)
     return app
 
 

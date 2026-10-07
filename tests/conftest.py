@@ -24,6 +24,7 @@ def client(monkeypatch):
     for name in ("AUTH_JWKS_URL", "AUTH_ISSUER", "AUTH_AUDIENCE"):
         monkeypatch.delenv(name, raising=False)
     monkeypatch.setenv("AUTH_DEV_SECRET", API_TEST_SECRET)
+    monkeypatch.setenv("AUTH_DEV_LOGIN", "1")
     monkeypatch.setenv("API_INPROCESS_WORKER", "0")
     monkeypatch.setattr(profiles, "_ready", False)
     with TestClient(create_app()) as c:
