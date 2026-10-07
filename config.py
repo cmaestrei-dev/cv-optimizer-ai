@@ -22,11 +22,11 @@ PDF_ENCODING = "UTF-8"
 MIN_PASSWORD_LENGTH = 8
 
 SKILL_CATEGORIES = [
-    "Lenguajes de Programación",
-    "Frameworks / Librerías",
-    "Bases de Datos",
-    "Herramientas / DevOps",
-    "Metodologías / Soft Skills",
+    "Herramientas y software",
+    "Conocimientos del área",
+    "Procesos y metodologías",
+    "Idiomas",
+    "Habilidades blandas",
     "Otros",
 ]
 

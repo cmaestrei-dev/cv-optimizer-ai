@@ -293,3 +293,136 @@ class TestCvPromptKeepsRealTitles:
         prompt_sent = mock_post.call_args[1]["json"]["contents"][0]["parts"][0]["text"]
         assert "CARGOS REALES" in prompt_sent
         assert "TODAS las experiencias deben titularse" not in prompt_sent
+
+
+def _mock_ok(mock_post, text="ok"):
+    mock_response = MagicMock()
+    mock_response.status_code = 200
+    mock_response.json.return_value = {"candidates": [{"content": {"parts": [{"text": text}]}}]}
+    mock_post.return_value = mock_response
+
+
+def _sent_prompt(mock_post) -> str:
+    return mock_post.call_args[1]["json"]["contents"][0]["parts"][-1]["text"]
+
+
+class TestUniversalPrompts:
+    @patch("services.gemini_client.requests.post")
+    def test_analysis_asks_for_language_and_area(self, mock_post):
+        from services.gemini_client import GeminiClient
+
+        _mock_ok(mock_post, "ROLE: Auxiliar")
+        GeminiClient(api_key="test", prompt_version="v3").analyze_job_posting(text="vacante")
+        prompt = _sent_prompt(mock_post)
+        assert "LANGUAGE:" in prompt
+        assert "AREA:" in prompt
+
+    @patch("services.gemini_client.requests.post")
+    def test_v3_analysis_rejects_non_vacancy(self, mock_post):
+        from services.gemini_client import GeminiClient, JobParsingError
+
+        _mock_ok(mock_post, "ERROR: La entrada no contiene información válida de una vacante.")
+        with pytest.raises(JobParsingError):
+            GeminiClient(api_key="test", prompt_version="v3").analyze_job_posting(text="hola")
+
+    @patch("services.gemini_client.requests.post")
+    def test_cv_prompt_is_not_tech_specific(self, mock_post):
+        from services.gemini_client import GeminiClient
+
+        _mock_ok(mock_post, "## CV")
+        GeminiClient(api_key="test", prompt_version="v3").generate_cv(
+            "vac", "exp", "sk", "edu", language="es", area="Administrativa"
+        )
+        prompt = _sent_prompt(mock_post)
+        assert "sector tecnológico" not in prompt
+        assert "Technical Skills" not in prompt
+        assert "Área profesional: Administrativa" in prompt
+        assert "## Habilidades" in prompt
+        assert "exactamente 12" not in prompt
+
+    @patch("services.gemini_client.requests.post")
+    def test_cv_prompt_uses_english_headings_for_english_vacancy(self, mock_post):
+        from services.gemini_client import GeminiClient
+
+        _mock_ok(mock_post, "## CV")
+        GeminiClient(api_key="test", prompt_version="v3").generate_cv(
+            "vac", "exp", "sk", "edu", language="en", area="Operations"
+        )
+        prompt = _sent_prompt(mock_post)
+        assert "## Professional Summary" in prompt
+        assert "## Work Experience" in prompt
+        assert "Idioma del CV: en" in prompt
+
+    @patch("services.gemini_client.requests.post")
+    def test_cv_prompt_without_language_defers_to_vacancy(self, mock_post):
+        from services.gemini_client import GeminiClient
+
+        _mock_ok(mock_post, "## CV")
+        GeminiClient(api_key="test", prompt_version="v3").generate_cv("vac", "exp", "sk", "edu")
+        prompt = _sent_prompt(mock_post)
+        assert "el mismo idioma en que está escrita la vacante" in prompt
+        assert "tradúcelos" in prompt
+
+    @patch("services.gemini_client.requests.post")
+    def test_polish_v3_is_not_tech_specific_and_forbids_inventing(self, mock_post):
+        from services.gemini_client import GeminiClient
+
+        _mock_ok(mock_post, "### X")
+        GeminiClient(api_key="test", prompt_version="v3").polish_experience(
+            "Auxiliar", "ACME", "2022 - 2024", "Colombia", "Presencial", "facturas"
+        )
+        prompt = _sent_prompt(mock_post)
+        assert "carreras de TI" not in prompt
+        assert "NO INVENTES" in prompt
+
+    @patch("services.gemini_client.requests.post")
+    def test_cv_import_uses_universal_categories(self, mock_post):
+        from config import SKILL_CATEGORIES
+        from services.gemini_client import GeminiClient
+
+        _mock_ok(mock_post, "EXPERIENCIAS:")
+        GeminiClient(api_key="test").parse_cv_document("cv")
+        prompt = _sent_prompt(mock_post)
+        assert all(cat in prompt for cat in SKILL_CATEGORIES)
+        assert "Lenguajes de Programación" not in prompt
+
+
+class TestParseVacancyHeader:
+    def test_reads_all_header_fields(self):
+        from services.pdf_generator import parse_vacancy_header
+
+        text = "ROLE: Auxiliar\nCOMPANY: ACME\nLANGUAGE: es\nAREA: Administrativa\n\nAbout the Role:\nX"
+        assert parse_vacancy_header(text) == {
+            "ROLE": "Auxiliar",
+            "COMPANY": "ACME",
+            "LANGUAGE": "es",
+            "AREA": "Administrativa",
+        }
+
+    def test_tolerates_markdown_bold_and_keeps_first_value(self):
+        from services.pdf_generator import parse_vacancy_header
+
+        text = "**ROLE:** Analista\nRequirements:\n- Role: líder\nrole: otro"
+        assert parse_vacancy_header(text)["ROLE"] == "Analista"
+
+
+class TestGenerateDocx:
+    def test_docx_structure(self):
+        import io
+
+        import docx
+
+        from services.docx_generator import build_docx_filename, generate_docx
+
+        profile = UserProfile(username="a", full_name="Ana Pérez", email="ana@x.co")
+        cv_md = (
+            "## Perfil Profesional\nAuxiliar **Administrativa**\n"
+            "## Experiencia Laboral\n### Auxiliar - ACME | 2022 - 2024\n- Gestioné **facturación**\n"
+        )
+        document = docx.Document(io.BytesIO(generate_docx(cv_md, profile)))
+        styled = [(p.style.name, p.text) for p in document.paragraphs]
+        assert ("Normal", "ANA PÉREZ") in styled
+        assert ("Heading 1", "Experiencia Laboral") in styled
+        assert ("Heading 2", "Auxiliar - ACME | 2022 - 2024") in styled
+        assert ("List Bullet", "Gestioné facturación") in styled
+        assert build_docx_filename("Ana_Auxiliar.pdf") == "Ana_Auxiliar.docx"

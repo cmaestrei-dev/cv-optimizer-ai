@@ -1,4 +1,5 @@
 import html
+import re
 
 import streamlit as st
 
@@ -8,27 +9,38 @@ from storage import append_skill, get_skills_lines, overwrite_skills
 
 
 def _extract_skill_name(line: str) -> str:
-    import re
-
     match = re.search(r"\*\*(.+?)\*\*", line)
     return match.group(1).strip().lower() if match else ""
 
 
+def _categories_for(lines: list[str]) -> list[str]:
+    """Categorías universales + las que el perfil ya usa (para no ocultar habilidades viejas)."""
+    categories = list(SKILL_CATEGORIES)
+    for line in lines:
+        match = re.search(r"-> \[(.+?)\]", line)
+        if match and match.group(1) not in categories:
+            categories.append(match.group(1))
+    return categories
+
+
 def render_tab_habilidades(profile: UserProfile | None) -> None:
     st.header(":material/build: Base Maestra de Habilidades (Skills)")
-    st.markdown("Administra las tecnologías, herramientas y metodologías que dominas.")
+    st.markdown("Administra las herramientas, conocimientos y competencias que dominas.")
+
+    lines = get_skills_lines(profile.slug) if profile else []
+    categories = _categories_for(lines)
 
     col_s1, col_s2 = st.columns(2)
 
     with col_s1:
         nueva_habilidad = st.text_input(
-            "Nombre de la Habilidad / Tecnología",
-            placeholder="Ej: Python, Docker, Scrum, PostgreSQL",
+            "Nombre de la habilidad",
+            placeholder="Ej: Excel avanzado, SAP, Facturación electrónica, Python",
             key="nueva_habilidad_input",
         )
 
     with col_s2:
-        categoria_habilidad = st.selectbox("Categoría", SKILL_CATEGORIES, key="cat_habilidad")
+        categoria_habilidad = st.selectbox("Categoría", categories, key="cat_habilidad")
 
     if st.button("Añadir Habilidad", type="primary"):
         if profile is None:
@@ -37,12 +49,11 @@ def render_tab_habilidades(profile: UserProfile | None) -> None:
             st.warning(":material/warning: Escribe el nombre de la habilidad.")
         else:
             skill_name = nueva_habilidad.strip()
-            existing_lines = get_skills_lines(profile.slug)
             nueva_linea = f"- **{skill_name}** -> [{categoria_habilidad}]\n"
 
             already_exists = any(
                 _extract_skill_name(line) == skill_name.lower()
-                for line in existing_lines
+                for line in lines
             )
             if already_exists:
                 st.warning(f":material/warning: '{skill_name}' ya existe en tu base de habilidades.")
@@ -58,8 +69,6 @@ def render_tab_habilidades(profile: UserProfile | None) -> None:
         st.info("Selecciona un perfil para ver tus habilidades.")
         return
 
-    lines = get_skills_lines(profile.slug)
-
     if not lines:
         st.info("Aún no tienes habilidades registradas. ¡Agrega la primera arriba!")
         return
@@ -68,7 +77,7 @@ def render_tab_habilidades(profile: UserProfile | None) -> None:
     for raw_line in lines:
         name = _extract_skill_name(raw_line)
         cat = None
-        for c in SKILL_CATEGORIES:
+        for c in categories:
             if f"[{c}]" in raw_line:
                 cat = c
                 break
@@ -137,7 +146,7 @@ def render_tab_habilidades(profile: UserProfile | None) -> None:
                     st.rerun()
     else:
         skills_to_delete = []
-        for cat in SKILL_CATEGORIES:
+        for cat in categories:
             skills_cat = [line for line in lines if f"[{cat}]" in line]
             if skills_cat:
                 with st.expander(f"{cat} ({len(skills_cat)})"):

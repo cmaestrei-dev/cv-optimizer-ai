@@ -177,16 +177,24 @@ def main():
         else:
             st.warning(":material/folder_data:  SQLite local — datos se pierden al dormir")
 
-        gemini_api_key = st.text_input(
-            "Ingresa tu API Key de Gemini",
-            type="password",
-            help="Puedes obtener tu API Key en https://aistudio.google.com/app/apikey",
-            key="api_key_input",
-        )
-        if gemini_api_key:
-            st.success("API Key guardada.")
+        server_api_key = _os.environ.get("GEMINI_API_KEY", "").strip()
+        if server_api_key:
+            st.caption("Usando la API Key de Gemini configurada en el servidor.")
+            user_api_key = st.text_input(
+                "Usar otra API Key de Gemini (opcional)",
+                type="password",
+                key="api_key_input",
+            )
         else:
-            st.warning("Por favor, ingresa tu API Key de Gemini para continuar.")
+            user_api_key = st.text_input(
+                "Ingresa tu API Key de Gemini",
+                type="password",
+                help="Puedes obtener tu API Key en https://aistudio.google.com/app/apikey",
+                key="api_key_input",
+            )
+            if not user_api_key:
+                st.warning("Por favor, ingresa tu API Key de Gemini para continuar.")
+        gemini_api_key = user_api_key.strip() or server_api_key
 
     profile = render_profile_sidebar()
 

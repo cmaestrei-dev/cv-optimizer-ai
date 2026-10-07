@@ -61,6 +61,13 @@ class UserProfile:
             parts.append(_link_html(self.github_url))
         return " | ".join(parts)
 
+    @property
+    def contact_line_text(self) -> str:
+        parts = [self.email, self.phone, self.linkedin_url, self.github_url]
+        return " | ".join(
+            p.replace("https://", "").replace("http://", "") for p in parts if p
+        )
+
     def to_dict(self) -> dict:
         return {
             "username": self.username,

@@ -189,7 +189,7 @@ def _render_new_experience_form(client: GeminiClient | None, profile: UserProfil
 
     logros_crudos = st.text_area(
         "Funciones y Logros (Texto crudo)",
-        placeholder="Escribe o pega en bruto lo que hacías. La IA lo pulirá y le dará formato técnico...",
+        placeholder="Escribe o pega en bruto lo que hacías. La IA lo pulirá y le dará formato profesional, sin inventar datos...",
         height=150,
     )
 
