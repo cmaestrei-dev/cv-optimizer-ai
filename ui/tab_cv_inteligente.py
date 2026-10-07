@@ -12,6 +12,8 @@ from core.profile import service
 from core.profile.completion import split_into_achievements
 from core.profile.interview import strength
 from core.profile.snapshot import ProfileSnapshot
+from core.tracking import service as tracking
+from core.tracking.models import PLATFORMS
 from core.vacancy import NotAVacancyError
 from models import UserProfile
 from services.docx_generator import build_docx_filename
@@ -286,6 +288,7 @@ def render_tab_cv_inteligente(profile: UserProfile | None, api_key_overrides: di
             _reanalyze(state, profile, api_key_overrides)
     _render_match(state["analysis"], state["snap"])
     _render_gaps(state, profile, api_key_overrides)
+    _render_save_vacancy(state, profile)
 
     if st.button(":material/description: Generar CV", type="primary", key="ci_generate"):
         analysis: pipeline.Analysis = state["analysis"]
@@ -307,3 +310,67 @@ def render_tab_cv_inteligente(profile: UserProfile | None, api_key_overrides: di
     if cv_state and cv_state["username"] == profile.username:
         st.divider()
         _render_cv(cv_state, profile)
+        _render_tracking(state, cv_state, profile)
+
+
+# ── seguimiento: guardar la vacante y el CV exacto en "Mis postulaciones" ──
+
+
+def _ensure_application(state: dict, profile: UserProfile, platform: str = "", url: str = "") -> int:
+    """Una postulación por análisis: se crea la primera vez y se reutiliza."""
+    if state.get("application_id"):
+        return state["application_id"]
+    vacancy = state["analysis"].vacancy
+    state["application_id"] = tracking.create_application(
+        profile.username, role=vacancy.role, company=vacancy.company, platform=platform, url=url,
+        vacancy_text=state.get("text", ""), analysis_json=vacancy.model_dump_json(),
+        match_score=state["analysis"].match.score,
+    )
+    return state["application_id"]
+
+
+def _render_save_vacancy(state: dict, profile: UserProfile) -> None:
+    if state.get("application_id"):
+        st.caption(f":material/bookmark_added: Vacante guardada en «Mis postulaciones» (#{state['application_id']}).")
+    elif st.button(":material/bookmark: Guardar esta vacante para después", key="ci_save_vacancy"):
+        _ensure_application(state, profile)
+        st.session_state["ci_flash"] = "Vacante guardada en «Mis postulaciones»."
+        st.rerun()
+
+
+def _render_tracking(state: dict, cv_state: dict, profile: UserProfile) -> None:
+    output = cv_state["cv"].output
+    current_hash = tracking.sha256(output.pdf)
+    st.markdown("**Seguimiento**")
+    if cv_state.get("saved_hash") == current_hash:
+        label = "enviado" if cv_state.get("sent") else "guardado"
+        st.success(
+            f":material/verified: Este CV quedó {label} en «Mis postulaciones» con la huella `{current_hash[:12]}`. "
+            "Allí puedes registrar respuestas, entrevistas y recordatorios."
+        )
+        if not cv_state.get("sent") and st.button(":material/send: Ya la envié", key="ci_mark_sent"):
+            tracking.mark_sent(profile.username, state["application_id"], cv_state["cv_record_id"])
+            cv_state["sent"] = True
+            st.rerun()
+        return
+
+    if cv_state.get("saved_hash"):
+        st.info(":material/edit: Editaste el CV después de guardarlo: registra esta versión si es la que vas a enviar.")
+    with st.form("ci_track_form"):
+        col_platform, col_url = st.columns([1, 2])
+        platform = col_platform.selectbox("¿Por dónde vas a postular?", PLATFORMS, key="ci_track_platform")
+        url = col_url.text_input("Enlace de la vacante (opcional)", key="ci_track_url")
+        col_save, col_sent = st.columns(2)
+        save = col_save.form_submit_button(":material/bookmark: Guardar en mis postulaciones", use_container_width=True)
+        sent = col_sent.form_submit_button(":material/send: Ya la envié", type="primary", use_container_width=True)
+    if save or sent:
+        application_id = _ensure_application(state, profile, platform, url)
+        filename = build_pdf_filename(profile, cv_state["role"], cv_state["company"])
+        cv_state["cv_record_id"] = tracking.attach_cv(
+            profile.username, application_id, pdf=output.pdf, docx=output.docx,
+            markdown=cv_state["cv"].document.to_markdown(), language=cv_state["cv"].document.language, filename=filename,
+        )
+        if sent:
+            tracking.mark_sent(profile.username, application_id, cv_state["cv_record_id"], platform=platform)
+        cv_state["saved_hash"], cv_state["sent"] = current_hash, sent
+        st.rerun()
