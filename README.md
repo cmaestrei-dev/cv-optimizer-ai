@@ -2,6 +2,10 @@
 
 Genera CVs ATS-optimizados mediante IA, cruzando tu historial real con cada vacante. Un CV nuevo y distinto por cada postulación, listo en segundos.
 
+- **Bandeja de vacantes**: busca en LinkedIn, Computrabajo, Magneto y elempleo, pega varios enlaces y te las ordena por compatibilidad con tu perfil.
+- **CV inteligente**: qué cumples y qué te falta, CV de una página verificado (nunca inventa), respuestas a las preguntas del portal y mensaje para el reclutador.
+- **Mis postulaciones**: el CV exacto que enviaste a cada vacante, estados, notas y recordatorios. Tú envías siempre en el portal: la app no postula por ti.
+
 ## Requisitos
 
 - Python 3.11+

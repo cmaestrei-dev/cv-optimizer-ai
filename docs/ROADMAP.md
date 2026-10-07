@@ -1,7 +1,7 @@
 # Roadmap y estado del proyecto
 
 > Documento vivo. Se actualiza al terminar cada cambio relevante: qué existe, qué se hizo, qué sigue.
-> Última actualización: 2026-10-07 (fase 3: inteligencia por plataforma)
+> Última actualización: 2026-10-07 (fase 4: bandeja de vacantes y aplicación asistida)
 
 ## Prioridad actual
 
@@ -10,11 +10,10 @@
 
 ## Qué existe hoy
 
-- App Streamlit pública en Streamlit Cloud, persistencia en Turso (SQLite local en desarrollo).
-- Perfiles con contraseña (PBKDF2), base maestra de experiencias / habilidades / educación (guardadas como Markdown).
-- Análisis de vacante (texto o imagen) y generación de CV ATS con Gemini → PDF con WeasyPrint.
-- Importación de CV en PDF.
-- Solo Gemini como proveedor de IA; la API key la escribe el usuario en la barra lateral.
+- App Streamlit pública en Streamlit Cloud (puerta con contraseña), Postgres en Neon (SQLite en desarrollo y tests).
+- Perfil maestro estructurado (experiencias con logros, habilidades, educación) con importación de CV/LinkedIn y ayudas para completarlo.
+- Motor de CV por etapas (match con evidencias, selección, redacción verificada, 1 página, PDF + DOCX); Gemini o DeepSeek.
+- Bandeja de vacantes (buscar en portales, traer varias por enlace, ordenar por compatibilidad), seguimiento de postulaciones con el CV exacto enviado, "Mi mercado".
 
 ## Fases
 
@@ -107,10 +106,14 @@
 - [ ] Extensión de navegador para capturar con un clic y correos de alertas → requieren una API (fase 5)
 - [ ] Guías por portal (qué campos del perfil del portal pesan más) → necesita datos reales de resultados; reevaluar con 20+ postulaciones por portal
 
-### Fase 4 — Descubrimiento y aplicación asistida
-- [ ] Búsqueda de vacantes objetivo + puntaje de afinidad
-- [ ] Cola de aprobación: el usuario aprueba cada envío
-- [ ] Extensión que llena formularios en la sesión del usuario; el usuario confirma el envío
+### Fase 4 — Descubrimiento y aplicación asistida (rama `claude/fase4-bandeja`)
+- [x] Buscar: cargos sugeridos por la IA a partir de la experiencia real (los cargos propios primero) y botones que abren la búsqueda de cada portal en el navegador de la persona, con ciudad (enlaces verificados el 2026-10-07; Magneto usa su buscador porque sus páginas por cargo solo existen para cargos populares)
+- [x] Bandeja de vacantes: pegar hasta 10 enlaces de golpe → se traen, analizan y ordenan por compatibilidad, con los requisitos obligatorios que faltan y los años pedidos vs. los propios. Detecta repetidas aunque cambie el formato del enlace (LinkedIn `?currentJobId=`, enlaces con nombre, parámetros de seguimiento) y tras redirecciones, sin confundir vacantes que se distinguen por un parámetro (`?jk=`); un error en un enlace no detiene el lote, una clave de IA inválida sí
+- [x] Cola de aprobación: "Preparar postulación" (recalcula el match con el perfil de hoy y la abre en "CV inteligente") o "Descartar" (recuperable). La bandeja no cuenta como postulaciones en las métricas
+- [x] Aplicación asistida en "CV inteligente": mensaje para el reclutador verificado contra el perfil (si inventa, se usa uno armado con datos reales), lista "Antes de enviar en el portal" con el nombre exacto del archivo a subir y enlace a la vacante; la persona envía y marca "Ya la envié"
+- [x] Arreglos de la app: tema oscuro fijo (en equipos con modo claro los botones secundarios eran ilegibles), barras de progreso con el color de acento, pestañas con etiqueta fija (cambiar el contador de la etiqueta devolvía a la primera pestaña), `use_container_width` obsoleto reemplazado, texto de vacantes escapado al mostrarlo
+- [x] Probado de punta a punta con Gemini y vacantes reales de LinkedIn, Computrabajo y elempleo; migración 0003 probada en Postgres
+- [ ] Extensión que llena formularios en la sesión del usuario; el usuario confirma el envío → fase 5 (requiere API)
 
 ### Fase 5 — SaaS
 - [ ] FastAPI + React, Postgres, cola de trabajos, almacenamiento de archivos
@@ -154,10 +157,17 @@
 | 2026-10-07 | Captura por enlace con `JobPosting` (schema.org) + respaldo de texto visible, en vez de scraping | Es lo que los portales publican para Google Empleos; una lectura por petición del usuario. No hay inicio de sesión ni recorrido de listados |
 | 2026-10-07 | "Mi mercado" en tablas con barras en la celda, no gráficos de colores | Pocos datos personales y varias medidas por portal: una tabla es legible con 3 o 300 filas, trae la vista de tabla y no depende del color |
 | 2026-10-07 | Retirar el código legado (generador clásico, cliente Gemini nativo, Turso) | El motor nuevo cubre todo y es más seguro (verificación); mantener dos caminos duplicaba el trabajo de cada cambio |
+| 2026-10-07 | Descubrimiento con enlaces de búsqueda que abre la persona, no recorrido de listados desde el servidor | Ver ofertas en el navegador propio no viola términos ni arriesga bloqueos; el servidor solo lee las vacantes que la persona elige (máx. 10 por carga) |
+| 2026-10-07 | La bandeja usa la misma tabla de postulaciones con estados `por_revisar` y `descartada` (no una tabla aparte) | Al prepararla, la vacante ya es la postulación: mismo id, mismo análisis, mismo historial; el CV enviado queda ligado a ella sin copiar datos |
+| 2026-10-07 | La bandeja procesa los enlaces en secuencia, no en paralelo | El plan gratuito de Gemini limita peticiones por minuto; en secuencia hay progreso claro y ~6 s por vacante |
+| 2026-10-07 | Sin cambio automático de pestaña al preparar una vacante | `st.tabs` con estado obliga a recargar en cada cambio de pestaña (más lento con Neon); un aviso claro basta |
+| 2026-10-07 | Etiquetas de pestaña fijas; los contadores van en una línea encima | Streamlit vuelve a la primera pestaña si cambia la etiqueta (descartar una vacante sacaba a la persona de la bandeja) |
+| 2026-10-07 | Repetidas por enlace: host + ruta + parámetros que identifican la vacante (`?jk=`), sin los de seguimiento; ante la duda se conserva el parámetro | Mezclar dos vacantes ataría el CV de una a la otra (rompe la garantía de "CV correcto"); un duplicado solo cuesta un clic en "Descartar" |
+| 2026-10-07 | "Mi mercado" cuenta también las vacantes de la bandeja y las descartadas | Son datos de qué pide el mercado aunque no se postule; las métricas de envío y avance solo cuentan las enviadas |
 | 2026-10-07 | No purgar el historial git de los `.md` personales | Solo contenido de CV (sin contacto ni IDs); purgar exige force push a `main` público y GitHub mantiene accesibles los commits huérfanos por SHA |
 
 ## Próximo paso
 
-1. Usuarios: usar "Traer" con enlaces reales, registrar postulaciones y estados; revisar "Mi mercado" tras ~10 envíos.
-3. Fase 4 — descubrimiento y aplicación asistida: buscar vacantes objetivo y puntuarlas; cola de aprobación; la persona confirma cada envío.
-4. Fase 5 — SaaS (FastAPI + React, extensión de navegador, auth gestionada, pagos, Ley 1581).
+1. Usuarios: rutina diaria con la bandeja (buscar → pegar enlaces → preparar las mejores → enviar en el portal → "Ya la envié") y actualizar estados; revisar "Mi mercado" tras ~10 envíos.
+2. Ajustes según el uso real (calidad de los cargos sugeridos, del mensaje al reclutador, portales que fallen al traer).
+3. Fase 5 — SaaS (FastAPI + React, extensión de navegador, auth gestionada, pagos, Ley 1581).
