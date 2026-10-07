@@ -3,6 +3,7 @@ from logging.config import fileConfig
 from alembic import context
 
 import core.profile.models  # noqa: F401  (registra las tablas en Base.metadata)
+import core.tracking.models  # noqa: F401
 from core.db import Base, get_engine
 
 config = context.config
