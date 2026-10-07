@@ -31,6 +31,7 @@ Para persistencia local (SQLite), no se requiere configuración adicional. La ba
    - `GEMINI_API_KEY` — tu API key de Google Gemini
    - `TURSO_DB_URL` — URL de tu base de datos Turso
    - `TURSO_AUTH_TOKEN` — token de autenticación de Turso
+   - Opcional, motor nuevo: `LLM_EXTRACT` / `LLM_WRITE` (`proveedor` o `proveedor:modelo`, p. ej. `deepseek:deepseek-flash`) y `DEEPSEEK_API_KEY`
    - `APP_ACCESS_PASSWORD` — contraseña de acceso a la app (**obligatoria** si usas Turso: sin ella la app queda cerrada)
 
 ### Base de datos en Turso (gratuito)
@@ -48,7 +49,8 @@ Para que los datos persistan entre deploys:
 ```
 app.py              # Entry point de Streamlit
 config.py           # Configuración y constantes
-services/           # Cliente de Gemini, generador de PDFs
+core/               # Núcleo sin UI: cliente de IA multi-proveedor, análisis de vacantes
+services/           # Cliente de Gemini (legado), generadores de PDF y DOCX
 storage/            # Capa de persistencia (SQLite local / Turso remoto)
 ui/                 # Componentes de la interfaz (tabs, formularios)
 models/             # Dataclasses (UserProfile)

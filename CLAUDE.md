@@ -15,8 +15,9 @@ streamlit run app.py
 
 ## Mapa
 
+- `core/` — núcleo sin dependencias de UI (destino de toda la lógica nueva). `core/llm/`: cliente único compatible con OpenAI (Gemini, DeepSeek), `get_llm(task)` con `LLM_EXTRACT`/`LLM_WRITE`, `generate_structured()` (JSON validado con Pydantic + 1 corrección). `core/vacancy.py`: análisis estructurado de vacantes.
 - `app.py` — entrada, inyecta `st.secrets` en `os.environ` antes de importar el resto, puerta de acceso.
-- `services/` — `gemini_client.py` (prompts por versión, `PROMPT_VERSION`; v3 es la vigente y universal), `pdf_generator.py`, `docx_generator.py`.
+- `services/` — legado en transición hacia `core/`: `gemini_client.py` (prompts por versión, `PROMPT_VERSION`; v3 es la vigente y universal), `pdf_generator.py`, `docx_generator.py`.
 - `storage/_db.py` — SQLite o Turso (cliente HTTP propio), según `TURSO_DB_URL`/`TURSO_AUTH_TOKEN`.
 - `ui/` — una función `render_*` por pestaña; `profile_form.py` maneja perfiles y login. Los resultados que deben sobrevivir reruns (CV generado, skills extraídas) van en `st.session_state`.
 - `models/profile.py` — `UserProfile` y hashing de contraseñas.
