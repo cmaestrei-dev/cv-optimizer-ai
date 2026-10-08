@@ -404,6 +404,7 @@ class AlertsOut(BaseModel):
     last_summary: str
     analyzing: int = Field(description="Lotes de vacantes de las alertas en análisis ahora")
     waiting: int = Field(description="Vacantes de las alertas que esperan cupo (o la experiencia de la persona)")
+    ignored_recently: int = Field(description="Correos que no son alertas llegados en los últimos días (Gmail reenvía de más)")
     gmail_filter: str = Field(description="Búsqueda para el filtro de Gmail que reenvía solo las alertas")
     daily_limit: int
 

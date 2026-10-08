@@ -64,7 +64,15 @@ async def _lifespan(_app: FastAPI):
         worker.stop_thread(*running)
 
 
+def _configure_logging() -> None:
+    """Los avisos INFO de `core.*` (p. ej. qué remitente mandó cada alerta) salen al registro; los de las
+    librerías, solo desde WARNING. Sin efecto si ya hay configuración (p. ej. en las pruebas)."""
+    logging.basicConfig(level=logging.WARNING, format="%(levelname)s %(name)s: %(message)s")
+    logging.getLogger("core").setLevel(logging.INFO)
+
+
 def create_app() -> FastAPI:
+    _configure_logging()
     # API_PREFIX="/api" en producción (la misma app sirve la web en "/"); vacío en desarrollo y pruebas.
     prefix = os.environ.get("API_PREFIX", "").strip().rstrip("/")
     app = FastAPI(title="CV Optimizer AI", version="0.1.0", lifespan=_lifespan,

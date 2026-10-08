@@ -30,3 +30,6 @@ class AlertInbox(Base):
     quota_used: Mapped[int] = mapped_column(Integer, default=0)
     # Vacantes que llegaron y esperan cupo (o a que la persona registre su experiencia): JSON, lista de URLs.
     pending: Mapped[str] = mapped_column(Text, default="")
+    # Correos que llegaron y no son alertas (p. ej. Gmail reenvía TODO el correo): se avisa en la app.
+    ignored_count: Mapped[int] = mapped_column(Integer, default=0, server_default="0")
+    last_ignored_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))

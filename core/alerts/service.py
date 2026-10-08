@@ -20,7 +20,7 @@ import time
 from collections.abc import Callable
 from contextlib import AbstractContextManager
 from dataclasses import dataclass
-from datetime import UTC, datetime
+from datetime import UTC, datetime, timedelta
 
 from sqlalchemy import select
 from sqlalchemy.exc import IntegrityError
@@ -56,6 +56,7 @@ class AlertStatus:
     received_count: int = 0
     last_summary: str = ""
     waiting: int = 0
+    ignored_recently: int = 0  # correos que no son alertas en los últimos días (todos, si siguen llegando)
 
 
 @dataclass
@@ -105,7 +106,16 @@ def _view(inbox: AlertInbox | None) -> AlertStatus:
         enabled=True, address=_address(inbox.token), forwarding_code=inbox.forwarding_code,
         forwarding_from=inbox.forwarding_from, last_received_at=inbox.last_received_at,
         received_count=inbox.received_count, last_summary=inbox.last_summary, waiting=len(_waiting(inbox)),
+        ignored_recently=inbox.ignored_count if _recent(inbox.last_ignored_at) else 0,
     )
+
+
+def _recent(when: datetime | None, days: int = 3) -> bool:
+    if when is None:
+        return False
+    if when.tzinfo is None:  # SQLite guarda sin zona: es UTC
+        when = when.replace(tzinfo=UTC)
+    return datetime.now(UTC) - when < timedelta(days=days)
 
 
 def status(username: str) -> AlertStatus:
@@ -129,6 +139,7 @@ def activate(username: str, *, rotate: bool = False) -> AlertStatus:
                 s.add(inbox)
             elif rotate:
                 inbox.token, inbox.forwarding_code, inbox.forwarding_from = secrets.token_hex(12), "", ""
+                inbox.ignored_count, inbox.last_ignored_at = 0, None
             s.flush()
             return _view(inbox)
     except IntegrityError:  # dos activaciones a la vez: gana la primera
@@ -201,7 +212,12 @@ def _handle(parsed: parsing.ParsedAlert, report: CheckReport) -> None:
     if parsed.kind == "rechazado":
         report.rejected += 1
         logger.info("Correo descartado: %s (remitente: %s)", parsed.reason,
-                    parsed.sender or parsed.sender_domain or "?")  # solo direcciones de portales, nunca personales
+                    parsed.sender or parsed.sender_domain or "-")  # solo portales: de los demás no se registra nada
+        if parsed.foreign and parsed.token:
+            with session_scope() as s:
+                if (inbox := s.scalar(select(AlertInbox).where(AlertInbox.token == parsed.token))) is not None:
+                    inbox.ignored_count += 1
+                    inbox.last_ignored_at = datetime.now(UTC)
         return
     with session_scope() as s:
         inbox = s.scalar(select(AlertInbox).where(AlertInbox.token == parsed.token))
@@ -211,6 +227,7 @@ def _handle(parsed: parsing.ParsedAlert, report: CheckReport) -> None:
             return
         if parsed.kind == "confirmacion":
             inbox.forwarding_code, inbox.forwarding_from = parsed.forwarding_code, parsed.forwarding_from[:320]
+            logger.info("Llegó el código de confirmación del reenvío de Gmail")
             return
         inbox_id = inbox.id
     logger.info("Alerta de %s con %s vacantes", parsed.sender, len(parsed.links))
