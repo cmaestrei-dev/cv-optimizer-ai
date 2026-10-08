@@ -8,7 +8,7 @@ curso puede pasarse por una llamada.
 import os
 from datetime import date
 
-from sqlalchemy import Date, ForeignKey, Integer, select
+from sqlalchemy import Date, ForeignKey, Integer, func, select
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Mapped, mapped_column
 
@@ -17,6 +17,7 @@ from core.profile.models import User
 from core.profile.repository import NotFoundError
 
 DEFAULT_DAILY_CALLS = 200
+DEFAULT_GLOBAL_DAILY_CALLS = 1000  # tope de todo el servicio: registrarse es gratis, la IA no
 
 
 class QuotaExceededError(RuntimeError):
@@ -31,11 +32,24 @@ class AIUsage(Base):
     calls: Mapped[int] = mapped_column(Integer, default=0)
 
 
-def daily_limit() -> int:
+def _int_env(name: str, default: int) -> int:
     try:
-        return int(os.environ.get("AI_DAILY_CALLS", DEFAULT_DAILY_CALLS))
+        return int(os.environ.get(name, default))
     except ValueError:
-        return DEFAULT_DAILY_CALLS
+        return default
+
+
+def daily_limit() -> int:
+    return _int_env("AI_DAILY_CALLS", DEFAULT_DAILY_CALLS)
+
+
+def global_daily_limit() -> int:
+    return _int_env("AI_GLOBAL_DAILY_CALLS", DEFAULT_GLOBAL_DAILY_CALLS)
+
+
+def used_today_by_everyone() -> int:
+    with session_scope() as s:
+        return s.scalar(select(func.coalesce(func.sum(AIUsage.calls), 0)).where(AIUsage.day == _today())) or 0
 
 
 def _today() -> date:
@@ -60,6 +74,8 @@ def used_today(username: str) -> int:
 def check(username: str) -> None:
     if used_today(username) >= daily_limit():
         raise QuotaExceededError("Llegaste al límite diario de uso de la IA. Se reinicia mañana (hora de Colombia).")
+    if used_today_by_everyone() >= global_daily_limit():
+        raise QuotaExceededError("El servicio llegó a su límite diario de uso de la IA. Vuelve a intentarlo mañana.")
 
 
 def add(username: str, calls: int = 1) -> None:

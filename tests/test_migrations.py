@@ -73,3 +73,15 @@ def test_future_batch_migrations_cannot_cascade_deletes(populated, tmp_path):
     assert _counts() == populated
     with session_scope() as s:
         assert s.execute(text("PRAGMA foreign_keys")).scalar() == 1
+
+
+def test_newer_database_does_not_crash_older_code(populated, caplog):
+    """Streamlit y la API comparten la base: si la otra app ya migró a una revisión que este código
+    no conoce, arrancar no debe fallar (antes: «Can't locate revision» y la app caída)."""
+    from core.db import upgrade_schema
+
+    with get_engine().begin() as c:
+        c.execute(text("update alembic_version set version_num = '9999_de_otra_app'"))
+    upgrade_schema()  # no lanza
+    assert "más nueva" in caplog.text
+    assert _counts() == populated

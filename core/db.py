@@ -1,3 +1,4 @@
+import logging
 import os
 import threading
 from collections.abc import Iterator
@@ -72,12 +73,28 @@ def session_scope() -> Iterator[Session]:
 
 
 def upgrade_schema() -> None:
-    """Aplica las migraciones de Alembic pendientes (idempotente)."""
+    """Aplica las migraciones de Alembic pendientes (idempotente).
+
+    Streamlit y la API comparten la base. Si la base ya está en una revisión que este código no
+    conoce (la otra app se desplegó con una migración más nueva), no se toca ni se cae: las
+    migraciones son aditivas y el código viejo sigue funcionando con columnas o tablas de más.
+    """
     from alembic import command
     from alembic.config import Config
+    from alembic.runtime.migration import MigrationContext
+    from alembic.script import ScriptDirectory
 
     root = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
     alembic_cfg = Config(os.path.join(root, "alembic.ini"))
     alembic_cfg.set_main_option("script_location", os.path.join(root, "migrations"))
     alembic_cfg.attributes["skip_logging_config"] = True  # no pisar el logging de la app
+    known = {rev.revision for rev in ScriptDirectory.from_config(alembic_cfg).walk_revisions()}
+    with get_engine().connect() as connection:
+        current = MigrationContext.configure(connection).get_current_heads()
+    if any(rev not in known for rev in current):
+        logging.getLogger(__name__).warning(
+            "La base está en una revisión más nueva que este código (%s): no se migra. Despliega la versión actual.",
+            ", ".join(current),
+        )
+        return
     command.upgrade(alembic_cfg, "head")
