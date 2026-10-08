@@ -5,6 +5,32 @@
   "version": "0.1.0"
  },
  "paths": {
+  "/config": {
+   "get": {
+    "tags": [
+     "sistema"
+    ],
+    "summary": "Public Config",
+    "description": "Configuración PÚBLICA para la web (sin sesión): la llave publicable de Clerk (es pública por diseño).",
+    "operationId": "public_config_config_get",
+    "responses": {
+     "200": {
+      "description": "Successful Response",
+      "content": {
+       "application/json": {
+        "schema": {
+         "additionalProperties": {
+          "type": "string"
+         },
+         "type": "object",
+         "title": "Response Public Config Config Get"
+        }
+       }
+      }
+     }
+    }
+   }
+  },
   "/health": {
    "get": {
     "tags": [
@@ -44,6 +70,53 @@
        "application/json": {
         "schema": {
          "$ref": "#/components/schemas/MeOut"
+        }
+       }
+      }
+     }
+    },
+    "security": [
+     {
+      "HTTPBearer": []
+     }
+    ]
+   }
+  },
+  "/me/link-legacy": {
+   "post": {
+    "tags": [
+     "perfil"
+    ],
+    "summary": "Link Legacy",
+    "description": "Vincula el perfil que la persona usaba en la versión anterior (Streamlit), con su contraseña.",
+    "operationId": "link_legacy_me_link_legacy_post",
+    "requestBody": {
+     "content": {
+      "application/json": {
+       "schema": {
+        "$ref": "#/components/schemas/LinkLegacyIn"
+       }
+      }
+     },
+     "required": true
+    },
+    "responses": {
+     "200": {
+      "description": "Successful Response",
+      "content": {
+       "application/json": {
+        "schema": {
+         "$ref": "#/components/schemas/MeOut"
+        }
+       }
+      }
+     },
+     "422": {
+      "description": "Validation Error",
+      "content": {
+       "application/json": {
+        "schema": {
+         "$ref": "#/components/schemas/HTTPValidationError"
         }
        }
       }
@@ -3880,6 +3953,28 @@
      "owned"
     ],
     "title": "KeywordOut"
+   },
+   "LinkLegacyIn": {
+    "properties": {
+     "username": {
+      "type": "string",
+      "maxLength": 64,
+      "minLength": 1,
+      "title": "Username"
+     },
+     "password": {
+      "type": "string",
+      "maxLength": 200,
+      "minLength": 1,
+      "title": "Password"
+     }
+    },
+    "type": "object",
+    "required": [
+     "username",
+     "password"
+    ],
+    "title": "LinkLegacyIn"
    },
    "MarketOut": {
     "properties": {

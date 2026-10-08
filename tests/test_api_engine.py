@@ -296,3 +296,13 @@ def test_rereading_the_vacancy_saves_it_with_its_evidence(ana):
     reread = {**_VACANCY, "requirements": list(reversed(_VACANCY["requirements"]))}
     tracking.set_match(user, app_id, 50, "", "", analysis_json=json.dumps(reread))
     assert client.get(f"/applications/{app_id}", headers=h).json()["vacancy"]["requirements"][0]["text"] == "SAP Business One"
+
+
+def test_cloud_run_refuses_to_start_without_postgres(monkeypatch):
+    from fastapi.testclient import TestClient
+
+    from api import main
+
+    monkeypatch.setenv("K_SERVICE", "cv-optimizer")
+    with pytest.raises(RuntimeError, match="DATABASE_URL"), TestClient(main.create_app()):
+        pass

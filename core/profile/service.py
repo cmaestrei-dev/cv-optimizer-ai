@@ -7,10 +7,11 @@ descartaría los cambios sin avisar.
 
 import hashlib
 import logging
+import re
 import secrets
 import threading
 
-from sqlalchemy import func, select
+from sqlalchemy import func, select, update
 from sqlalchemy.exc import IntegrityError
 
 from core.db import session_scope, upgrade_schema
@@ -73,6 +74,67 @@ def account_username(subject: str, *, email: str = "", full_name: str = "") -> s
         except IntegrityError:
             continue
     raise RuntimeError("No se pudo crear la cuenta")
+
+
+class LinkError(ValueError):
+    """No se pudo vincular el perfil anterior; el mensaje se muestra a la persona."""
+
+
+def legacy_key(name: str) -> str:
+    """Mismo nombre de perfil que crea Streamlit (ui/profile_form.py): minúsculas, espacios → "_"."""
+    return re.sub(r"[^a-zA-Z0-9_\-]", "", name.strip().lower().replace(" ", "_"))
+
+
+_DUMMY_SALT = "00" * 32  # para que un perfil inexistente tarde lo mismo que una contraseña mala
+
+
+def link_legacy_profile(subject: str, legacy_username: str, password: str) -> str:
+    """Vincula un perfil de Streamlit (con su contraseña) a la cuenta del SaaS de `subject`.
+
+    - Un solo mensaje para perfil inexistente, sin contraseña o contraseña mala (no revela qué existe).
+    - La contraseña (PBKDF2, lento) se verifica FUERA de la transacción: no retiene conexiones.
+    - Con la contraseña correcta se puede volver a vincular (mismo nivel de confianza que Streamlit):
+      así un cambio de proveedor o de instancia de Clerk no deja el perfil huérfano.
+    - El cambio es condicional (UPDATE … WHERE auth_subject = el leído): dos intentos simultáneos no se pisan.
+    Devuelve el usuario interno resultante.
+    """
+    from models import UserProfile  # contraseña PBKDF2 de los perfiles de Streamlit
+
+    wrong = LinkError("Usuario o contraseña incorrectos.")
+    with session_scope() as s:
+        legacy = repo.get_user(s, legacy_key(legacy_username))
+        snapshot = (legacy.id, legacy.username, legacy.password_hash, legacy.salt, legacy.auth_subject) if legacy else None
+    if snapshot is None or snapshot[1].startswith(SAAS_PREFIX):
+        UserProfile(username="x", password_hash="0" * 64, salt=_DUMMY_SALT).verify_password(password)
+        raise wrong
+    legacy_id, username, password_hash, salt, linked_to = snapshot
+    profile = UserProfile(username=username, password_hash=password_hash, salt=salt)
+    if not profile.has_password:  # sin contraseña: mismo tiempo y mismo mensaje que una contraseña mala
+        UserProfile(username="x", password_hash="0" * 64, salt=_DUMMY_SALT).verify_password(password)
+        raise wrong
+    if not profile.verify_password(password):
+        raise wrong
+    if linked_to == subject:
+        return username
+    with session_scope() as s:
+        current = s.scalar(select(User).where(User.auth_subject == subject))
+        if current is not None and current.id != legacy_id:
+            if any(s.scalar(select(func.count()).select_from(m).where(m.user_id == current.id))
+                   for m in (Experience, Skill, Education, _application_model())):
+                raise LinkError("Tu cuenta nueva ya tiene datos. Vincula el perfil anterior antes de empezar a usarla.")
+            s.delete(current)
+            s.flush()  # libera auth_subject antes de asignarlo al perfil anterior
+        condition = User.auth_subject.is_(None) if linked_to is None else User.auth_subject == linked_to
+        moved = s.execute(update(User).where(User.id == legacy_id, condition).values(auth_subject=subject)).rowcount
+        if moved != 1:  # otro intento lo vinculó entre la lectura y ahora
+            raise LinkError("Ese perfil acaba de vincularse desde otra sesión. Intenta de nuevo.")
+        return username
+
+
+def _application_model():
+    from core.tracking.models import Application  # el seguimiento depende del perfil, no al revés
+
+    return Application
 
 
 def get_user(username: str) -> User | None:

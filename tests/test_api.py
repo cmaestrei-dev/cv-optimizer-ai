@@ -2,6 +2,7 @@ import json
 import time
 
 import jwt
+import pytest
 from cryptography.hazmat.primitives.asymmetric import rsa
 
 from api import auth
@@ -316,3 +317,95 @@ def test_frontend_contract_is_up_to_date(monkeypatch):
     assert create_app().openapi() == committed, (
         "La API cambió: python scripts/export_openapi.py web/openapi.json && (cd web && npm run api:types)"
     )
+
+
+class TestLinkLegacy:
+    @pytest.fixture
+    def dianita(self, client, monkeypatch):
+        from api.routers import profile as profile_router
+        from models import UserProfile
+
+        monkeypatch.setattr(profile_router, "_LINK_ATTEMPTS", {})  # el límite es global al proceso
+
+        p = UserProfile(username="dianita")
+        p.set_password("clave-de-dianita")
+        profiles.create_user("dianita", full_name="Diana", password_hash=p.password_hash, salt=p.salt)
+        profiles.add_experience("dianita", role="Auxiliar Administrativa", achievements=["Facturé"])
+        profiles.create_user("sinclave")
+        return client
+
+    def test_links_with_password_and_keeps_all_data(self, dianita, monkeypatch):
+        monkeypatch.setattr("api.routers.profile.time.sleep", lambda s: None)
+        client, h = dianita, _h("google-diana")
+        assert client.get("/profile", headers=h).json()["experiences"] == []  # cuenta nueva vacía
+        assert client.post("/me/link-legacy", headers=h, json={"username": "dianita", "password": "mala"}).status_code == 422
+        r = client.post("/me/link-legacy", headers=h, json={"username": " Dianita ", "password": "clave-de-dianita"})
+        assert r.status_code == 200 and r.json()["has_experience"] is True
+        assert client.get("/profile", headers=h).json()["experiences"][0]["role"] == "Auxiliar Administrativa"
+        assert profiles.account_username("dev|google-diana") == "dianita"
+        # Sigue disponible en Streamlit (con su contraseña) durante la transición; la cuenta vacía ya no existe
+        assert profiles.list_usernames() == ["dianita", "sinclave"]
+        # Con la contraseña correcta se puede volver a vincular (p. ej. al cambiar de instancia de Clerk);
+        # sin ella, no: y el mensaje no revela que el perfil existe
+        other = client.post("/me/link-legacy", headers=_h("eve"), json={"username": "dianita", "password": "x"})
+        assert other.status_code == 422 and other.json()["detail"] == "Usuario o contraseña incorrectos."
+        moved = client.post("/me/link-legacy", headers=_h("clerk-prod-diana"), json={"username": "dianita", "password": "clave-de-dianita"})
+        assert moved.status_code == 200 and profiles.account_username("dev|clerk-prod-diana") == "dianita"
+
+    def test_refuses_profiles_without_password_and_accounts_with_data(self, dianita, monkeypatch):
+        monkeypatch.setattr("api.routers.profile.time.sleep", lambda s: None)
+        client = dianita
+        missing = client.post("/me/link-legacy", headers=_h("ana"), json={"username": "no-existe", "password": "x"})
+        r = client.post("/me/link-legacy", headers=_h("ana"), json={"username": "sinclave", "password": "x"})
+        assert r.status_code == missing.status_code == 422 and r.json()["detail"] == missing.json()["detail"]
+        client.post("/experiences", headers=_h("ana"), json={"role": "Cajera"})
+        r = client.post("/me/link-legacy", headers=_h("ana"), json={"username": "dianita", "password": "clave-de-dianita"})
+        assert r.status_code == 422 and "ya tiene datos" in r.json()["detail"]
+        assert client.post("/me/link-legacy", headers=_h("ana"), json={"username": "saas:x", "password": "x"}).status_code == 422
+
+    def test_guessing_is_limited_per_account_and_per_profile(self, dianita, monkeypatch):
+        from api.routers import profile as profile_router
+
+        monkeypatch.setattr("api.routers.profile.time.sleep", lambda s: None)
+        monkeypatch.setattr(profile_router, "_LINK_ATTEMPTS", {})
+        client, h = dianita, _h("atacante")
+        for _ in range(5):
+            assert client.post("/me/link-legacy", headers=h, json={"username": "dianita", "password": "x"}).status_code == 422
+        assert client.post("/me/link-legacy", headers=h, json={"username": "dianita", "password": "clave-de-dianita"}).status_code == 429
+        # Muchas cuentas nuevas contra el mismo perfil: también se frena (10 por hora)
+        for i in range(5):
+            client.post("/me/link-legacy", headers=_h(f"bot{i}"), json={"username": "dianita", "password": "x"})
+        assert client.post("/me/link-legacy", headers=_h("bot9"), json={"username": "dianita", "password": "x"}).status_code == 429
+
+    def test_streamlit_style_names(self, dianita, monkeypatch):
+        from models import UserProfile
+
+        monkeypatch.setattr("api.routers.profile.time.sleep", lambda s: None)
+        p = UserProfile(username="juan_perez")
+        p.set_password("clave-juan-123")
+        profiles.create_user("juan_perez", password_hash=p.password_hash, salt=p.salt)
+        r = dianita.post("/me/link-legacy", headers=_h("juan"), json={"username": "Juan Perez", "password": "clave-juan-123"})
+        assert r.status_code == 200
+
+
+def test_clerk_tokens_are_checked_by_authorized_party(client, monkeypatch):
+    key = rsa.generate_private_key(public_exponent=65537, key_size=2048)
+    jwk = json.loads(jwt.algorithms.RSAAlgorithm.to_jwk(key.public_key()))
+    monkeypatch.setenv("AUTH_JWKS_URL", "https://cv.clerk.accounts.dev/.well-known/jwks.json")
+    monkeypatch.setenv("AUTH_ISSUER", "https://cv.clerk.accounts.dev")
+    monkeypatch.setenv("AUTH_AUTHORIZED_PARTIES", "https://cv-optimizer.run.app, http://localhost:5173")
+    auth._jwks_client.cache_clear()
+    monkeypatch.setattr(jwt.PyJWKClient, "fetch_data", lambda self: {"keys": [{**jwk, "kid": "k1", "use": "sig"}]})
+
+    def bearer(**claims):  # un token de sesión de Clerk: sin aud, con azp
+        now = int(time.time())
+        body = {"iss": "https://cv.clerk.accounts.dev", "sub": "user_2abc", "sid": "sess_1", "exp": now + 60, **claims}
+        return {"Authorization": "Bearer " + jwt.encode(body, key, algorithm="RS256", headers={"kid": "k1"})}
+
+    assert client.get("/me", headers=bearer(azp="https://cv-optimizer.run.app")).status_code == 200
+    assert client.get("/me", headers=bearer(azp="http://localhost:5173/")).status_code == 200
+    assert client.get("/me", headers=bearer(azp="https://evil.example")).status_code == 401
+    assert client.get("/me", headers=bearer()).status_code == 401  # sin azp: se rechaza
+    monkeypatch.delenv("AUTH_AUTHORIZED_PARTIES")  # sin audiencia ni orígenes: no arranca
+    assert client.get("/me", headers=bearer(azp="https://cv-optimizer.run.app")).status_code == 503
+    auth._jwks_client.cache_clear()

@@ -121,6 +121,11 @@ class ProfileOut(BaseModel):
     achievements_total: int
 
 
+class LinkLegacyIn(BaseModel):
+    username: Annotated[str, StringConstraints(strip_whitespace=True, min_length=1, max_length=64)]
+    password: Annotated[str, StringConstraints(min_length=1, max_length=200)]
+
+
 class MeOut(BaseModel):
     email: str
     contact: ContactOut

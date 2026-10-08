@@ -1,7 +1,7 @@
 # Roadmap y estado del proyecto
 
 > Documento vivo. Se actualiza al terminar cada cambio relevante: qué existe, qué se hizo, qué sigue.
-> Última actualización: 2026-10-07 (fase 5c: frontend React)
+> Última actualización: 2026-10-07 (fase 5d.1: Clerk, vincular perfiles, despliegue en Cloud Run)
 
 ## Prioridad actual
 
@@ -159,7 +159,20 @@ La app de Streamlit sigue funcionando sobre la misma base durante toda la fase; 
 - [x] CI: trabajo `web` (tipos al día, `tsc`, Vitest, build); `PRODUCT.md` y `DESIGN.md` actualizados (cualquier profesión, React)
 - [x] Revisión independiente aplicada: «Ya la envié» podía registrar una versión del CV distinta de la más reciente (ahora usa la elegida o la más reciente de ese momento, con versiones distinguibles); la entrada de desarrollo exige `AUTH_DEV_LOGIN=1` explícito (un despliegue sin `DATABASE_URL` cae en SQLite y la habría dejado abierta); nombres sin letras latinas ya no comparten cuenta; contrato OpenAPI reproducible; LinkedIn sin `https://` ya no bloquea el formulario; doble toque no agrega logros dos veces; fechas sin zona tratadas como UTC; el portal de envío ya no queda en «LinkedIn» por defecto; una caché de datos por sesión
 
-*5d — Cuentas reales y despliegue*: proveedor de identidad (Google y correo), vincular los perfiles de Streamlit con su contraseña actual, despliegue (backend en contenedor por WeasyPrint, frontend estático), dominio; retirar Streamlit
+*5c fusionada (PR #17)*
+
+*5d — Cuentas reales y despliegue*. Decisiones del dueño (2026-10-07): **Clerk** (Google y correo), **US$0** al inicio, **sin dominio** por ahora.
+
+*5d.1* (rama `claude/fase5d-cuentas`)
+- [x] La API acepta tokens de Clerk: emisor + JWKS + `azp` (origen de la web) en `AUTH_AUTHORIZED_PARTIES`; sin `azp` o de otro origen → 401
+- [x] Web con Clerk (`@clerk/react` v6, textos `esMX`, colores de `DESIGN.md`) cuando la API entrega la llave pública (`/api/config`); sin ella, entrada de desarrollo. Token asíncrono por petición; caché por sesión
+- [x] Vincular el perfil de Streamlit (nombre + contraseña de siempre): la cuenta nueva vacía se reemplaza por el perfil anterior con todos sus datos, en una transacción; máx. 5 intentos cada 15 min por cuenta y 10 por hora por perfil; Streamlit lo sigue mostrando (con su contraseña) durante la transición. Probado en el navegador
+- [x] Un solo servicio: la API en `/api` sirve también la web (sin CORS); rutas de API inexistentes dan 404 JSON, no la web; sin acceso fuera de `web/dist`
+- [x] `Dockerfile` (web compilada + API sin Streamlit, WeasyPrint con fuentes Liberation, usuario sin privilegios) y trabajo `docker` en la CI (construye, arranca y genera un PDF dentro del contenedor)
+- [x] Cloud Run (`deploy/cloudrun.sh`, `deploy/README.md`): us-east1 (cerca de Neon us-east-2), CPU siempre asignada (la cola trabaja después de responder; con cobro por petición la CPU se frena), 0–1 instancias, secretos en Secret Manager, alerta de presupuesto de US$1. En Cloud Run sin Postgres el servicio no arranca
+- [x] Revisión independiente aplicada: vincular responde siempre el mismo mensaje (no revela qué perfiles existen ni cuáles tienen contraseña, con tiempo igualado) y se puede re-vincular con la contraseña; el límite de intentos se cuenta antes de verificar (las peticiones simultáneas no lo saltan); los nombres se normalizan como en Streamlit; tope global de IA (`AI_GLOBAL_DAILY_CALLS`, 1000/día) porque registrarse es gratis; una base migrada por la otra app a una revisión más nueva ya no tumba el arranque; cabeceras anti-iframe y `Referrer-Policy`, recursos de la web con caché inmutable; si `/api/config` falla la web ofrece reintentar (antes mostraba la entrada de desarrollo); el script solo despliega `main` limpio y al día, fija `AUTH_AUTHORIZED_PARTIES` antes de la primera revisión y usa una cuenta de servicio que solo lee los dos secretos; `.gcloudignore`; guía: registros de Clerk restringidos a invitación durante las pruebas
+
+*5d.2* — (dueño) cuenta de Clerk + Google Cloud → desplegar → probar Clerk con usuarios reales → vincular los perfiles. Luego retirar Streamlit cuando la versión nueva lo reemplace
 
 *5e — Operar como SaaS*: observabilidad (errores, latencia, costo de IA por cuenta), copias de seguridad, Ley 1581 (política de tratamiento, autorización, exportar y borrar mis datos), términos, proveedor de IA de pago (sin plan gratuito)
 
@@ -221,6 +234,11 @@ La app de Streamlit sigue funcionando sobre la misma base durante toda la fase; 
 | 2026-10-07 | Guardar el mapa de evidencias de la IA y recalcular el match sin IA | Ver la compatibilidad es lo más frecuente; así es instantáneo y gratis, y las referencias a logros borrados se descartan solas. La IA solo se vuelve a llamar cuando la persona actualiza tras cambiar su perfil |
 | 2026-10-07 | Cola de trabajos en Postgres (no Redis/Celery) | Una pieza menos que desplegar y pagar; `SKIP LOCKED` reparte sin duplicar; el volumen (decenas de trabajos al día) está muy lejos de sus límites |
 | 2026-10-07 | Cupo de IA por llamadas reales (envoltorio del cliente), no por "unidades" estimadas | Exacto para cualquier operación presente o futura y no cobra los errores del proveedor |
+| 2026-10-07 | Clerk + Cloud Run (CPU siempre asignada, máx. 1 instancia) + sin dominio | Elección del dueño (Clerk, US$0). Cloud Run con cobro por petición frena la CPU al responder y la cola de trabajos quedaría a medias; con CPU asignada tiene su propia capa gratuita. Render gratis: 0,1 CPU (el PDF sería lentísimo) y ~1 min para despertar |
+| 2026-10-07 | La llave pública de Clerk la entrega la API (`/api/config`), no se compila en la web | La misma imagen sirve en cualquier entorno y Cloud Run la construye con `--source` sin argumentos |
+| 2026-10-07 | Los perfiles de Streamlit se vinculan con su contraseña, no por correo | Los perfiles viejos no tienen correo verificado; la contraseña prueba que es la misma persona |
+| 2026-10-07 | Tope diario global de IA además del cupo por cuenta | Con registro abierto, muchas cuentas nuevas multiplicarían el cupo individual; el global acota el costo total |
+| 2026-10-07 | El código tolera una base en una revisión de Alembic más nueva | Streamlit y la API comparten Neon y se despliegan por separado: la que migra primero no debe tumbar a la otra |
 | 2026-10-07 | Frontend sin librería de componentes ni Tailwind | Pocas pantallas y un sistema de diseño ya definido: CSS con tokens es más liviano, sin dependencias extra que mantener o auditar |
 | 2026-10-07 | Tipos del frontend generados desde OpenAPI y comprobados en la CI | El backend es la fuente de verdad; un cambio en la API que rompa el frontend lo detecta `tsc`, no la persona usuaria |
 | 2026-10-07 | TypeScript 5.9 (no 7) en `web/` | `openapi-typescript` usa la API JS del compilador, que TypeScript 7 (nativo) ya no ofrece |
@@ -231,5 +249,6 @@ La app de Streamlit sigue funcionando sobre la misma base durante toda la fase; 
 
 ## Próximo paso
 
-1. Fase 5a (API) → 5b (motor por API) → 5c (React) → 5d (cuentas reales y despliegue) → 5e (operación y Ley 1581) → 5f (cobros).
-2. Fase 6: pruebas reales y retroalimentación (decisión del dueño: probar a fondo cuando la versión SaaS esté lista; la app de Streamlit sigue disponible mientras tanto).
+1. 5d.2 (dueño): crear la app en Clerk y el proyecto en Google Cloud (ver `deploy/README.md`), desplegar, entrar y vincular los perfiles.
+2. Luego 5e (operación y Ley 1581) → 5f (cobros).
+3. Fase 6: pruebas reales y retroalimentación (decisión del dueño: probar a fondo cuando la versión SaaS esté lista; la app de Streamlit sigue disponible mientras tanto).
