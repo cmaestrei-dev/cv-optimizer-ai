@@ -803,6 +803,67 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/alerts": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Get Alerts */
+        get: operations["get_alerts_alerts_get"];
+        put?: never;
+        /**
+         * Activate
+         * @description Crea la dirección de reenvío de la cuenta (si ya existe, la devuelve igual).
+         */
+        post: operations["activate_alerts_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/alerts/rotate": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Rotate
+         * @description Dirección nueva: la anterior deja de recibir (hay que cambiarla también en Gmail).
+         */
+        post: operations["rotate_alerts_rotate_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/alerts/check": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Check
+         * @description Revisa el buzón ahora (como mucho una vez por minuto, para todas las cuentas) y devuelve el estado.
+         */
+        post: operations["check_alerts_check_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/dev/token": {
         parameters: {
             query?: never;
@@ -852,6 +913,49 @@ export interface components {
         AchievementsIn: {
             /** Texts */
             texts: string[];
+        };
+        /** AlertsOut */
+        AlertsOut: {
+            /**
+             * Enabled
+             * @description El servidor tiene buzón de alertas configurado
+             */
+            enabled: boolean;
+            /**
+             * Address
+             * @description Dirección de reenvío de la cuenta; vacía si aún no se activó
+             */
+            address: string;
+            /**
+             * Forwarding Code
+             * @description Código que Gmail pide para confirmar el reenvío (si llegó)
+             */
+            forwarding_code: string;
+            /** Forwarding From */
+            forwarding_from: string;
+            /** Last Received At */
+            last_received_at: string | null;
+            /** Received Count */
+            received_count: number;
+            /** Last Summary */
+            last_summary: string;
+            /**
+             * Analyzing
+             * @description Lotes de vacantes de las alertas en análisis ahora
+             */
+            analyzing: number;
+            /**
+             * Waiting
+             * @description Vacantes de las alertas que esperan cupo (o la experiencia de la persona)
+             */
+            waiting: number;
+            /**
+             * Gmail Filter
+             * @description Búsqueda para el filtro de Gmail que reenvía solo las alertas
+             */
+            gmail_filter: string;
+            /** Daily Limit */
+            daily_limit: number;
         };
         /** AnalysisOut */
         AnalysisOut: {
@@ -3293,6 +3397,86 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["UsageOut"];
+                };
+            };
+        };
+    };
+    get_alerts_alerts_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["AlertsOut"];
+                };
+            };
+        };
+    };
+    activate_alerts_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["AlertsOut"];
+                };
+            };
+        };
+    };
+    rotate_alerts_rotate_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["AlertsOut"];
+                };
+            };
+        };
+    };
+    check_alerts_check_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["AlertsOut"];
                 };
             };
         };

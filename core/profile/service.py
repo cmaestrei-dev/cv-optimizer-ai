@@ -122,6 +122,7 @@ def link_legacy_profile(subject: str, legacy_username: str, password: str) -> st
             if any(s.scalar(select(func.count()).select_from(m).where(m.user_id == current.id))
                    for m in (Experience, Skill, Education, _application_model())):
                 raise LinkError("Tu cuenta nueva ya tiene datos. Vincula el perfil anterior antes de empezar a usarla.")
+            _keep_alert_address(s, current.id, legacy_id)
             s.delete(current)
             s.flush()  # libera auth_subject antes de asignarlo al perfil anterior
         condition = User.auth_subject.is_(None) if linked_to is None else User.auth_subject == linked_to
@@ -129,6 +130,15 @@ def link_legacy_profile(subject: str, legacy_username: str, password: str) -> st
         if moved != 1:  # otro intento lo vinculó entre la lectura y ahora
             raise LinkError("Ese perfil acaba de vincularse desde otra sesión. Intenta de nuevo.")
         return username
+
+
+def _keep_alert_address(s, from_user_id: int, to_user_id: int) -> None:
+    """La dirección de alertas de la cuenta nueva pasa al perfil vinculado: ya puede estar puesta en el
+    reenvío de Gmail. Si el perfil ya tenía una, se conserva esa."""
+    from core.alerts.models import AlertInbox  # las alertas dependen del perfil, no al revés
+
+    if s.scalar(select(AlertInbox.id).where(AlertInbox.user_id == to_user_id)) is None:
+        s.execute(update(AlertInbox).where(AlertInbox.user_id == from_user_id).values(user_id=to_user_id))
 
 
 def _application_model():

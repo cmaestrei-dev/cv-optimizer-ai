@@ -1,7 +1,7 @@
 # Roadmap y estado del proyecto
 
 > Documento vivo. Se actualiza al terminar cada cambio relevante: qué existe, qué se hizo, qué sigue.
-> Última actualización: 2026-10-08 (fase 5d.2: publicada en Cloud Run con Clerk)
+> Última actualización: 2026-10-08 (fase 5e: alertas de empleo por correo → bandeja)
 
 ## Prioridad actual
 
@@ -14,6 +14,7 @@
 - Perfil maestro estructurado (experiencias con logros, habilidades, educación) con importación de CV/LinkedIn y ayudas para completarlo.
 - Motor de CV por etapas (match con evidencias, selección, redacción verificada, 1 página, PDF + DOCX); Gemini o DeepSeek.
 - Bandeja de vacantes (buscar en portales, traer varias por enlace, ordenar por compatibilidad), seguimiento de postulaciones con el CV exacto enviado, "Mi mercado".
+- Versión SaaS (FastAPI + React) publicada en Cloud Run con Clerk; las alertas de empleo que la persona reenvía desde su Gmail llegan solas a la bandeja.
 
 ## Fases
 
@@ -182,11 +183,33 @@ La app de Streamlit sigue funcionando sobre la misma base durante toda la fase; 
 - [ ] (dueño) entrar con Google y vincular su perfil y el de dianita
 - [ ] Retirar Streamlit cuando la versión nueva lo reemplace
 
-*5e — Operar como SaaS*: observabilidad (errores, latencia, costo de IA por cuenta), copias de seguridad, Ley 1581 (política de tratamiento, autorización, exportar y borrar mis datos), términos, proveedor de IA de pago (sin plan gratuito)
+*5e — Vacantes que llegan solas* (rama `claude/alertas-correo`; pedido tras la primera prueba real de la pareja, 2026-10-08)
+- [x] Buzón propio de Gmail leído por IMAP (contraseña de aplicación en Secret Manager); cada cuenta tiene su dirección `buzón+código@gmail.com` y la activa en la Bandeja
+- [x] La persona reenvía con un filtro de Gmail solo las alertas (LinkedIn `jobalerts-noreply`, Computrabajo, elempleo, Magneto); el código de confirmación del reenvío de Gmail aparece en la app (nunca se abre el enlace)
+- [x] Solo correos con DKIM/DMARC válido del portal según el primer `Authentication-Results` (los de más abajo se pueden falsificar); de LinkedIn solo los de empleos (sus otros correos son mensajes privados)
+- [x] Enlaces reconocidos por patrón y guardados en forma canónica sin parámetros (los correos traen `otpToken`, que inicia sesión, y enlaces de «darse de baja»); nunca se abre un enlace del correo
+- [x] Cada vacante nueva entra al mismo trabajo "bandeja" (captura con protección SSRF + análisis medido por el cupo de IA); repetidas se ignoran; tope de 40 al día por cuenta; los correos van a la papelera apenas se leen
+- [x] Revisión al abrir la bandeja (máx. una por minuto) y cada mañana a las 7:00 (Cloud Scheduler con token propio); el script de despliegue lo configura solo si existen los secretos del buzón
+- [x] Comprobado desde Google Cloud: LinkedIn y Computrabajo entregan la vacante completa (JSON-LD) sin sesión
+- [x] Revisión independiente aplicada:
+  - `Authentication-Results` se lee resultado por resultado, sin comentarios ni comillas: antes un MAIL FROM o un `header.i` inventados podían pasar por DKIM válido.
+  - La confirmación de reenvío solo se acepta de `forwarding-noreply@google.com`.
+  - Las alertas son un tipo de trabajo propio: no cuentan para el límite de la persona y van después de lo que alguien espera.
+  - Lo que pasa del tope, lo que llega sin experiencia registrada y lo que queda sin analizar porque se acabó el cupo de IA ahora espera, no se pierde.
+  - El cupo, la espera y los trabajos se guardan en una sola transacción, y las URL que ya están en análisis no se repiten.
+  - Un correo que falla se queda sin frenar a los demás y se descarta tras 3 intentos.
+  - Se vacía la papelera: antes los correos quedaban 30 días con sus enlaces de inicio de sesión.
+  - Vincular el perfil anterior conserva la dirección de alertas.
+  - Computrabajo de otros países conserva su host.
+  - Pedir una dirección nueva pide confirmación.
+- [ ] (dueño) cuenta de Gmail de la app + contraseña de aplicación; desplegar; activar las alertas de los dos y crear alertas en los portales
+- [ ] Con correos reales: ajustar los lectores de Computrabajo, elempleo y Magneto (aún sin muestras reales) y acotar el filtro de Gmail y los remitentes aceptados a la dirección exacta de alertas de cada portal (el registro guarda el remitente de cada alerta; hoy se acepta cualquier dirección de esos dominios)
 
-*5f — Cobros*: planes y pasarela de pago (según si el dueño factura como persona natural o empresa)
+*5f — Extensión de navegador*: en la página de una vacante, «Guardar» (a la bandeja) y «Llenar» (datos, CV a medida y respuestas de filtro); la persona revisa y pulsa Enviar. Primero el portal que más usen; también las páginas «Trabaja con nosotros» de las empresas. Nunca contraseñas de los portales ni envíos automáticos
 
-*5g — (opcional) Extensión de navegador* para traer vacantes con un clic y llenar formularios con confirmación humana; recordatorios por correo
+*5g — Operar como SaaS*: observabilidad (errores, latencia, costo de IA por cuenta), copias de seguridad, Ley 1581 (política de tratamiento, autorización, exportar y borrar mis datos), términos, proveedor de IA de pago (sin plan gratuito)
+
+*5h — Cobros*: planes y pasarela de pago (según si el dueño factura como persona natural o empresa); recordatorios por correo
 
 ### Fase 6 — Pruebas reales y retroalimentación
 - [ ] Uso diario por los dos usuarios (y amigos) con postulaciones reales
@@ -245,6 +268,9 @@ La app de Streamlit sigue funcionando sobre la misma base durante toda la fase; 
 | 2026-10-07 | Clerk + Cloud Run (CPU siempre asignada, máx. 1 instancia) + sin dominio | Elección del dueño (Clerk, US$0). Cloud Run con cobro por petición frena la CPU al responder y la cola de trabajos quedaría a medias; con CPU asignada tiene su propia capa gratuita. Render gratis: 0,1 CPU (el PDF sería lentísimo) y ~1 min para despertar |
 | 2026-10-07 | La llave pública de Clerk la entrega la API (`/api/config`), no se compila en la web | La misma imagen sirve en cualquier entorno y Cloud Run la construye con `--source` sin argumentos |
 | 2026-10-07 | Los perfiles de Streamlit se vinculan con su contraseña, no por correo | Los perfiles viejos no tienen correo verificado; la contraseña prueba que es la misma persona |
+| 2026-10-08 | Nada de bots que entren a los portales con la contraseña de la persona; automatizar con alertas por correo y (después) una extensión donde ella da el último clic | LinkedIn prohíbe bots y extensiones que automaticen y restringe o cierra esas cuentas; guardar contraseñas de terceros sería el mayor riesgo de la app; postular en masa baja la respuesta; un navegador por usuario en la nube no cabe en US$0 |
+| 2026-10-08 | Correo entrante con un buzón de Gmail propio leído por IMAP, al abrir la bandeja y cada mañana | Sin dominio no hay correo entrante propio; un webhook por correo despertaría la instancia (CPU siempre asignada, ~15 min por despertar) muchas veces al día; leer bajo demanda cabe en la capa gratuita y no despierta Neon si no hay correo |
+| 2026-10-08 | Las alertas usan el mismo trabajo "bandeja" que los enlaces pegados | Una sola ruta de captura y análisis (SSRF, cupo de IA, repetidas); el correo solo aporta los enlaces |
 | 2026-10-08 | Registro cerrado con lista de correos permitidos (no modo «Restricted» con invitaciones) | No envía correos y basta con dos personas; al abrir el SaaS se cambia la configuración, no el código |
 | 2026-10-08 | Cloud Run en un proyecto de Google Cloud separado del de la llave de Gemini | Activar facturación en el proyecto de Gemini pasa la llave al plan de pago |
 | 2026-10-07 | Tope diario global de IA además del cupo por cuenta | Con registro abierto, muchas cuentas nuevas multiplicarían el cupo individual; el global acota el costo total |
@@ -259,6 +285,6 @@ La app de Streamlit sigue funcionando sobre la misma base durante toda la fase; 
 
 ## Próximo paso
 
-1. 5d.2 (dueño): entrar en la versión publicada con Google y vincular los perfiles de Streamlit.
-2. Luego 5e (operación y Ley 1581) → 5f (cobros).
+1. 5e (dueño): crear el Gmail de la app y su contraseña de aplicación → desplegar → activar las alertas de los dos y crear alertas en los portales. Con los primeros correos reales, ajustar los lectores por portal.
+2. 5f extensión de navegador (Guardar y Llenar, con confirmación humana) → 5g (operación y Ley 1581) → 5h (cobros).
 3. Fase 6: pruebas reales y retroalimentación (decisión del dueño: probar a fondo cuando la versión SaaS esté lista; la app de Streamlit sigue disponible mientras tanto).

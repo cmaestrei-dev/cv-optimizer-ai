@@ -6,7 +6,7 @@ from collections.abc import Callable
 from dataclasses import dataclass
 from datetime import UTC, datetime, timedelta
 
-from sqlalchemy import and_, delete, func, or_, select, update
+from sqlalchemy import and_, case, delete, func, or_, select, update
 from sqlalchemy.orm import Session
 
 from core.db import session_scope
@@ -18,6 +18,9 @@ from core.profile.repository import NotFoundError
 STALE_AFTER = timedelta(minutes=10)  # un trabajo "corriendo" sin latido en este tiempo se dio por perdido
 MAX_ATTEMPTS = 3
 MAX_ACTIVE_PER_ACCOUNT = 3  # una cuenta no puede llenar la cola y hacer esperar a las demás
+# Los que crea la app, no la persona (las alertas por correo): no cuentan para su límite (no deben impedirle
+# generar un CV) y se atienden después de los que alguien está esperando. Su costo lo acota el cupo de IA.
+BACKGROUND_KINDS = ("alerta",)
 
 new_job = threading.Event()  # despierta al trabajador del mismo proceso (sin sondear la base)
 
@@ -45,15 +48,33 @@ def _user_id(session, username: str) -> int:
 def enqueue(username: str, kind: str, payload: dict) -> int:
     with session_scope() as s:
         user_id = _user_id(s, username)
-        active = s.scalar(select(func.count(Job.id)).where(Job.user_id == user_id, Job.status.in_(("queued", "running"))))
-        if active >= MAX_ACTIVE_PER_ACCOUNT:
+        active = s.scalar(select(func.count(Job.id)).where(
+            Job.user_id == user_id, Job.status.in_(("queued", "running")), Job.kind.not_in(BACKGROUND_KINDS)))
+        if kind not in BACKGROUND_KINDS and active >= MAX_ACTIVE_PER_ACCOUNT:
             raise UserInputError("Ya tienes trabajos en curso. Espera a que terminen y vuelve a intentarlo.")
-        job = Job(user_id=user_id, kind=kind, payload=json.dumps(payload, ensure_ascii=False))
-        s.add(job)
-        s.flush()
-        job_id = job.id
+        job_id = add(s, user_id, kind, payload)
     new_job.set()
     return job_id
+
+
+def add(session: Session, user_id: int, kind: str, payload: dict) -> int:
+    """Agrega un trabajo dentro de una transacción ajena (sin límite). Quien llama hace `new_job.set()` al confirmar."""
+    job = Job(user_id=user_id, kind=kind, payload=json.dumps(payload, ensure_ascii=False))
+    session.add(job)
+    session.flush()
+    return job.id
+
+
+def pending_payloads(session: Session, user_id: int, kind: str) -> list[dict]:
+    """Entradas de los trabajos de ese tipo que aún no terminan."""
+    query = select(Job.payload).where(Job.user_id == user_id, Job.kind == kind, Job.status.in_(("queued", "running")))
+    return [json.loads(p or "{}") for p in session.scalars(query)]
+
+
+def count_active(username: str, kind: str) -> int:
+    with session_scope() as s:
+        return s.scalar(select(func.count(Job.id)).where(
+            Job.user_id == _user_id(s, username), Job.kind == kind, Job.status.in_(("queued", "running"))))
 
 
 def get(username: str, job_id: int) -> Job:
@@ -77,7 +98,7 @@ def claim() -> ClaimedJob | None:
             select(Job)
             .where(or_(Job.status == "queued",
                        and_(Job.status == "running", Job.started_at < now - STALE_AFTER)))
-            .order_by(Job.id)
+            .order_by(case((Job.kind.in_(BACKGROUND_KINDS), 1), else_=0), Job.id)
             .limit(1)
             .with_for_update(skip_locked=True)
         )

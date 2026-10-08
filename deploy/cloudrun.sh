@@ -30,7 +30,21 @@ SA="${RUNNER}@${PROJECT}.iam.gserviceaccount.com"
 if ! gcloud iam service-accounts describe "$SA" --project "$PROJECT" >/dev/null 2>&1; then
   gcloud iam service-accounts create "$RUNNER" --project "$PROJECT" --display-name "CV Optimizer (Cloud Run)"
 fi
-for secret in database-url gemini-api-key; do
+has_secret() { gcloud secrets describe "$1" --project "$PROJECT" >/dev/null 2>&1; }
+SECRETS="DATABASE_URL=database-url:latest,GEMINI_API_KEY=gemini-api-key:latest"
+ACCESS=(database-url gemini-api-key)
+# Alertas por correo (opcional): se activan si existen los secretos del buzón (ver deploy/README.md).
+ALERTS=0
+if has_secret alerts-mailbox && has_secret alerts-mailbox-password; then
+  ALERTS=1
+  if ! has_secret alerts-cron-token; then  # token de la revisión programada: se genera aquí y nadie lo ve
+    head -c 32 /dev/urandom | od -An -tx1 | tr -d ' \n' \
+      | gcloud secrets create alerts-cron-token --project "$PROJECT" --replication-policy automatic --data-file=- >/dev/null
+  fi
+  SECRETS="${SECRETS},ALERTS_MAILBOX=alerts-mailbox:latest,ALERTS_MAILBOX_PASSWORD=alerts-mailbox-password:latest,ALERTS_CRON_TOKEN=alerts-cron-token:latest"
+  ACCESS+=(alerts-mailbox alerts-mailbox-password alerts-cron-token)
+fi
+for secret in "${ACCESS[@]}"; do
   gcloud secrets add-iam-policy-binding "$secret" --project "$PROJECT" --quiet \
     --role roles/secretmanager.secretAccessor --member "serviceAccount:${SA}" >/dev/null
 done
@@ -42,7 +56,7 @@ PARTIES="https://${SERVICE}-${PN}.${REGION}.run.app"
 EXISTING="$(gcloud run services describe "$SERVICE" --project "$PROJECT" --region "$REGION" --format 'value(status.url)' 2>/dev/null || true)"
 if [ -n "$EXISTING" ] && [ "$EXISTING" != "$PARTIES" ]; then PARTIES="${PARTIES},${EXISTING}"; fi
 
-echo "Proyecto: $PROJECT · Región: $REGION · Servicio: $SERVICE · Clerk: $ISSUER"
+echo "Proyecto: $PROJECT · Región: $REGION · Servicio: $SERVICE · Clerk: $ISSUER · Alertas por correo: $([ "$ALERTS" = 1 ] && echo sí || echo no)"
 
 # --no-cpu-throttling: la CPU sigue activa fuera de las peticiones (la cola de trabajos genera CV y
 #   analiza la bandeja después de responder). Tiene su propia capa gratuita.
@@ -52,7 +66,7 @@ gcloud run deploy "$SERVICE" --project "$PROJECT" --region "$REGION" --source . 
   --service-account "$SA" \
   --allow-unauthenticated --no-cpu-throttling --min-instances 0 --max-instances 1 \
   --cpu 1 --memory 1Gi --concurrency 20 --timeout 300 \
-  --set-secrets "DATABASE_URL=database-url:latest,GEMINI_API_KEY=gemini-api-key:latest" \
+  --set-secrets "$SECRETS" \
   --set-env-vars "^@^CLERK_PUBLISHABLE_KEY=${CLERK_PUBLISHABLE_KEY}@AUTH_JWKS_URL=${ISSUER}/.well-known/jwks.json@AUTH_ISSUER=${ISSUER}@AUTH_AUTHORIZED_PARTIES=${PARTIES}@AI_DAILY_CALLS=200@AI_GLOBAL_DAILY_CALLS=1000"
 
 URL="$(gcloud run services describe "$SERVICE" --project "$PROJECT" --region "$REGION" --format 'value(status.url)')"
@@ -61,6 +75,20 @@ case ",${PARTIES}," in
   *) gcloud run services update "$SERVICE" --project "$PROJECT" --region "$REGION" \
        --update-env-vars "^@^AUTH_AUTHORIZED_PARTIES=${PARTIES},${URL}" ;;  # primer despliegue con otra forma de URL
 esac
+
+if [ "$ALERTS" = 1 ]; then
+  # Cada mañana revisa el buzón: la bandeja queda analizada antes de abrirla (despierta el servicio una vez).
+  gcloud services enable cloudscheduler.googleapis.com --project "$PROJECT"
+  CRON=(--project "$PROJECT" --location "$REGION" --schedule "0 7 * * *" --time-zone "America/Bogota"
+        --uri "${URL}/api/internal/alerts/check" --http-method POST --attempt-deadline 180s)
+  HEADER="X-Cron-Token=$(gcloud secrets versions access latest --secret alerts-cron-token --project "$PROJECT")"
+  if gcloud scheduler jobs describe "${SERVICE}-alertas" --project "$PROJECT" --location "$REGION" >/dev/null 2>&1; then
+    gcloud scheduler jobs update http "${SERVICE}-alertas" "${CRON[@]}" --update-headers "$HEADER" >/dev/null
+  else
+    gcloud scheduler jobs create http "${SERVICE}-alertas" "${CRON[@]}" --headers "$HEADER" >/dev/null
+  fi
+  unset HEADER
+fi
 
 echo
 echo "Listo: ${URL}"

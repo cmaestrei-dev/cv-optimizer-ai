@@ -2,6 +2,7 @@ from logging.config import fileConfig
 
 from alembic import context
 
+import core.alerts.models  # noqa: F401
 import core.jobs.models  # noqa: F401
 import core.profile.models  # noqa: F401  (registra las tablas en Base.metadata)
 import core.tracking.models  # noqa: F401

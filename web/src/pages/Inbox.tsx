@@ -3,6 +3,7 @@ import { useState } from "react";
 import { Link, useNavigate } from "react-router";
 
 import { get, post, safeHref, type S } from "../api/client";
+import { AlertsCard } from "../components/inbox/AlertsCard";
 import { EmptyState, ErrorNotice, Notice, ScoreBar, Spinner } from "../components/ui";
 import { useJob } from "../lib/useJob";
 
@@ -138,8 +139,9 @@ export function Inbox() {
     <>
       <div className="page-head">
         <h1>Bandeja de vacantes</h1>
-        <p>Pega varias vacantes y te las ordenamos según tu perfil. Tú decides cuáles preparar; <b>la postulación la envías tú</b> en el portal.</p>
+        <p>Las vacantes de tus alertas llegan solas, o pega las que encuentres: te las ordenamos según tu perfil. Tú decides cuáles preparar; <b>la postulación la envías tú</b> en el portal.</p>
       </div>
+      <AlertsCard />
       <SearchPortals />
       <AddLinks />
       <h2>3. Por revisar {inbox.data && `(${inbox.data.length})`}</h2>

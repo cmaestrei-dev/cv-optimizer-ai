@@ -6,6 +6,17 @@ export function date(value: string | null | undefined): string {
   return d.toLocaleDateString("es-CO", { day: "numeric", month: "short", year: "numeric" });
 }
 
+/** "hace 5 min", "hace 3 h"; más de un día: la fecha. */
+export function ago(value: string | null | undefined, now: number = Date.now()): string {
+  if (!value) return "";
+  const iso = /([zZ]|[+-]\d\d:?\d\d)$/.test(value) ? value : `${value}Z`;
+  const minutes = Math.round((now - new Date(iso).getTime()) / 60000);
+  if (minutes < 1) return "hace un momento";
+  if (minutes < 60) return `hace ${minutes} min`;
+  const hours = Math.round(minutes / 60);
+  return hours < 24 ? `hace ${hours} h` : date(value);
+}
+
 export function number(value: number): string {
   return value.toLocaleString("es-CO", { maximumFractionDigits: 1 });
 }
