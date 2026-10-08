@@ -7,7 +7,7 @@ from core import applying, discovery, onboarding
 from core import llm as llm_module
 from core.jobs.service import ClaimedJob
 from core.profile import service as profiles
-from core.usage import metered
+from core.usage import QuotaExceededError, metered
 
 
 def _llm(task: str, username: str):
@@ -34,6 +34,25 @@ def triage(job: ClaimedJob, report: Callable[[dict], None]) -> dict:
     return state
 
 
+def triage_alerts(job: ClaimedJob, report: Callable[[dict], None]) -> dict:
+    """Vacantes de las alertas por correo. Si se acaba el cupo de IA, las que faltan vuelven a la espera
+    de la cuenta (se analizan otro día) en vez de perderse."""
+    from core.alerts import service as alerts
+
+    progress: dict = {}
+
+    def keep(state: dict) -> None:
+        progress.update(state)
+        report(state)
+
+    try:
+        return triage(job, keep)
+    except QuotaExceededError:
+        rest = [str(u) for u in job.payload["urls"]][progress.get("done", 0):]
+        alerts.defer(job.username, rest)
+        return {**progress, "deferred": len(rest)}
+
+
 def read_cv(job: ClaimedJob, report: Callable[[dict], None]) -> dict:
     return onboarding.read_import(job.username, str(job.payload["pdf_text"]), _llm("extract", job.username))
 
@@ -41,6 +60,7 @@ def read_cv(job: ClaimedJob, report: Callable[[dict], None]) -> dict:
 HANDLERS: dict[str, Callable[[ClaimedJob, Callable[[dict], None]], dict]] = {
     "cv": generate_cv,
     "bandeja": triage,
+    "alerta": triage_alerts,
     "importar": read_cv,
 }
 # Su entrada tiene datos personales que no se necesitan después (el texto del CV): se borra al terminar.
