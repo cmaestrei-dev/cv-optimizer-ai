@@ -394,6 +394,28 @@ class GapOut(BaseModel):
     candidates: list[CandidateOut]
 
 
+class AlertsOut(BaseModel):
+    enabled: bool = Field(description="El servidor tiene buzón de alertas configurado")
+    address: str = Field(description="Dirección de reenvío de la cuenta; vacía si aún no se activó")
+    forwarding_code: str = Field(description="Código que Gmail pide para confirmar el reenvío (si llegó)")
+    forwarding_from: str
+    last_received_at: datetime | None
+    received_count: int
+    last_summary: str
+    analyzing: int = Field(description="Lotes de vacantes de las alertas en análisis ahora")
+    waiting: int = Field(description="Vacantes de las alertas que esperan cupo (o la experiencia de la persona)")
+    gmail_filter: str = Field(description="Búsqueda para el filtro de Gmail que reenvía solo las alertas")
+    daily_limit: int
+
+
+class AlertsCheckOut(BaseModel):
+    checked: bool
+    messages: int
+    alerts: int
+    queued: int
+    rejected: int
+
+
 class TitlesOut(BaseModel):
     titles: list[str]
 

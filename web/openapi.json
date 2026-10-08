@@ -2370,6 +2370,111 @@
     ]
    }
   },
+  "/alerts": {
+   "get": {
+    "tags": [
+     "alertas"
+    ],
+    "summary": "Get Alerts",
+    "operationId": "get_alerts_alerts_get",
+    "responses": {
+     "200": {
+      "description": "Successful Response",
+      "content": {
+       "application/json": {
+        "schema": {
+         "$ref": "#/components/schemas/AlertsOut"
+        }
+       }
+      }
+     }
+    },
+    "security": [
+     {
+      "HTTPBearer": []
+     }
+    ]
+   },
+   "post": {
+    "tags": [
+     "alertas"
+    ],
+    "summary": "Activate",
+    "description": "Crea la dirección de reenvío de la cuenta (si ya existe, la devuelve igual).",
+    "operationId": "activate_alerts_post",
+    "responses": {
+     "200": {
+      "description": "Successful Response",
+      "content": {
+       "application/json": {
+        "schema": {
+         "$ref": "#/components/schemas/AlertsOut"
+        }
+       }
+      }
+     }
+    },
+    "security": [
+     {
+      "HTTPBearer": []
+     }
+    ]
+   }
+  },
+  "/alerts/rotate": {
+   "post": {
+    "tags": [
+     "alertas"
+    ],
+    "summary": "Rotate",
+    "description": "Dirección nueva: la anterior deja de recibir (hay que cambiarla también en Gmail).",
+    "operationId": "rotate_alerts_rotate_post",
+    "responses": {
+     "200": {
+      "description": "Successful Response",
+      "content": {
+       "application/json": {
+        "schema": {
+         "$ref": "#/components/schemas/AlertsOut"
+        }
+       }
+      }
+     }
+    },
+    "security": [
+     {
+      "HTTPBearer": []
+     }
+    ]
+   }
+  },
+  "/alerts/check": {
+   "post": {
+    "tags": [
+     "alertas"
+    ],
+    "summary": "Check",
+    "description": "Revisa el buzón ahora (como mucho una vez por minuto, para todas las cuentas) y devuelve el estado.",
+    "operationId": "check_alerts_check_post",
+    "responses": {
+     "200": {
+      "description": "Successful Response",
+      "content": {
+       "application/json": {
+        "schema": {
+         "$ref": "#/components/schemas/AlertsOut"
+        }
+       }
+      }
+     }
+    },
+    "security": [
+     {
+      "HTTPBearer": []
+     }
+    ]
+   }
+  },
   "/dev/token": {
    "post": {
     "tags": [
@@ -2506,6 +2611,83 @@
      "texts"
     ],
     "title": "AchievementsIn"
+   },
+   "AlertsOut": {
+    "properties": {
+     "enabled": {
+      "type": "boolean",
+      "title": "Enabled",
+      "description": "El servidor tiene buzón de alertas configurado"
+     },
+     "address": {
+      "type": "string",
+      "title": "Address",
+      "description": "Dirección de reenvío de la cuenta; vacía si aún no se activó"
+     },
+     "forwarding_code": {
+      "type": "string",
+      "title": "Forwarding Code",
+      "description": "Código que Gmail pide para confirmar el reenvío (si llegó)"
+     },
+     "forwarding_from": {
+      "type": "string",
+      "title": "Forwarding From"
+     },
+     "last_received_at": {
+      "anyOf": [
+       {
+        "type": "string",
+        "format": "date-time"
+       },
+       {
+        "type": "null"
+       }
+      ],
+      "title": "Last Received At"
+     },
+     "received_count": {
+      "type": "integer",
+      "title": "Received Count"
+     },
+     "last_summary": {
+      "type": "string",
+      "title": "Last Summary"
+     },
+     "analyzing": {
+      "type": "integer",
+      "title": "Analyzing",
+      "description": "Lotes de vacantes de las alertas en análisis ahora"
+     },
+     "waiting": {
+      "type": "integer",
+      "title": "Waiting",
+      "description": "Vacantes de las alertas que esperan cupo (o la experiencia de la persona)"
+     },
+     "gmail_filter": {
+      "type": "string",
+      "title": "Gmail Filter",
+      "description": "Búsqueda para el filtro de Gmail que reenvía solo las alertas"
+     },
+     "daily_limit": {
+      "type": "integer",
+      "title": "Daily Limit"
+     }
+    },
+    "type": "object",
+    "required": [
+     "enabled",
+     "address",
+     "forwarding_code",
+     "forwarding_from",
+     "last_received_at",
+     "received_count",
+     "last_summary",
+     "analyzing",
+     "waiting",
+     "gmail_filter",
+     "daily_limit"
+    ],
+    "title": "AlertsOut"
    },
    "AnalysisOut": {
     "properties": {

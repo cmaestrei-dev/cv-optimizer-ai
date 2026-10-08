@@ -18,7 +18,7 @@ from sqlalchemy import text
 
 import config  # noqa: F401  (carga .env antes de leer variables)
 from api.limits import BodySizeLimit
-from api.routers import applications, assist, dev, engine, market, profile
+from api.routers import alerts, applications, assist, dev, engine, market, profile
 from api.web import mount_web
 from core.applying import DuplicateVacancyError
 from core.capture import CaptureError
@@ -115,8 +115,10 @@ def create_app() -> FastAPI:
             s.execute(text("select 1"))
         return {"status": "ok"}
 
-    for router in (profile.router, assist.router, applications.router, market.router, engine.router):
+    for router in (profile.router, assist.router, applications.router, market.router, engine.router, alerts.router):
         app.include_router(router, prefix=prefix)
+    if alerts.cron_enabled():  # revisión programada del buzón: solo con un token largo configurado
+        app.include_router(alerts.internal, prefix=prefix)
     if dev.enabled():  # entrar con un nombre: solo en desarrollo local (nunca con Postgres ni con JWKS)
         app.include_router(dev.router, prefix=prefix)
     if web_dist := os.environ.get("WEB_DIST", "").strip():  # después de la API: lo demás es la web

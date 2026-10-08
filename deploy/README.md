@@ -59,7 +59,25 @@ Solo despliega `main` limpio y al día (se niega si hay cambios locales). Al fin
 revisión más nueva antes que este servicio, el servicio no se cae (avisa en el registro); redespliégalo
 para ponerlo al día.
 
-## 5. Primer uso
+## 5. Alertas por correo (opcional)
+Las alertas de empleo que la persona reenvía desde su Gmail llegan solas a la bandeja.
+1. Crea una cuenta de Gmail **solo para la app** (no uses la personal: la app lee todo ese buzón).
+2. En esa cuenta activa la verificación en dos pasos (myaccount.google.com/signinoptions/twosv) y crea una
+   **contraseña de aplicación** (myaccount.google.com/apppasswords): 16 letras.
+3. Guárdalas como secretos:
+   ```bash
+   printf '%s' 'buzon.de.la.app@gmail.com' | gcloud secrets create alerts-mailbox --data-file=-
+   read -rs P && printf '%s' "$P" | tr -cd 'a-zA-Z' | gcloud secrets create alerts-mailbox-password --data-file=- && unset P
+   ```
+4. Vuelve a desplegar. El script detecta los secretos, genera el token de la revisión programada
+   (`alerts-cron-token`) y crea una tarea de Cloud Scheduler que revisa el buzón cada día a las 7:00
+   (hora de Bogotá). También se revisa al abrir la bandeja.
+
+Cada persona activa sus alertas en la Bandeja: la app le da su dirección (`buzon+código@gmail.com`) y los
+pasos para el reenvío y el filtro de Gmail. Solo se aceptan correos firmados (DKIM) por LinkedIn,
+Computrabajo, elempleo y Magneto; los correos se mandan a la papelera apenas se leen.
+
+## 6. Primer uso
 1. Entra con Google o correo.
 2. En **Perfil**, «¿Ya usabas CV Optimizer?» → tu nombre de perfil de la versión anterior y su contraseña:
    tus experiencias, CV y postulaciones pasan a tu cuenta nueva (Streamlit los sigue mostrando).
@@ -74,6 +92,7 @@ La dirección del servicio no se publica en este repositorio (es público): sác
 | `AUTH_JWKS_URL`, `AUTH_ISSUER` | derivados de la llave de Clerk |
 | `AUTH_AUTHORIZED_PARTIES` | las direcciones `run.app` del servicio (solo tokens pedidos desde esta web) |
 | `CLERK_PUBLISHABLE_KEY` | la entrega `/api/config` a la web |
+| `ALERTS_MAILBOX`, `ALERTS_MAILBOX_PASSWORD`, `ALERTS_CRON_TOKEN` | Secret Manager, solo si existen los secretos del buzón |
 | `AI_DAILY_CALLS` / `AI_GLOBAL_DAILY_CALLS` | 200 llamadas a la IA por cuenta al día / 1000 en total |
 
 Cloud Run: CPU siempre asignada (la cola de trabajos genera el CV después de responder), 0 a 1
