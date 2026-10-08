@@ -22,7 +22,7 @@ def mount_web(app: FastAPI, dist: str, api_prefix: str) -> None:
     api_root = api_prefix.strip("/")
     app.mount("/assets", StaticFiles(directory=root / "assets"), name="assets")
 
-    @app.get("/{path:path}", include_in_schema=False)
+    @app.api_route("/{path:path}", methods=["GET", "HEAD"], include_in_schema=False)  # HEAD: monitores de disponibilidad
     def spa(path: str):
         if path == api_root or path.startswith(f"{api_root}/"):  # ruta de API inexistente: 404 de API, no la web
             return JSONResponse({"detail": "No encontrado"}, status_code=404)

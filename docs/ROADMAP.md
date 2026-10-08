@@ -1,7 +1,7 @@
 # Roadmap y estado del proyecto
 
 > Documento vivo. Se actualiza al terminar cada cambio relevante: qué existe, qué se hizo, qué sigue.
-> Última actualización: 2026-10-07 (fase 5d.1: Clerk, vincular perfiles, despliegue en Cloud Run)
+> Última actualización: 2026-10-08 (fase 5d.2: publicada en Cloud Run con Clerk)
 
 ## Prioridad actual
 
@@ -172,7 +172,15 @@ La app de Streamlit sigue funcionando sobre la misma base durante toda la fase; 
 - [x] Cloud Run (`deploy/cloudrun.sh`, `deploy/README.md`): us-east1 (cerca de Neon us-east-2), CPU siempre asignada (la cola trabaja después de responder; con cobro por petición la CPU se frena), 0–1 instancias, secretos en Secret Manager, alerta de presupuesto de US$1. En Cloud Run sin Postgres el servicio no arranca
 - [x] Revisión independiente aplicada: vincular responde siempre el mismo mensaje (no revela qué perfiles existen ni cuáles tienen contraseña, con tiempo igualado) y se puede re-vincular con la contraseña; el límite de intentos se cuenta antes de verificar (las peticiones simultáneas no lo saltan); los nombres se normalizan como en Streamlit; tope global de IA (`AI_GLOBAL_DAILY_CALLS`, 1000/día) porque registrarse es gratis; una base migrada por la otra app a una revisión más nueva ya no tumba el arranque; cabeceras anti-iframe y `Referrer-Policy`, recursos de la web con caché inmutable; si `/api/config` falla la web ofrece reintentar (antes mostraba la entrada de desarrollo); el script solo despliega `main` limpio y al día, fija `AUTH_AUTHORIZED_PARTIES` antes de la primera revisión y usa una cuenta de servicio que solo lee los dos secretos; `.gcloudignore`; guía: registros de Clerk restringidos a invitación durante las pruebas
 
-*5d.2* — (dueño) cuenta de Clerk + Google Cloud → desplegar → probar Clerk con usuarios reales → vincular los perfiles. Luego retirar Streamlit cuando la versión nueva lo reemplace
+*5d.1 fusionada (PR #18)*
+
+*5d.2 — Publicar* (2026-10-08)
+- [x] Clerk (app `gen_cv`, instancia de desarrollo): Google + correo; registro cerrado a los dos correos del dueño y su pareja (lista de permitidos, sin enviar invitaciones)
+- [x] Google Cloud: proyecto propio, aparte del de Gemini, facturación solo ahí, alerta de presupuesto de 4000 COP (~US$1), secretos en Secret Manager pegados por el dueño sin mostrarse
+- [x] Desplegado en Cloud Run (la dirección no va en el repo público; ver `deploy/README.md`) (salud, configuración, web, 401 sin sesión, cabeceras de seguridad comprobados; pantalla de Clerk en español)
+- [x] `HEAD` en las rutas de la web (antes 405: un monitor de disponibilidad lo vería caído)
+- [ ] (dueño) entrar con Google y vincular su perfil y el de dianita
+- [ ] Retirar Streamlit cuando la versión nueva lo reemplace
 
 *5e — Operar como SaaS*: observabilidad (errores, latencia, costo de IA por cuenta), copias de seguridad, Ley 1581 (política de tratamiento, autorización, exportar y borrar mis datos), términos, proveedor de IA de pago (sin plan gratuito)
 
@@ -237,6 +245,8 @@ La app de Streamlit sigue funcionando sobre la misma base durante toda la fase; 
 | 2026-10-07 | Clerk + Cloud Run (CPU siempre asignada, máx. 1 instancia) + sin dominio | Elección del dueño (Clerk, US$0). Cloud Run con cobro por petición frena la CPU al responder y la cola de trabajos quedaría a medias; con CPU asignada tiene su propia capa gratuita. Render gratis: 0,1 CPU (el PDF sería lentísimo) y ~1 min para despertar |
 | 2026-10-07 | La llave pública de Clerk la entrega la API (`/api/config`), no se compila en la web | La misma imagen sirve en cualquier entorno y Cloud Run la construye con `--source` sin argumentos |
 | 2026-10-07 | Los perfiles de Streamlit se vinculan con su contraseña, no por correo | Los perfiles viejos no tienen correo verificado; la contraseña prueba que es la misma persona |
+| 2026-10-08 | Registro cerrado con lista de correos permitidos (no modo «Restricted» con invitaciones) | No envía correos y basta con dos personas; al abrir el SaaS se cambia la configuración, no el código |
+| 2026-10-08 | Cloud Run en un proyecto de Google Cloud separado del de la llave de Gemini | Activar facturación en el proyecto de Gemini pasa la llave al plan de pago |
 | 2026-10-07 | Tope diario global de IA además del cupo por cuenta | Con registro abierto, muchas cuentas nuevas multiplicarían el cupo individual; el global acota el costo total |
 | 2026-10-07 | El código tolera una base en una revisión de Alembic más nueva | Streamlit y la API comparten Neon y se despliegan por separado: la que migra primero no debe tumbar a la otra |
 | 2026-10-07 | Frontend sin librería de componentes ni Tailwind | Pocas pantallas y un sistema de diseño ya definido: CSS con tokens es más liviano, sin dependencias extra que mantener o auditar |
@@ -249,6 +259,6 @@ La app de Streamlit sigue funcionando sobre la misma base durante toda la fase; 
 
 ## Próximo paso
 
-1. 5d.2 (dueño): crear la app en Clerk y el proyecto en Google Cloud (ver `deploy/README.md`), desplegar, entrar y vincular los perfiles.
+1. 5d.2 (dueño): entrar en la versión publicada con Google y vincular los perfiles de Streamlit.
 2. Luego 5e (operación y Ley 1581) → 5f (cobros).
 3. Fase 6: pruebas reales y retroalimentación (decisión del dueño: probar a fondo cuando la versión SaaS esté lista; la app de Streamlit sigue disponible mientras tanto).

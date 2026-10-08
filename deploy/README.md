@@ -11,20 +11,34 @@ versiones conviven mientras dure la transición.
 2. Copia la **Publishable key** (`pk_test_…`). Es pública. La *Secret key* no se necesita.
 3. Mientras no haya dominio propio se usa la instancia de *desarrollo* de Clerk (muestra un aviso de
    «Development mode» y admite un número limitado de usuarios: suficiente para la fase de pruebas).
-4. **Cierra los registros** mientras sea solo para ustedes: *Configure → Restrictions* → modo de registro
-   **Restricted** e invita sus correos. Así nadie más gasta el cupo de IA (además hay un tope global de
-   1000 llamadas al día para todo el servicio).
+4. **Cierra los registros** mientras sea solo para ustedes: lista de correos permitidos (*Configure →
+   Restrictions → Allowlist*), sin enviar invitaciones. Así nadie más gasta el cupo de IA (además hay un
+   tope global de 1000 llamadas al día para todo el servicio). Con la CLI de Clerk (`npm i -g clerk`,
+   `clerk auth login`):
+   ```bash
+   clerk api /allowlist_identifiers --app APP_ID --instance dev -X POST -d '{"identifier":"correo@gmail.com","notify":false}' --yes
+   clerk config patch --app APP_ID --instance dev --json '{"auth_access_control":{"allowlist_enabled":true}}'
+   ```
+   No hace falta `clerk init` ni `clerk env pull`: la web ya trae Clerk y la llave secreta no se usa.
+   La llave publicable sale de `clerk apps list`.
 
 ## 2. Google Cloud (una sola vez)
 1. Crea una cuenta en [cloud.google.com](https://cloud.google.com), un proyecto (p. ej. `cv-optimizer`) y
    actívale la facturación (pide tarjeta aunque no cobre dentro de la capa gratuita).
-2. **Alerta de presupuesto**: Facturación → Presupuestos y alertas → crear presupuesto de **US$1** con
-   avisos al 50 % y 100 %. Así te enteras antes de cualquier cobro.
+2. **Alerta de presupuesto** de ~US$1 con avisos al 50 % y 100 %. Si la cuenta de facturación está en
+   pesos (Colombia), el monto va en COP:
+   ```bash
+   gcloud billing budgets create --billing-account CUENTA --display-name "CV Optimizer ~US\$1" \
+     --budget-amount 4000COP --filter-projects projects/TU_PROYECTO \
+     --threshold-rule percent=0.5 --threshold-rule percent=1.0
+   ```
+   **No actives la facturación en el proyecto de la llave de Gemini** («Default Gemini Project»): la
+   llave pasaría al plan de pago. Cloud Run va en un proyecto aparte.
 3. Instala la CLI: [cloud.google.com/sdk/docs/install](https://cloud.google.com/sdk/docs/install), y luego:
    ```bash
    gcloud auth login
    gcloud config set project TU_PROYECTO
-   gcloud services enable run.googleapis.com cloudbuild.googleapis.com artifactregistry.googleapis.com secretmanager.googleapis.com
+   gcloud services enable run.googleapis.com cloudbuild.googleapis.com artifactregistry.googleapis.com secretmanager.googleapis.com billingbudgets.googleapis.com iam.googleapis.com
    ```
 
 ## 3. Secretos (los escribes tú; nunca se guardan en el repo ni en el historial de la terminal)
@@ -38,7 +52,7 @@ de servicio propia (`cv-optimizer-run`) que solo puede leer estos dos secretos.
 ## 4. Desplegar
 ```bash
 git checkout main && git pull
-CLERK_PUBLISHABLE_KEY=pk_test_... ./deploy/cloudrun.sh
+PROJECT=TU_PROYECTO CLERK_PUBLISHABLE_KEY=pk_test_... ./deploy/cloudrun.sh
 ```
 Solo despliega `main` limpio y al día (se niega si hay cambios locales). Al final imprime la dirección
 (`https://cv-optimizer-….run.app`). Para actualizar, el mismo comando. Si Streamlit migra la base a una
@@ -49,6 +63,9 @@ para ponerlo al día.
 1. Entra con Google o correo.
 2. En **Perfil**, «¿Ya usabas CV Optimizer?» → tu nombre de perfil de la versión anterior y su contraseña:
    tus experiencias, CV y postulaciones pasan a tu cuenta nueva (Streamlit los sigue mostrando).
+
+La dirección del servicio no se publica en este repositorio (es público): sácala con
+`gcloud run services describe cv-optimizer --region us-east1 --format 'value(status.url)'`.
 
 ## Qué queda configurado
 | Variable | Valor |
