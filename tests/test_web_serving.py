@@ -38,6 +38,7 @@ def test_api_under_prefix_and_web_everywhere_else(site):
     page = site.get("/")
     assert page.headers["x-frame-options"] == "DENY" and "frame-ancestors 'none'" in page.headers["content-security-policy"]
     assert site.get("/a%00b").status_code == 200
+    assert site.head("/").status_code == 200  # antes 405: un monitor de disponibilidad lo vería caído
     assert site.get("/api/docs").status_code == 200
 
 
