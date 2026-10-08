@@ -950,6 +950,11 @@ export interface components {
              */
             waiting: number;
             /**
+             * Ignored Recently
+             * @description Correos que no son alertas llegados en los últimos días (Gmail reenvía de más)
+             */
+            ignored_recently: number;
+            /**
              * Gmail Filter
              * @description Búsqueda para el filtro de Gmail que reenvía solo las alertas
              */

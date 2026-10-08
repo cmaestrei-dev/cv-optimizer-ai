@@ -120,6 +120,16 @@ export function AlertsCard() {
       ) : (
         <p className="muted">Aún no llega ninguna alerta. Sigue estos pasos (una sola vez):</p>
       )}
+      {data.ignored_recently > 0 && (
+        <Notice kind="warn">
+          <p>
+            Llegaron {data.ignored_recently} {data.ignored_recently === 1 ? "correo que no es" : "correos que no son"} alertas de empleo
+            (se borraron sin guardarlos). Quizá Gmail está reenviando <b>todo</b> tu correo: en{" "}
+            <a href={GMAIL_FORWARDING} target="_blank" rel="noopener noreferrer">Reenvío y correo POP/IMAP ↗</a> marca
+            «Inhabilitar el reenvío» y guarda los cambios. Las alertas siguen llegando por el filtro.
+          </p>
+        </Notice>
+      )}
       {analyzing > 0 && <Spinner label="Analizando vacantes de tus alertas" />}
       {data.waiting > 0 && (
         <small className="muted">

@@ -64,6 +64,7 @@ class ParsedAlert:
     forwarding_code: str = ""
     forwarding_from: str = ""
     reason: str = ""  # por qué se rechazó (para el registro; sin datos personales)
+    foreign: bool = False  # llegó a la dirección de alertas pero no es de un portal: ¿se reenvía todo el correo?
 
 
 def _domain(address: str) -> str:
@@ -220,10 +221,11 @@ def parse(raw: bytes, mailbox: str) -> ParsedAlert:
                            forwarding_from=requester.lower())
     portal = next((name for domain, name in PORTAL_SENDERS.items() if _within(sender, domain)), "")
     if not portal:
-        return ParsedAlert("rechazado", token, sender_domain=sender, reason="remitente que no es un portal conocido")
+        return ParsedAlert("rechazado", token, reason="remitente que no es un portal conocido", foreign=True)
     allowed = next(domain for domain in PORTAL_SENDERS if _within(sender, domain))
     if not _authentic_sender(msg, allowed):
         return ParsedAlert("rechazado", token, portal, sender, reason="DKIM o DMARC no válidos")
     if allowed == "linkedin.com" and not sender_address.startswith(("jobalerts", "jobs")):  # p. ej. mensajes privados
-        return ParsedAlert("rechazado", token, portal, sender, sender_address, reason="correo de LinkedIn que no es de empleos")
+        return ParsedAlert("rechazado", token, portal, sender, sender_address, reason="correo de LinkedIn que no es de empleos",
+                           foreign=True)
     return ParsedAlert("alerta", token, portal, sender, sender_address, links=extract_links(msg))

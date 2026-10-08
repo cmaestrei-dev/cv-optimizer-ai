@@ -202,7 +202,9 @@ La app de Streamlit sigue funcionando sobre la misma base durante toda la fase; 
   - Vincular el perfil anterior conserva la dirección de alertas.
   - Computrabajo de otros países conserva su host.
   - Pedir una dirección nueva pide confirmación.
-- [ ] (dueño) cuenta de Gmail de la app + contraseña de aplicación; desplegar; activar las alertas de los dos y crear alertas en los portales
+- [x] Desplegado (2026-10-08) con el buzón propio y la revisión de las 7:00; la revisión programada entra al buzón sin errores
+- [x] Aviso en la Bandeja si llegan correos que no son alertas (señal de que Gmail reenvía todo el correo: hay que marcar «Inhabilitar el reenvío»); los avisos INFO de `core.*` ya salen al registro de Cloud Run (antes solo las advertencias), sin datos personales: de los correos ajenos a los portales no se registra ni el remitente
+- [ ] (dueño y pareja) activar las alertas, confirmar el reenvío, crear el filtro y las alertas en los portales (la pareja ya lo hizo)
 - [ ] Con correos reales: ajustar los lectores de Computrabajo, elempleo y Magneto (aún sin muestras reales) y acotar el filtro de Gmail y los remitentes aceptados a la dirección exacta de alertas de cada portal (el registro guarda el remitente de cada alerta; hoy se acepta cualquier dirección de esos dominios)
 
 *5f — Extensión de navegador*: en la página de una vacante, «Guardar» (a la bandeja) y «Llenar» (datos, CV a medida y respuestas de filtro); la persona revisa y pulsa Enviar. Primero el portal que más usen; también las páginas «Trabaja con nosotros» de las empresas. Nunca contraseñas de los portales ni envíos automáticos

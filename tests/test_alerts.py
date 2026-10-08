@@ -234,6 +234,18 @@ class TestService:
         alerts.check(force=True, opener=FakeMailbox([_email()]).open)
         assert alerts.status("ana").forwarding_code == ""
 
+    def test_warns_when_gmail_forwards_everything(self, mailbox_env, caplog):
+        import logging
+
+        _activate(_user())
+        personal = _email(sender="Banco <avisos@banco.example>", auth=("mx.google.com; dkim=pass header.d=banco.example",))
+        with caplog.at_level(logging.INFO, logger="core.alerts.service"):
+            alerts.check(opener=FakeMailbox([personal, personal, _email()]).open)
+        state = alerts.status("ana")
+        assert state.ignored_recently == 2 and state.received_count == 1
+        assert "banco" not in caplog.text and "jobalerts-noreply@linkedin.com" in caplog.text  # solo portales en el registro
+        assert alerts.activate("ana", rotate=True).ignored_recently == 0
+
     def test_old_address_stops_working(self, mailbox_env):
         _activate(_user())
         alerts.activate("ana", rotate=True)
