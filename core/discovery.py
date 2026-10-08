@@ -151,6 +151,7 @@ def _triage_one(username: str, url: str, llm: LLMClient, profile: ProfileSnapsho
         platform=captured.platform, url=final_url, vacancy_text=captured.text,
         analysis_json=vacancy.model_dump_json(), match_json=json.dumps(match_summary(match), ensure_ascii=False),
         evidence_json=evidence_json(result.evidence, profile), match_score=match.score, status="por_revisar",
+        posted_on=captured.posted_on, closes_on=captured.closes_on,
     )
     label = " — ".join(p for p in (vacancy.role, vacancy.company) if p)
     return TriageResult(url, "agregada", label, application_id, match.score)

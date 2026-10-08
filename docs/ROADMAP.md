@@ -207,6 +207,10 @@ La app de Streamlit sigue funcionando sobre la misma base durante toda la fase; 
 - [ ] (dueño y pareja) activar las alertas, confirmar el reenvío, crear el filtro y las alertas en los portales (la pareja ya lo hizo)
 - [ ] Con correos reales: ajustar los lectores de Computrabajo, elempleo y Magneto (aún sin muestras reales) y acotar el filtro de Gmail y los remitentes aceptados a la dirección exacta de alertas de cada portal (el registro guarda el remitente de cada alerta; hoy se acepta cualquier dirección de esos dominios)
 
+*5e.1 — Vigencia de las vacantes* (2026-10-08, pedido del dueño al ver vacantes de hace 40-60 días)
+- [x] La captura guarda la fecha de publicación y de cierre del JobPosting (`datePosted`, `validThrough`; acepta fechas sin ceros como las de elempleo y descarta las imposibles); migración 0008
+- [x] La Bandeja muestra «Publicada hace N días · cierra …», marca las de más de 30 días o por cerrar, y pone al final las que ya cerraron
+
 *5f — Extensión de navegador*: en la página de una vacante, «Guardar» (a la bandeja) y «Llenar» (datos, CV a medida y respuestas de filtro); la persona revisa y pulsa Enviar. Primero el portal que más usen; también las páginas «Trabaja con nosotros» de las empresas. Nunca contraseñas de los portales ni envíos automáticos
 
 *5g — Operar como SaaS*: observabilidad (errores, latencia, costo de IA por cuenta), copias de seguridad, Ley 1581 (política de tratamiento, autorización, exportar y borrar mis datos), términos, proveedor de IA de pago (sin plan gratuito)

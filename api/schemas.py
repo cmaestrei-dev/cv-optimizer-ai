@@ -146,6 +146,8 @@ class ApplicationSummaryOut(BaseModel):
     status: str
     status_label: str
     match_score: int | None
+    posted_on: date | None = Field(default=None, description="Publicación de la vacante, si el portal la da")
+    closes_on: date | None = Field(default=None, description="La vacante está vigente hasta esta fecha")
     applied_on: date | None
     next_action_on: date | None
     next_action: str
