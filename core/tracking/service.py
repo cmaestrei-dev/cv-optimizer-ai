@@ -85,6 +85,8 @@ def create_application(
     match_score: int | None = None,
     status: str = "guardada",
     applied_on: date | None = None,
+    posted_on: date | None = None,
+    closes_on: date | None = None,
 ) -> int:
     if status not in STATUSES:
         raise ValueError(f"Estado desconocido: {status}")
@@ -93,7 +95,7 @@ def create_application(
             user_id=_user_id(s, username), role=role.strip() or "(sin cargo)", company=company.strip(),
             platform=platform, url=url.strip(), vacancy_text=vacancy_text, analysis_json=analysis_json,
             match_json=match_json, evidence_json=evidence_json, match_score=match_score, status=status,
-            applied_on=applied_on,
+            applied_on=applied_on, posted_on=posted_on, closes_on=closes_on,
         )
         if status in APPLIED_STATUSES and applied_on:
             application.next_action_on = applied_on + timedelta(days=DEFAULT_FOLLOW_UP_DAYS)

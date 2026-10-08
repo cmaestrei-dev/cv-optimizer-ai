@@ -12,6 +12,7 @@ import json
 import re
 import socket
 from dataclasses import dataclass
+from datetime import date, timedelta
 from html.parser import HTMLParser
 from urllib.parse import parse_qs, urljoin, urlparse
 
@@ -63,6 +64,8 @@ class CapturedVacancy:
     source: str  # "jobposting" | "page"
     title: str = ""
     company: str = ""
+    posted_on: date | None = None  # fecha de publicación (JobPosting.datePosted)
+    closes_on: date | None = None  # vigente hasta (JobPosting.validThrough)
 
 
 def detect_platform(url: str) -> str:
@@ -225,6 +228,30 @@ def _posting_text(posting: dict) -> str:
     return "\n".join(lines).strip()
 
 
+def _date(value, *, today: date | None = None) -> date | None:
+    """Fecha de un JobPosting ("2026-09-03", "2026-9-3", "2026-09-03T10:00:00Z"); None si no es creíble."""
+    match = re.match(r"\s*(\d{4})-(\d{1,2})-(\d{1,2})", str(value or ""))
+    if not match:
+        return None
+    try:
+        parsed = date(*(int(g) for g in match.groups()))
+    except ValueError:
+        return None
+    today = today or date.today()
+    return parsed if today - timedelta(days=3 * 365) <= parsed <= today + timedelta(days=3 * 365) else None
+
+
+def posting_dates(posting: dict, *, today: date | None = None) -> tuple[date | None, date | None]:
+    today = today or date.today()
+    posted = _date(posting.get("datePosted"), today=today)
+    if posted and posted > today + timedelta(days=1):  # publicada "en el futuro": dato malo
+        posted = None
+    closes = _date(posting.get("validThrough"), today=today)
+    if closes and posted and closes < posted:
+        closes = None
+    return posted, closes
+
+
 def capture_vacancy(url: str) -> CapturedVacancy:
     url = canonical_url(url)
     final_url, html = _download(url)
@@ -234,7 +261,8 @@ def capture_vacancy(url: str) -> CapturedVacancy:
         posting = postings[0]
         try:
             return CapturedVacancy(final_url, platform, _posting_text(posting)[:MAX_TEXT], "jobposting",
-                                   _name(posting.get("title")), _name(posting.get("hiringOrganization")))
+                                   _name(posting.get("title")), _name(posting.get("hiringOrganization")),
+                                   *posting_dates(posting))
         except (TypeError, ValueError, AttributeError):
             pass  # JobPosting con formato inesperado: se usa el texto visible
     for zone in ("main", "article", "body"):

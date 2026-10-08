@@ -69,12 +69,14 @@ def _save(username: str, application_id: int, analysis: pipeline.Analysis, snaps
 def add_vacancy(username: str, llm: LLMClient, *, text: str = "", url: str = "", prepare: bool = False) -> int:
     """Trae (si hay enlace), analiza y guarda la vacante: en la bandeja o, con `prepare`, lista para postular."""
     url, platform = canonical_url(url) if url.strip() else "", ""
+    posted_on = closes_on = None
     if url and (existing := tracking.find_by_url(username, url)) is not None:
         raise DuplicateVacancyError(existing)
     snapshot = _snapshot_with_experience(username)
     if url:
         captured = capture_vacancy(url)
         url, platform, text = canonical_url(captured.url), captured.platform, captured.text
+        posted_on, closes_on = captured.posted_on, captured.closes_on
         if (existing := tracking.find_by_url(username, url)) is not None:
             raise DuplicateVacancyError(existing)
     if not text.strip():
@@ -87,7 +89,7 @@ def add_vacancy(username: str, llm: LLMClient, *, text: str = "", url: str = "",
         vacancy_text=text, analysis_json=result.vacancy.model_dump_json(),
         match_json=json.dumps(pipeline.match_summary(result.match), ensure_ascii=False),
         evidence_json=pipeline.evidence_json(result.evidence, snapshot), match_score=result.match.score,
-        status="guardada" if prepare else "por_revisar",
+        status="guardada" if prepare else "por_revisar", posted_on=posted_on, closes_on=closes_on,
     )
 
 

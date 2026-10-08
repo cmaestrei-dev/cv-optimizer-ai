@@ -5,6 +5,7 @@ import { Link, useNavigate } from "react-router";
 import { get, post, safeHref, type S } from "../api/client";
 import { AlertsCard } from "../components/inbox/AlertsCard";
 import { EmptyState, ErrorNotice, Notice, ScoreBar, Spinner } from "../components/ui";
+import { freshness } from "../lib/format";
 import { useJob } from "../lib/useJob";
 
 type TriageItem = { url: string; status: string; message: string; score: number | null };
@@ -99,6 +100,7 @@ function AddLinks() {
 
 function InboxItem({ item }: { item: S["ApplicationSummaryOut"] }) {
   const missing = item.missing_musts ?? [];
+  const age = freshness(item.posted_on, item.closes_on);
   const partial = item.partial_musts ?? [];
   const queryClient = useQueryClient();
   const navigate = useNavigate();
@@ -118,6 +120,12 @@ function InboxItem({ item }: { item: S["ApplicationSummaryOut"] }) {
       <div>
         <h3>{item.role}</h3>
         <small>{[item.company, item.platform].filter(Boolean).join(" · ")}</small>
+        {age && (
+          <small style={{ display: "block" }} className={age.stale ? "" : "muted"}>
+            {age.stale && <span className={`lvl ${age.closed ? "no" : "parcial"}`}>{age.closed ? "✗" : "!"} </span>}
+            {age.text}{age.closed ? ": ya no recibe postulaciones" : ""}
+          </small>
+        )}
       </div>
       <ScoreBar score={item.match_score} />
       {missing.length > 0 && <small><span className="lvl no">✗</span> Te falta: {missing.slice(0, 3).join("; ")}{missing.length > 3 && ` y ${missing.length - 3} más`}</small>}

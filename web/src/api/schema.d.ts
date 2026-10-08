@@ -1047,6 +1047,16 @@ export interface components {
             status_label: string;
             /** Match Score */
             match_score: number | null;
+            /**
+             * Posted On
+             * @description Publicación de la vacante, si el portal la da
+             */
+            posted_on?: string | null;
+            /**
+             * Closes On
+             * @description La vacante está vigente hasta esta fecha
+             */
+            closes_on?: string | null;
             /** Applied On */
             applied_on: string | null;
             /** Next Action On */
@@ -1114,6 +1124,16 @@ export interface components {
             status_label: string;
             /** Match Score */
             match_score: number | null;
+            /**
+             * Posted On
+             * @description Publicación de la vacante, si el portal la da
+             */
+            posted_on?: string | null;
+            /**
+             * Closes On
+             * @description La vacante está vigente hasta esta fecha
+             */
+            closes_on?: string | null;
             /** Applied On */
             applied_on: string | null;
             /** Next Action On */

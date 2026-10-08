@@ -49,6 +49,22 @@ class TestCapture:
 
     @patch("core.capture.socket.getaddrinfo", return_value=PUBLIC)
     @patch("core.capture.requests.get")
+    def test_posting_dates(self, get, _dns):
+        from datetime import date
+
+        from core.capture import posting_dates
+
+        today = date(2026, 10, 8)
+        assert posting_dates({"datePosted": "2026-9-3", "validThrough": "2026-10-28T23:59:00Z"}, today=today) == \
+            (date(2026, 9, 3), date(2026, 10, 28))  # elempleo escribe el mes sin cero
+        assert posting_dates({"datePosted": "2027-01-01"}, today=today) == (None, None)  # publicada "en el futuro"
+        assert posting_dates({"datePosted": "2026-09-01", "validThrough": "2026-08-01"}, today=today) == (date(2026, 9, 1), None)
+        assert posting_dates({"datePosted": "ayer", "validThrough": "2026-02-30"}, today=today) == (None, None)
+        get.return_value = _response(body=JOBPOSTING_HTML.replace('"title"', '"datePosted": "2026-10-01", "title"'))
+        assert capture_vacancy("https://www.elempleo.com/co/ofertas-trabajo/1").posted_on == date(2026, 10, 1)
+
+    @patch("core.capture.socket.getaddrinfo", return_value=PUBLIC)
+    @patch("core.capture.requests.get")
     def test_falls_back_to_main_text(self, get, _dns):
         body = "<html><body><nav>menú</nav><main><h1>Auxiliar</h1><p>" + "Requisitos de la oferta. " * 20 + "</p><script>x=1</script></main></body></html>"
         get.return_value = _response(body=body)

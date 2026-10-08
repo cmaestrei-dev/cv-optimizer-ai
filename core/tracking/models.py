@@ -40,6 +40,8 @@ class Application(Base):
     match_json: Mapped[str] = mapped_column(Text, default="", server_default="")  # resumen del match (bandeja)
     evidence_json: Mapped[str] = mapped_column(Text, default="", server_default="")  # mapa de evidencias de la IA
     match_score: Mapped[int | None] = mapped_column(Integer)
+    posted_on: Mapped[date | None] = mapped_column(Date)  # publicación de la vacante (si el portal la da)
+    closes_on: Mapped[date | None] = mapped_column(Date)  # vigente hasta
     applied_on: Mapped[date | None] = mapped_column(Date)
     next_action_on: Mapped[date | None] = mapped_column(Date, index=True)
     next_action: Mapped[str] = mapped_column(String, default="")

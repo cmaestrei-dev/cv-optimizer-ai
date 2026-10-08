@@ -47,6 +47,7 @@ def _summary(a: Application) -> ApplicationSummaryOut:
     return ApplicationSummaryOut(
         id=a.id, role=a.role, company=a.company, platform=a.platform, url=a.url, status=a.status,
         status_label=STATUSES.get(a.status, (a.status, ""))[0], match_score=a.match_score, applied_on=a.applied_on,
+        posted_on=a.posted_on, closes_on=a.closes_on,
         next_action_on=a.next_action_on, next_action=a.next_action, created_at=a.created_at, updated_at=a.updated_at,
         missing_musts=missing_musts(a.match_json), partial_musts=missing_musts(a.match_json, "parcial"),
     )
@@ -80,8 +81,10 @@ def list_applications(
     applications = tracking.list_applications(account.username, _VIEWS[view], with_files=False)
     if view in ("cerradas", "todas"):  # lo descartado sin enviar vive en la bandeja
         applications = [a for a in applications if not (a.status == "descartada" and a.applied_on is None)]
-    if view == "bandeja":
-        applications.sort(key=lambda a: (a.match_score if a.match_score is not None else -1, a.id), reverse=True)
+    if view == "bandeja":  # las ya cerradas al final: no se puede postular
+        today = tracking.today()
+        applications.sort(key=lambda a: (not (a.closes_on and a.closes_on < today),
+                                         a.match_score if a.match_score is not None else -1, a.id), reverse=True)
     return [_summary(a) for a in applications]
 
 

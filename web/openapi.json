@@ -2899,6 +2899,32 @@
       ],
       "title": "Match Score"
      },
+     "posted_on": {
+      "anyOf": [
+       {
+        "type": "string",
+        "format": "date"
+       },
+       {
+        "type": "null"
+       }
+      ],
+      "title": "Posted On",
+      "description": "Publicación de la vacante, si el portal la da"
+     },
+     "closes_on": {
+      "anyOf": [
+       {
+        "type": "string",
+        "format": "date"
+       },
+       {
+        "type": "null"
+       }
+      ],
+      "title": "Closes On",
+      "description": "La vacante está vigente hasta esta fecha"
+     },
      "applied_on": {
       "anyOf": [
        {
@@ -3066,6 +3092,32 @@
        }
       ],
       "title": "Match Score"
+     },
+     "posted_on": {
+      "anyOf": [
+       {
+        "type": "string",
+        "format": "date"
+       },
+       {
+        "type": "null"
+       }
+      ],
+      "title": "Posted On",
+      "description": "Publicación de la vacante, si el portal la da"
+     },
+     "closes_on": {
+      "anyOf": [
+       {
+        "type": "string",
+        "format": "date"
+       },
+       {
+        "type": "null"
+       }
+      ],
+      "title": "Closes On",
+      "description": "La vacante está vigente hasta esta fecha"
      },
      "applied_on": {
       "anyOf": [

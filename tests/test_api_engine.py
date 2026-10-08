@@ -306,3 +306,18 @@ def test_cloud_run_refuses_to_start_without_postgres(monkeypatch):
     monkeypatch.setenv("K_SERVICE", "cv-optimizer")
     with pytest.raises(RuntimeError, match="DATABASE_URL"), TestClient(main.create_app()):
         pass
+
+
+def test_inbox_shows_dates_and_puts_closed_vacancies_last(ana):
+    from datetime import timedelta
+
+    client, h, _ = ana
+    username = profiles.account_username("dev|ana")
+    today = tracking.today()
+    closed = tracking.create_application(username, role="Cerrada", status="por_revisar", match_score=95,
+                                         posted_on=today - timedelta(days=40), closes_on=today - timedelta(days=1))
+    open_ = tracking.create_application(username, role="Abierta", status="por_revisar", match_score=60,
+                                        posted_on=today - timedelta(days=3), closes_on=today + timedelta(days=20))
+    inbox = client.get("/applications?view=bandeja", headers=h).json()
+    assert [a["id"] for a in inbox] == [open_, closed]
+    assert inbox[0]["posted_on"] == (today - timedelta(days=3)).isoformat()

@@ -17,6 +17,30 @@ export function ago(value: string | null | undefined, now: number = Date.now()):
   return hours < 24 ? `hace ${hours} h` : date(value);
 }
 
+/** Qué tan vigente está una vacante: "Publicada hace 3 días · cierra 25 oct". `stale` = vieja o por cerrar. */
+export function freshness(
+  posted: string | null | undefined,
+  closes: string | null | undefined,
+  now: string = today(),
+): { text: string; stale: boolean; closed: boolean } | null {
+  const days = (a: string, b: string) => Math.round((Date.parse(`${b}T12:00:00Z`) - Date.parse(`${a}T12:00:00Z`)) / 86_400_000);
+  const parts: string[] = [];
+  let stale = false;
+  let closed = false;
+  if (posted) {
+    const age = days(posted, now);
+    parts.push(age <= 0 ? "Publicada hoy" : age === 1 ? "Publicada ayer" : `Publicada hace ${age} días`);
+    stale = age > 30;
+  }
+  if (closes) {
+    const left = days(now, closes);
+    closed = left < 0;
+    parts.push(closed ? "ya cerró" : left === 0 ? "cierra hoy" : left <= 3 ? `cierra en ${left} ${left === 1 ? "día" : "días"}` : `cierra ${date(closes)}`);
+    stale = stale || left <= 3;
+  }
+  return parts.length ? { text: parts.join(" · "), stale, closed } : null;
+}
+
 export function number(value: number): string {
   return value.toLocaleString("es-CO", { maximumFractionDigits: 1 });
 }
