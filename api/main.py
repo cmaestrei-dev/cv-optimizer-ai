@@ -19,6 +19,7 @@ from sqlalchemy import text
 import config  # noqa: F401  (carga .env antes de leer variables)
 from api.limits import BodySizeLimit
 from api.routers import applications, assist, dev, engine, market, profile
+from api.web import mount_web
 from core.applying import DuplicateVacancyError
 from core.capture import CaptureError
 from core.db import database_url, session_scope
@@ -47,6 +48,8 @@ def _check_production_config() -> None:
         raise RuntimeError(
             "La API no arranca con Postgres sin AUTH_JWKS_URL. Para desarrollo usa SQLite (sin DATABASE_URL)."
         )
+    if os.environ.get("K_SERVICE") and not database_url().startswith("postgresql"):  # Cloud Run lo define
+        raise RuntimeError("En Cloud Run falta DATABASE_URL (Postgres): los datos se perderían con el contenedor.")
 
 
 @asynccontextmanager
@@ -62,7 +65,10 @@ async def _lifespan(_app: FastAPI):
 
 
 def create_app() -> FastAPI:
-    app = FastAPI(title="CV Optimizer AI", version="0.1.0", lifespan=_lifespan)
+    # API_PREFIX="/api" en producción (la misma app sirve la web en "/"); vacío en desarrollo y pruebas.
+    prefix = os.environ.get("API_PREFIX", "").strip().rstrip("/")
+    app = FastAPI(title="CV Optimizer AI", version="0.1.0", lifespan=_lifespan,
+                  docs_url=f"{prefix}/docs", redoc_url=None, openapi_url=f"{prefix}/openapi.json")
 
     app.add_middleware(BodySizeLimit)  # se agrega antes que CORS: así CORS lo envuelve y el 413 lleva sus cabeceras
     origins = [o.strip() for o in os.environ.get("API_CORS_ORIGINS", "").split(",") if o.strip()]
@@ -75,6 +81,11 @@ def create_app() -> FastAPI:
     async def _security_headers(request: Request, call_next):
         response = await call_next(request)
         response.headers.setdefault("X-Content-Type-Options", "nosniff")
+        response.headers.setdefault("X-Frame-Options", "DENY")  # nadie puede incrustar la app (clickjacking)
+        response.headers.setdefault("Content-Security-Policy", "frame-ancestors 'none'")
+        response.headers.setdefault("Referrer-Policy", "strict-origin-when-cross-origin")
+        if request.url.path.startswith("/assets/"):  # archivos de la web con huella en el nombre: no cambian
+            response.headers.setdefault("Cache-Control", "public, max-age=31536000, immutable")
         response.headers.setdefault("Cache-Control", "no-store")  # datos personales: nada en cachés intermedias
         return response
 
@@ -93,16 +104,23 @@ def create_app() -> FastAPI:
         return JSONResponse({"detail": str(exc), "application_id": exc.application_id},
                             status_code=status.HTTP_409_CONFLICT)
 
-    @app.get("/health", tags=["sistema"])
+    @app.get(f"{prefix}/config", tags=["sistema"])
+    def public_config() -> dict[str, str]:
+        """Configuración PÚBLICA para la web (sin sesión): la llave publicable de Clerk (es pública por diseño)."""
+        return {"clerk_publishable_key": os.environ.get("CLERK_PUBLISHABLE_KEY", "").strip()}
+
+    @app.get(f"{prefix}/health", tags=["sistema"])
     def health() -> dict[str, str]:
         with session_scope() as s:
             s.execute(text("select 1"))
         return {"status": "ok"}
 
     for router in (profile.router, assist.router, applications.router, market.router, engine.router):
-        app.include_router(router)
+        app.include_router(router, prefix=prefix)
     if dev.enabled():  # entrar con un nombre: solo en desarrollo local (nunca con Postgres ni con JWKS)
-        app.include_router(dev.router)
+        app.include_router(dev.router, prefix=prefix)
+    if web_dist := os.environ.get("WEB_DIST", "").strip():  # después de la API: lo demás es la web
+        mount_web(app, web_dist, prefix)
     return app
 
 

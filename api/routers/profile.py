@@ -3,6 +3,9 @@
 Las modificaciones devuelven el perfil completo actualizado (una sola fuente de verdad para el cliente).
 """
 
+import threading
+import time
+
 from fastapi import APIRouter, HTTPException, status
 
 from api.auth import CurrentAccount
@@ -15,6 +18,7 @@ from api.schemas import (
     EducationOut,
     ExperienceIn,
     ExperienceOut,
+    LinkLegacyIn,
     MeOut,
     ProfileOut,
     SkillIn,
@@ -25,6 +29,36 @@ from core.profile.interview import strength
 from core.profile.links import safe_link
 
 router = APIRouter(tags=["perfil"])
+
+# Intentos de vincular un perfil anterior (adivinar contraseñas): por cuenta (5 cada 15 min) y por perfil
+# objetivo (10 por hora, porque crear cuentas nuevas es gratis). En memoria: el servicio corre en 1 instancia.
+_LINK_ATTEMPTS: dict[str, list[float]] = {}
+_LINK_LOCK = threading.Lock()
+_LINK_LIMITS = {"cuenta": (5, 15 * 60), "perfil": (10, 60 * 60)}
+
+
+def _take_link_attempt(account_key: str, target_key: str) -> list[str]:
+    """Registra el intento ANTES de verificar (las ráfagas simultáneas no se cuelan) o lanza 429."""
+    now = time.time()
+    keys = {"cuenta": f"cuenta:{account_key}", "perfil": f"perfil:{target_key}"}
+    with _LINK_LOCK:
+        for kind, key in keys.items():
+            limit, window = _LINK_LIMITS[kind]
+            recent = [t for t in _LINK_ATTEMPTS.get(key, []) if now - t < window]
+            _LINK_ATTEMPTS[key] = recent
+            if len(recent) >= limit:
+                raise HTTPException(status.HTTP_429_TOO_MANY_REQUESTS, "Demasiados intentos. Espera un rato y vuelve a intentarlo.")
+        for key in keys.values():
+            _LINK_ATTEMPTS[key].append(now)
+    return list(keys.values())
+
+
+def _release_link_attempt(keys: list[str]) -> None:
+    """Un intento exitoso no cuenta como fallido."""
+    with _LINK_LOCK:
+        for key in keys:
+            if _LINK_ATTEMPTS.get(key):
+                _LINK_ATTEMPTS[key].pop()
 
 
 def _contact(username: str) -> ContactOut:
@@ -62,6 +96,21 @@ def _profile(username: str) -> ProfileOut:
 def me(account: CurrentAccount) -> MeOut:
     has_experience, has_skills, has_education = service.profile_status(account.username)
     return MeOut(email=account.email, contact=_contact(account.username), has_experience=has_experience,
+                 has_skills=has_skills, has_education=has_education)
+
+
+@router.post("/me/link-legacy", response_model=MeOut)
+def link_legacy(body: LinkLegacyIn, account: CurrentAccount) -> MeOut:
+    """Vincula el perfil que la persona usaba en la versión anterior (Streamlit), con su contraseña."""
+    attempt = _take_link_attempt(account.subject, service.legacy_key(body.username))
+    try:
+        username = service.link_legacy_profile(account.subject, body.username, body.password)
+    except service.LinkError as e:
+        time.sleep(1)  # frena la adivinación de contraseñas
+        raise HTTPException(status.HTTP_422_UNPROCESSABLE_CONTENT, str(e)) from None
+    _release_link_attempt(attempt)
+    has_experience, has_skills, has_education = service.profile_status(username)
+    return MeOut(email=account.email, contact=_contact(username), has_experience=has_experience,
                  has_skills=has_skills, has_education=has_education)
 
 

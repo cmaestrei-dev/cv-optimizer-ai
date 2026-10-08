@@ -1,0 +1,15 @@
+.git
+.github
+.claude
+**/__pycache__
+**/*.pyc
+.env
+.env.*
+.streamlit/secrets.toml
+data/
+web/node_modules
+web/dist
+tests/
+evals/
+docs/
+*.db

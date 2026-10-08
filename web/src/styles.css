@@ -102,7 +102,7 @@ button.small, .btn.small { min-height: 36px; padding: 6px 12px; font-size: 0.875
 label { display: flex; flex-direction: column; gap: 6px; font: 500 0.875rem/1.4 var(--font); color: var(--muted); }
 label.check { flex-direction: row; align-items: flex-start; gap: 10px; font-size: 0.95rem; color: var(--text); cursor: pointer; }
 label.check input { margin-top: 4px; width: 18px; height: 18px; accent-color: var(--accent); flex: none; }
-input[type="text"], input[type="email"], input[type="url"], input[type="tel"], input[type="date"], select, textarea {
+input[type="text"], input[type="email"], input[type="url"], input[type="tel"], input[type="date"], input[type="password"], input[type="number"], input[type="search"], select, textarea {
   width: 100%; min-height: 44px; padding: 10px 12px; border-radius: var(--radius-sm);
   background: var(--canvas); color: var(--text); border: 1px solid var(--border);
   font: 400 1rem/1.5 var(--font);

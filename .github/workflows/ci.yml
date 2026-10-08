@@ -41,3 +41,18 @@ jobs:
       - run: npm run typecheck
       - run: npm test
       - run: npm run build
+
+  docker:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Construir la imagen de producción
+        run: docker build -t cv-optimizer .
+      - name: Arranca y responde (API, web y PDF dentro del contenedor)
+        run: |
+          docker run -d --name app -p 8080:8080 -e AUTH_DEV_SECRET=$(python3 -c "print('x'*40)") -e AUTH_DEV_LOGIN=1 cv-optimizer
+          for i in $(seq 1 30); do curl -sf localhost:8080/api/health && break; sleep 1; done
+          curl -sf localhost:8080/api/health
+          curl -sf localhost:8080/bandeja | grep -q 'id="root"'
+          docker exec app python -c "from weasyprint import HTML; assert HTML(string='<p>Hola Árbol</p>').write_pdf().startswith(b'%PDF')"
+          docker logs app 2>&1 | tail -20

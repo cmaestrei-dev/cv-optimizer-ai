@@ -6,6 +6,7 @@ import { ContactCard } from "../components/profile/ContactCard";
 import { EducationCard } from "../components/profile/EducationCard";
 import { ExperienceCard, ExperienceForm } from "../components/profile/ExperienceCard";
 import { ImportCard } from "../components/profile/ImportCard";
+import { LinkLegacyCard } from "../components/profile/LinkLegacyCard";
 import { SkillsCard } from "../components/profile/SkillsCard";
 import { useSaveProfile } from "../components/profile/useSaveProfile";
 import { ErrorNotice, Notice, Spinner } from "../components/ui";
@@ -30,6 +31,7 @@ export function Profile() {
       {imported && (
         <Notice kind="ok"><p>{imported} Ahora completa tus logros con «Completar con IA»: mientras más cifras, mejor el CV.</p></Notice>
       )}
+      {empty && <LinkLegacyCard />}
       {empty && <ImportCard prominent onSaved={setImported} />}
       {!empty && (
         <div className="notice info">

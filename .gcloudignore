@@ -1,0 +1,14 @@
+# Lo que NO se sube a Cloud Build (gcloud run deploy --source .)
+.git
+.github
+.claude
+**/__pycache__
+.env
+.env.*
+.streamlit/secrets.toml
+data/
+web/node_modules/
+web/dist/
+tests/
+evals/
+*.db

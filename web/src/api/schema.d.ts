@@ -4,6 +4,26 @@
  */
 
 export interface paths {
+    "/config": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Public Config
+         * @description Configuración PÚBLICA para la web (sin sesión): la llave publicable de Clerk (es pública por diseño).
+         */
+        get: operations["public_config_config_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/health": {
         parameters: {
             query?: never;
@@ -32,6 +52,26 @@ export interface paths {
         get: operations["me_me_get"];
         put?: never;
         post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/me/link-legacy": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Link Legacy
+         * @description Vincula el perfil que la persona usaba en la versión anterior (Streamlit), con su contraseña.
+         */
+        post: operations["link_legacy_me_link_legacy_post"];
         delete?: never;
         options?: never;
         head?: never;
@@ -1424,6 +1464,13 @@ export interface components {
             /** Owned */
             owned: boolean;
         };
+        /** LinkLegacyIn */
+        LinkLegacyIn: {
+            /** Username */
+            username: string;
+            /** Password */
+            password: string;
+        };
         /** MarketOut */
         MarketOut: {
             /** Applications */
@@ -1721,6 +1768,28 @@ export interface components {
 }
 export type $defs = Record<string, never>;
 export interface operations {
+    public_config_config_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        [key: string]: string;
+                    };
+                };
+            };
+        };
+    };
     health_health_get: {
         parameters: {
             query?: never;
@@ -1759,6 +1828,39 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["MeOut"];
+                };
+            };
+        };
+    };
+    link_legacy_me_link_legacy_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["LinkLegacyIn"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["MeOut"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
                 };
             };
         };

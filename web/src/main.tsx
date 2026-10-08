@@ -32,9 +32,8 @@ function makeQueryClient(): QueryClient {
 
 /** Una caché por sesión: lo que llegue tarde de la cuenta anterior no se ve en la nueva. */
 function SessionData() {
-  const { session } = useAuth();
-  const token = session?.token;
-  const client = useMemo(() => makeQueryClient(), [token]); // nueva caché al cambiar de sesión
+  const { sessionKey } = useAuth();
+  const client = useMemo(() => makeQueryClient(), [sessionKey]); // nueva caché al cambiar de sesión
   return (
     <QueryClientProvider client={client}>
       <RouterProvider router={router} />
@@ -43,8 +42,9 @@ function SessionData() {
 }
 
 function RequireSession() {
-  const { session } = useAuth();
-  return session ? <Outlet /> : <Login />;
+  const { status } = useAuth();
+  if (status === "loading") return <main className="main"><Spinner /></main>;
+  return status === "signed-in" ? <Outlet /> : <Login />;
 }
 
 function Home() {
@@ -73,10 +73,36 @@ const router = createBrowserRouter([
   },
 ]);
 
-createRoot(document.getElementById("root")!).render(
-  <StrictMode>
-    <AuthProvider>
-      <SessionData />
-    </AuthProvider>
-  </StrictMode>,
-);
+function Unavailable() {
+  return (
+    <main className="main" style={{ maxWidth: 440, paddingTop: "12vh" }}>
+      <h1>CV Optimizer</h1>
+      <div className="notice warn">
+        <p>No pudimos conectar con el servidor. Puede estar despertando: espera unos segundos.</p>
+        <button className="primary" onClick={() => window.location.reload()}>Reintentar</button>
+      </div>
+    </main>
+  );
+}
+
+async function start() {
+  const root = createRoot(document.getElementById("root")!);
+  // La llave pública de Clerk viene de la API: la misma compilación sirve en cualquier entorno.
+  let clerkKey: string;
+  try {
+    clerkKey = (await get<{ clerk_publishable_key: string }>("/config")).clerk_publishable_key;
+  } catch {
+    // Sin la configuración no se sabe qué entrada mostrar: nunca caer en la de desarrollo por error.
+    root.render(<Unavailable />);
+    return;
+  }
+  root.render(
+    <StrictMode>
+      <AuthProvider clerkKey={clerkKey}>
+        <SessionData />
+      </AuthProvider>
+    </StrictMode>,
+  );
+}
+
+void start();

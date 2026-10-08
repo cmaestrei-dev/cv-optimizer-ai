@@ -16,10 +16,11 @@ export class ApiError extends Error {
   }
 }
 
-let getToken: () => string | null = () => null;
+type TokenGetter = () => Promise<string | null> | string | null;
+let getToken: TokenGetter = () => null;
 let onUnauthorized: () => void = () => {};
 
-export function configureAuth(tokenGetter: () => string | null, unauthorized: () => void): void {
+export function configureAuth(tokenGetter: TokenGetter, unauthorized: () => void): void {
   getToken = tokenGetter;
   onUnauthorized = unauthorized;
 }
@@ -40,7 +41,7 @@ export function errorMessage(body: unknown, status: number): string {
 
 async function request(method: string, path: string, body?: unknown): Promise<Response> {
   const headers: Record<string, string> = {};
-  const token = getToken();
+  const token = await getToken();
   if (token) headers.Authorization = `Bearer ${token}`;
   let payload: BodyInit | undefined;
   if (body instanceof FormData) payload = body;

@@ -1,9 +1,10 @@
+import { SignIn } from "@clerk/react";
 import { useState, type FormEvent } from "react";
 
 import { useAuth } from "../auth/auth";
 import { ErrorNotice } from "../components/ui";
 
-export function Login() {
+function DevLogin() {
   const { signIn } = useAuth();
   const [name, setName] = useState("");
   const [error, setError] = useState<unknown>(null);
@@ -24,18 +25,25 @@ export function Login() {
   }
 
   return (
-    <main className="main" style={{ maxWidth: 440, paddingTop: "12vh" }}>
+    <form className="card stack" onSubmit={submit}>
+      <label>
+        Tu nombre
+        <input type="text" value={name} onChange={(e) => setName(e.target.value)} autoComplete="name" autoFocus />
+      </label>
+      <ErrorNotice error={error} />
+      <button className="primary" disabled={busy || !name.trim()}>{busy ? "Entrando…" : "Entrar"}</button>
+      <small className="faint">Modo de desarrollo: entrada solo por nombre.</small>
+    </form>
+  );
+}
+
+export function Login() {
+  const { mode } = useAuth();
+  return (
+    <main className="main" style={{ maxWidth: 440, paddingTop: "8vh" }}>
       <h1>CV Optimizer</h1>
       <p className="muted">Tu CV a la medida de cada vacante, sin inventar nada. Tú decides y tú envías.</p>
-      <form className="card stack" onSubmit={submit}>
-        <label>
-          Tu nombre
-          <input type="text" value={name} onChange={(e) => setName(e.target.value)} autoComplete="name" autoFocus />
-        </label>
-        <ErrorNotice error={error} />
-        <button className="primary" disabled={busy || !name.trim()}>{busy ? "Entrando…" : "Entrar"}</button>
-        <small className="faint">Versión de prueba: el inicio con Google o correo llega en la siguiente fase.</small>
-      </form>
+      {mode === "clerk" ? <SignIn routing="hash" /> : <DevLogin />}
     </main>
   );
 }
