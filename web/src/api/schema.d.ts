@@ -1961,6 +1961,11 @@ export interface components {
              * @default false
              */
             prepare: boolean;
+            /**
+             * Posted On
+             * @description Publicación de la vacante, si quien la envía la conoce
+             */
+            posted_on?: string | null;
         };
         /** ValidationError */
         ValidationError: {

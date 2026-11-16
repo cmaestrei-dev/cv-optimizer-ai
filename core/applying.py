@@ -9,8 +9,9 @@ consulta, y solo se vuelve a llamar a la IA cuando el perfil cambió y la person
 
 import json
 from dataclasses import dataclass
+from datetime import date
 
-from core.capture import canonical_url, capture_vacancy
+from core.capture import canonical_url, capture_vacancy, detect_platform
 from core.engine import pipeline
 from core.engine.cover import CoverNote, write_cover_note
 from core.engine.document import CVDocument, render
@@ -66,19 +67,25 @@ def _save(username: str, application_id: int, analysis: pipeline.Analysis, snaps
 # ── vacantes y análisis ───────────────────────────────────────────────
 
 
-def add_vacancy(username: str, llm: LLMClient, *, text: str = "", url: str = "", prepare: bool = False) -> int:
-    """Trae (si hay enlace), analiza y guarda la vacante: en la bandeja o, con `prepare`, lista para postular."""
+def add_vacancy(
+    username: str, llm: LLMClient, *, text: str = "", url: str = "", prepare: bool = False, posted: date | None = None,
+) -> int:
+    """Trae (si solo hay enlace), analiza y guarda la vacante: en la bandeja o, con `prepare`, lista para postular.
+    Con texto y enlace se usa el texto tal cual y el enlace solo identifica la vacante (sin descargarla)."""
     url, platform = canonical_url(url) if url.strip() else "", ""
     posted_on = closes_on = None
     if url and (existing := tracking.find_by_url(username, url)) is not None:
         raise DuplicateVacancyError(existing)
     snapshot = _snapshot_with_experience(username)
-    if url:
+    if url and not text.strip():  # solo el enlace: se trae la vacante
         captured = capture_vacancy(url)
         url, platform, text = canonical_url(captured.url), captured.platform, captured.text
         posted_on, closes_on = captured.posted_on, captured.closes_on
         if (existing := tracking.find_by_url(username, url)) is not None:
             raise DuplicateVacancyError(existing)
+    elif url:  # texto y enlace (p. ej. el bot ya leyó la página): se usa el texto y no se descarga nada
+        platform = detect_platform(url)
+        posted_on = posted
     if not text.strip():
         raise UserInputError("Pega el texto de la vacante o su enlace.")
     result = pipeline.analyze(llm, snapshot, text=text)

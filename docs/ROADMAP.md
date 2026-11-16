@@ -256,10 +256,15 @@ Entregas:
   - Se crea y revoca desde Perfil y usa la cuenta sin contraseña.
   - Se muestra una vez y solo se guarda su SHA-256; máximo 5 activos.
   - El bot no puede crear tokens ni vincular perfiles. Migración 0009.
-- [ ] **E2, buscar y analizar en modo prueba:**
-  - Corre en el computador del dueño con Playwright y un perfil persistente propio (él inicia sesión una vez).
-  - Descubre vacantes en la búsqueda pública, abre cada una con la sesión, lee la descripción y la manda al motor por la API: vacante, compatibilidad y CV.
-  - No envía nada.
+- [x] **E1 fusionado** (PR #24).
+- [x] **E2, buscar y analizar en modo prueba** (`runner/`, `python -m runner`):
+  - Configuración TOML en `~/.config/cv-optimizer-bot/` y token en un archivo 0600.
+  - Las vacantes salen de la búsqueda **pública** de LinkedIn (sin sesión, con pausas de 2,5 a 5 s y como mucho 2 páginas por búsqueda). La oferta también se lee de la vista pública, así que la sesión del dueño solo se usará para postular.
+  - Cada vacante va a la API con su texto y su enlace: la API usa ese texto y no la descarga (Cloud Run está en una IP de centro de datos). Luego se hace su CV y se baja el PDF.
+  - Recuerda las vacantes ya vistas, excluye palabras y empresas, y cuenta el tope diario.
+  - Si LinkedIn devuelve 429/999, pausa 24 h. Explica un token revocado o un perfil vacío.
+  - `python -m runner entrar` abre el navegador propio (Playwright, perfil persistente en una carpeta 0700) para que el dueño inicie sesión una vez.
+  - 14 pruebas, una de ellas de punta a punta contra la API de pruebas, con IA falsa y sin red.
 - [ ] **E3, postular con «Solicitud sencilla»:**
   - Sube el CV de esa vacante y responde con el motor de preguntas más un banco de respuestas del dueño (salario, disponibilidad…).
   - Si una pregunta obligatoria no tiene respuesta, salta la vacante: nunca responde al azar.
