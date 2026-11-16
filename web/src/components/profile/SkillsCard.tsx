@@ -1,6 +1,7 @@
 import { useState, type FormEvent } from "react";
 
 import { ApiError, del, post, type S } from "../../api/client";
+import { CloseIcon } from "../icons";
 import { ErrorNotice } from "../ui";
 import { useSaveProfile } from "./useSaveProfile";
 
@@ -29,18 +30,18 @@ export function SkillsCard({ skills }: { skills: S["SkillOut"][] }) {
     .filter(([, list]) => list.length);
 
   return (
-    <section className="card stack">
-      <h2>Habilidades</h2>
+    <section className="panel stack">
+      <h2 className="panel-title" style={{ margin: 0 }}>Habilidades</h2>
       {groups.map(([label, list]) => (
         <div key={label}>
-          <small>{label}</small>
+          <small className="group-label">{label}</small>
           <div className="row" style={{ marginTop: 6 }}>
             {list.map((s) => (
               <span className="chip" key={s.id}>
                 {s.name}
                 <button aria-label={`Quitar ${s.name}`} onClick={async () => {
                   try { save(await del<S["ProfileOut"]>(`/skills/${s.id}`)); } catch (err) { setError(err); }
-                }}>×</button>
+                }}><CloseIcon /></button>
               </span>
             ))}
           </div>

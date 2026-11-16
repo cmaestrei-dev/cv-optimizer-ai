@@ -1,6 +1,7 @@
 import { useState, type ReactNode } from "react";
 
 import { ApiError } from "../api/client";
+import { AlertIcon, CheckIcon, CrossIcon, ExternalIcon, HalfIcon, RepeatIcon } from "./icons";
 
 export function Spinner({ label = "Cargando" }: { label?: string }) {
   return (
@@ -21,14 +22,35 @@ export function ErrorNotice({ error }: { error: unknown }) {
   return <Notice kind="bad"><p>{message}</p></Notice>;
 }
 
-export function ScoreBar({ score, label = "Compatibilidad" }: { score: number | null | undefined; label?: string }) {
-  if (score === null || score === undefined) return <small className="muted">Sin calcular</small>;
+/** Zona de la tabla según la compatibilidad: clasificación (≥75), repechaje (50–74), descenso (<50 o cerrada). */
+export type Zone = "up" | "mid" | "down" | "none";
+
+export function zoneOf(score: number | null | undefined, closed = false): Zone {
+  if (closed) return "down";
+  if (score === null || score === undefined) return "none";
+  return score >= 75 ? "up" : score >= 50 ? "mid" : "down";
+}
+
+export const ZONE_LABEL: Record<Zone, string> = {
+  up: "Zona de postulación",
+  mid: "Repechaje",
+  down: "Descenso",
+  none: "Sin calcular",
+};
+
+/** Compatibilidad como numeral de marcador, con su zona. */
+export function Score({ score, size = "md", label = "Compatibilidad" }: { score: number | null | undefined; size?: "md" | "lg"; label?: string }) {
+  if (score === null || score === undefined) return <span className="score-num none" title="Sin calcular">—<span className="sr-only">{label} sin calcular</span></span>;
   return (
-    <div className="score" aria-label={`${label}: ${score} de 100`}>
-      <div className="score-track"><div className="score-fill" style={{ width: `${Math.max(2, score)}%` }} /></div>
-      <b>{score}</b>
-    </div>
+    <span className={`score-num ${size} ${zoneOf(score)}`} aria-label={`${label}: ${score} de 100`}>
+      {score}
+    </span>
   );
+}
+
+/** Barra proporcional (palabras clave, cupos): solo como apoyo de un número que se lee al lado. */
+export function Bar({ value, max = 100 }: { value: number; max?: number }) {
+  return <span className="bar" aria-hidden="true"><span style={{ width: `${Math.max(2, Math.min(100, (value / max) * 100))}%` }} /></span>;
 }
 
 export function CopyButton({ text, label = "Copiar" }: { text: string; label?: string }) {
@@ -54,21 +76,46 @@ export function CopyButton({ text, label = "Copiar" }: { text: string; label?: s
 
 export function EmptyState({ title, children }: { title: string; children?: ReactNode }) {
   return (
-    <div className="card">
+    <div className="empty">
       <h3>{title}</h3>
       <div className="muted">{children}</div>
     </div>
   );
 }
 
-const LEVEL = { cubre: ["✓", "Cumples"], parcial: ["½", "A medias"], no: ["✗", "Te falta"] } as const;
+const MARKS = {
+  ok: [CheckIcon, "Cumples"],
+  half: [HalfIcon, "A medias"],
+  no: [CrossIcon, "Te falta"],
+  warn: [AlertIcon, "Atención"],
+  repeat: [RepeatIcon, "Repetida"],
+} as const;
+
+/** Estado con ícono dibujado y texto para lectores de pantalla (nunca solo color). */
+export function Mark({ kind, label }: { kind: keyof typeof MARKS; label?: string }) {
+  const [Icon, text] = MARKS[kind];
+  return (
+    <span className={`mark ${kind}`} title={label ?? text}>
+      <Icon />
+      <span className="sr-only">{label ?? text}</span>
+    </span>
+  );
+}
+
+const LEVEL = { cubre: "ok", parcial: "half", no: "no" } as const;
 
 export function Level({ level }: { level: string }) {
-  const [mark, text] = LEVEL[level as keyof typeof LEVEL] ?? ["·", level];
+  const kind = LEVEL[level as keyof typeof LEVEL];
+  return kind ? <Mark kind={kind} /> : null;
+}
+
+/** Enlace a un sitio de terceros (ya pasado por safeHref). */
+export function ExternalLink({ href, children, className = "btn small" }: { href: string | undefined; children: ReactNode; className?: string }) {
+  if (!href) return null;
   return (
-    <span className={`lvl ${level}`} title={text}>
-      {mark}
-      <span className="sr-only">{text}</span>
-    </span>
+    <a className={className} href={href} target="_blank" rel="noopener noreferrer">
+      {children}<ExternalIcon />
+      <span className="sr-only"> (abre en otra pestaña)</span>
+    </a>
   );
 }

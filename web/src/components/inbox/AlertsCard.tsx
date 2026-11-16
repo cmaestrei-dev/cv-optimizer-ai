@@ -5,7 +5,7 @@ import { useEffect, useRef } from "react";
 
 import { get, post, type S } from "../../api/client";
 import { ago } from "../../lib/format";
-import { CopyButton, ErrorNotice, Notice, Spinner } from "../ui";
+import { CopyButton, ErrorNotice, ExternalLink, Mark, Notice, Spinner } from "../ui";
 
 const GMAIL_FORWARDING = "https://mail.google.com/mail/u/0/#settings/fwdandpop";
 
@@ -20,13 +20,13 @@ function Copyable({ text }: { text: string }) {
 
 function Steps({ alerts }: { alerts: S["AlertsOut"] }) {
   return (
-    <ol className="stack" style={{ paddingLeft: 20, margin: 0 }}>
+    <ol className="stack steps" style={{ margin: 0 }}>
       <li>
         <b>Tu dirección de alertas</b> (solo para ti):
         <Copyable text={alerts.address} />
       </li>
       <li>
-        En <b>Gmail desde un computador</b>: Configuración → <a href={GMAIL_FORWARDING} target="_blank" rel="noopener noreferrer">Reenvío y correo POP/IMAP ↗</a> →
+        En <b>Gmail desde un computador</b>: Configuración → <ExternalLink className="ext" href={GMAIL_FORWARDING}>Reenvío y correo POP/IMAP</ExternalLink> →
         «Agregar una dirección de reenvío» → pega tu dirección.
         {alerts.forwarding_code ? (
           <Notice kind="ok">
@@ -93,8 +93,8 @@ export function AlertsCard() {
 
   if (!active) {
     return (
-      <section className="card stack">
-        <h2>Recibe vacantes sin buscarlas</h2>
+      <section className="panel stack">
+        <h2 className="panel-title" style={{ margin: 0 }}>Recibe vacantes sin buscarlas</h2>
         <p className="muted">
           LinkedIn, Computrabajo, elempleo y Magneto te mandan alertas de empleo por correo. Si las reenvías a la app, cada vacante
           llega sola a tu bandeja, analizada y ordenada según tu perfil. Sin contraseñas: solo un filtro en tu Gmail.
@@ -106,14 +106,14 @@ export function AlertsCard() {
   }
 
   return (
-    <section className="card stack">
+    <section className="panel stack">
       <div className="row spread">
-        <h2 style={{ margin: 0 }}>Alertas por correo</h2>
+        <h2 className="panel-title" style={{ margin: 0 }}>Alertas por correo</h2>
         <button className="small" onClick={() => check.mutate()} disabled={check.isPending}>{check.isPending ? "Revisando…" : "Revisar ahora"}</button>
       </div>
       {working ? (
         <p>
-          <span className="lvl cubre">✓</span> Funcionando · {data.received_count} {data.received_count === 1 ? "alerta recibida" : "alertas recibidas"}
+          <Mark kind="ok" /> Funcionando · {data.received_count} {data.received_count === 1 ? "alerta recibida" : "alertas recibidas"}
           {data.last_received_at && `, la última ${ago(data.last_received_at)}`}.
           {data.last_summary && <><br /><small className="muted">{data.last_summary}</small></>}
         </p>
@@ -125,7 +125,7 @@ export function AlertsCard() {
           <p>
             Llegaron {data.ignored_recently} {data.ignored_recently === 1 ? "correo que no es" : "correos que no son"} alertas de empleo
             (se borraron sin guardarlos). Quizá Gmail está reenviando <b>todo</b> tu correo: en{" "}
-            <a href={GMAIL_FORWARDING} target="_blank" rel="noopener noreferrer">Reenvío y correo POP/IMAP ↗</a> marca
+            <ExternalLink className="ext" href={GMAIL_FORWARDING}>Reenvío y correo POP/IMAP</ExternalLink> marca
             «Inhabilitar el reenvío» y guarda los cambios. Las alertas siguen llegando por el filtro.
           </p>
         </Notice>
@@ -139,15 +139,15 @@ export function AlertsCard() {
       )}
       <ErrorNotice error={check.error ?? rotate.error} />
       {working ? (
-        <details>
+        <details className="fold">
           <summary>Ver los pasos de configuración</summary>
           <div style={{ marginTop: 12 }}><Steps alerts={data} /></div>
         </details>
       ) : (
         <Steps alerts={data} />
       )}
-      <details>
-        <summary><small>Cambiar mi dirección</small></summary>
+      <details className="fold">
+        <summary>Cambiar mi dirección</summary>
         <div className="stack" style={{ marginTop: 8 }}>
           <small className="muted">Úsalo si compartiste tu dirección por error: la actual deja de funcionar y tendrás que poner la nueva en Gmail (reenvío y filtro).</small>
           <div><button className="small danger" disabled={rotate.isPending}

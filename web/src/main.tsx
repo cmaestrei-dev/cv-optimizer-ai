@@ -13,6 +13,12 @@ import { Inbox } from "./pages/Inbox";
 import { Login } from "./pages/Login";
 import { Market } from "./pages/Market";
 import { Profile } from "./pages/Profile";
+import "@fontsource/barlow/400.css";
+import "@fontsource/barlow/500.css";
+import "@fontsource/barlow/600.css";
+import "@fontsource/barlow-condensed/500.css";
+import "@fontsource/barlow-condensed/600.css";
+import "@fontsource/barlow-condensed/700.css";
 import "./styles.css";
 
 function makeQueryClient(): QueryClient {
@@ -75,13 +81,14 @@ const router = createBrowserRouter([
 
 function Unavailable() {
   return (
-    <main className="main" style={{ maxWidth: 440, paddingTop: "12vh" }}>
-      <h1>CV Optimizer</h1>
-      <div className="notice warn">
+    <div className="gate">
+      <header className="band"><span className="brand"><span className="brand-mark" aria-hidden="true">CV</span>Optimizer</span></header>
+      <main className="gate-main">
+        <h1>Sin conexión</h1>
         <p>No pudimos conectar con el servidor. Puede estar despertando: espera unos segundos.</p>
         <button className="primary" onClick={() => window.location.reload()}>Reintentar</button>
-      </div>
-    </main>
+      </main>
+    </div>
   );
 }
 

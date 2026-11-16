@@ -1,6 +1,7 @@
 import { useState, type FormEvent } from "react";
 
 import { del, post, type S } from "../../api/client";
+import { PlusIcon } from "../icons";
 import { ErrorNotice } from "../ui";
 import { useSaveProfile } from "./useSaveProfile";
 
@@ -23,11 +24,11 @@ export function EducationCard({ education }: { education: S["EducationOut"][] })
   }
 
   return (
-    <section className="card stack">
-      <h2>Educación y certificados</h2>
+    <section className="panel stack">
+      <h2 className="panel-title" style={{ margin: 0 }}>Educación y certificados</h2>
       {education.map((d) => (
-        <div className="row spread" key={d.id}>
-          <span><b>{d.title}</b> <small>{[d.institution, d.period_text].filter(Boolean).join(" · ")}</small></span>
+        <div className="row spread" key={d.id} style={{ flexWrap: "nowrap", alignItems: "flex-start" }}>
+          <span><b>{d.title}</b><small style={{ display: "block" }}>{[d.institution, d.period_text].filter(Boolean).join(" · ")}</small></span>
           <button className="small danger" onClick={async () => {
             try { save(await del<S["ProfileOut"]>(`/education/${d.id}`)); } catch (err) { setError(err); }
           }}>Quitar</button>
@@ -46,7 +47,7 @@ export function EducationCard({ education }: { education: S["EducationOut"][] })
           </div>
         </form>
       ) : (
-        <button className="small" onClick={() => setAdding(true)}>Agregar estudio o certificado</button>
+        <div><button className="small" onClick={() => setAdding(true)}><PlusIcon />Agregar estudio o certificado</button></div>
       )}
       <ErrorNotice error={error} />
     </section>

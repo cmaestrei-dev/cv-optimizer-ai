@@ -64,3 +64,22 @@ export const STATUS_LABELS: Record<string, string> = {
   retirada: "Retirada",
   descartada: "Descartada",
 };
+
+/** Tono de la pastilla de estado según la etapa (el texto siempre dice el estado). */
+export function pillTone(status: string): "go" | "wait" | "out" | "prep" {
+  if (["en_revision", "entrevista", "oferta"].includes(status)) return "go";
+  if (status === "postulada") return "wait";
+  if (["rechazada", "retirada", "descartada"].includes(status)) return "out";
+  return "prep";
+}
+
+/** Fecha corta para listas: "16 nov" (con el año solo si no es el actual). */
+const MONTHS = ["ene", "feb", "mar", "abr", "may", "jun", "jul", "ago", "sep", "oct", "nov", "dic"];
+
+export function shortDate(value: string | null | undefined, now: Date = new Date()): string {
+  if (!value) return "";
+  const iso = value.length === 10 ? `${value}T12:00:00` : /([zZ]|[+-]\d\d:?\d\d)$/.test(value) ? value : `${value}Z`;
+  const d = new Date(iso);
+  const text = `${d.getDate()} ${MONTHS[d.getMonth()]}`;
+  return d.getFullYear() === now.getFullYear() ? text : `${text} ${d.getFullYear()}`;
+}

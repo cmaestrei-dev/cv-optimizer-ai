@@ -1,12 +1,15 @@
 # Roadmap y estado del proyecto
 
 > Documento vivo. Se actualiza al terminar cada cambio relevante: qué existe, qué se hizo, qué sigue.
-> Última actualización: 2026-10-08 (fase 5e: alertas de empleo por correo → bandeja)
+> Última actualización: 2026-11-16 (cambio de rumbo: búsqueda automática para el dueño; rediseño de la web)
 
 ## Prioridad actual
 
-1. **Ahora:** que la app funcione bien para 2 personas que buscan empleo con urgencia (el dueño y su pareja), de **cualquier profesión**.
-2. **Futuro:** convertirla en SaaS. No se migra a React/FastAPI hasta tener un núcleo de dominio independiente de Streamlit (ver decisiones).
+**Cambio de rumbo (2026-11-16).** La pareja del dueño ya consiguió empleo (por contactos, no por la app). El SaaS deja de ser la meta principal. Lo que sigue: que la herramienta le consiga empleo al dueño **de forma automática**, plataforma por plataforma, empezando por LinkedIn.
+
+1. **Ahora:** rediseño de la web (hecho en la rama `rediseno-web`); después, investigar y planear la automatización de LinkedIn con el dueño.
+2. **Siempre:** el CV nunca inventa nada; cada envío queda registrado con el CV exacto.
+3. **Pausado:** SaaS (5g operación, 5h cobros).
 
 ## Qué existe hoy
 
@@ -217,6 +220,21 @@ La app de Streamlit sigue funcionando sobre la misma base durante toda la fase; 
 
 *5h — Cobros*: planes y pasarela de pago (según si el dueño factura como persona natural o empresa); recordatorios por correo
 
+*Rediseño de la web* (2026-11-16, rama `rediseno-web`; pedido del dueño: «se ve horrible, hazlo como quieras»)
+- [x] Nuevo mundo visual «tabla de posiciones» (gráfica deportiva de día).
+  - Fondo claro con verde cancha. Fuentes Barlow y Barlow Condensed, servidas desde la app y no desde Google.
+  - Reemplaza el oscuro estilo GitHub de una sola columna de tarjetas.
+  - La dirección queda en `.impeccable/surfaces/web-src.md`.
+- [x] Bandeja:
+  - Tabla de posiciones ordenada por compatibilidad, con zonas siempre acompañadas de texto: postulación (75 o más), repechaje (50 a 74), descenso (menos de 50 o cerrada).
+  - Banda «Tu próxima jugada» con una sola decisión.
+  - Riel lateral para traer vacantes: enlaces, alertas y portales.
+- [x] Postulaciones: estadísticas como fila de la tabla de la liga, racha de los últimos 5 envíos y lista tipo calendario.
+- [x] Postulación: marcador grande con su zona; requisitos y CV a la izquierda, envío y seguimiento a la derecha.
+- [x] Perfil: ficha con estadísticas y la trayectoria como historial de clubes.
+- [x] Mercado: tablas en el mismo estilo.
+- [x] Íconos dibujados en lugar de símbolos (✓ ✗ ↗ ×). En celular, las tablas se vuelven filas de dos líneas; sin desplazamiento horizontal en ninguna pantalla.
+
 ### Fase 6 — Pruebas reales y retroalimentación
 - [ ] Uso diario por los dos usuarios (y amigos) con postulaciones reales
 - [ ] Registro de problemas y mejoras; ajustar cargos sugeridos, mensajes, motor y diseño con datos reales
@@ -226,6 +244,8 @@ La app de Streamlit sigue funcionando sobre la misma base durante toda la fase; 
 
 | Fecha | Decisión | Por qué |
 |---|---|---|
+| 2026-11-16 | Prioridad: búsqueda y postulación automática para el dueño; SaaS en pausa | La pareja ya consiguió empleo; el dueño necesita trabajo y quiere que la herramienta lo haga sola. Riesgo real a vigilar: los términos de LinkedIn prohíben bots (posible cierre de la cuenta) |
+| 2026-11-16 | Web clara con mundo «tabla de posiciones», fuentes servidas por la app | El tema oscuro clonado de GitHub se veía genérico y desperdiciaba la pantalla; una tabla ordenada es la forma natural de una bandeja por compatibilidad. Fuentes propias: sin dependencia de Google Fonts |
 | 2026-10-07 | Uso personal primero, SaaS después | Necesidad urgente de empleo; validar el producto con usuarios reales |
 | 2026-10-07 | React + FastAPI sí, pero después de extraer el núcleo | Migrar la UI con la lógica acoplada a Streamlit solo traslada el desorden |
 | 2026-10-07 | No scraping masivo de LinkedIn; captura vía extensión / JSON-LD / alertas | Los términos de LinkedIn prohíben bots y scraping; riesgo de baneo de cuentas |
@@ -291,6 +311,6 @@ La app de Streamlit sigue funcionando sobre la misma base durante toda la fase; 
 
 ## Próximo paso
 
-1. 5e (dueño): crear el Gmail de la app y su contraseña de aplicación → desplegar → activar las alertas de los dos y crear alertas en los portales. Con los primeros correos reales, ajustar los lectores por portal.
-2. 5f extensión de navegador (Guardar y Llenar, con confirmación humana) → 5g (operación y Ley 1581) → 5h (cobros).
-3. Fase 6: pruebas reales y retroalimentación (decisión del dueño: probar a fondo cuando la versión SaaS esté lista; la app de Streamlit sigue disponible mientras tanto).
+1. Revisar y fusionar el rediseño de la web (rama `rediseno-web`) y desplegarlo.
+2. Automatización de LinkedIn: investigar opciones con el dueño (encontrar vacantes, «Solicitud sencilla», CV a medida por vacante, límites para no perder la cuenta) y planearla por entregas.
+3. Después, el resto de portales (Computrabajo, Magneto, elempleo) con el mismo esquema.

@@ -25,7 +25,7 @@ function DevLogin() {
   }
 
   return (
-    <form className="card stack" onSubmit={submit}>
+    <form className="panel stack" onSubmit={submit}>
       <label>
         Tu nombre
         <input type="text" value={name} onChange={(e) => setName(e.target.value)} autoComplete="name" autoFocus />
@@ -40,10 +40,13 @@ function DevLogin() {
 export function Login() {
   const { mode } = useAuth();
   return (
-    <main className="main" style={{ maxWidth: 440, paddingTop: "8vh" }}>
-      <h1>CV Optimizer</h1>
-      <p className="muted">Tu CV a la medida de cada vacante, sin inventar nada. Tú decides y tú envías.</p>
-      {mode === "clerk" ? <SignIn routing="hash" /> : <DevLogin />}
-    </main>
+    <div className="gate">
+      <header className="band"><span className="brand"><span className="brand-mark" aria-hidden="true">CV</span>Optimizer</span></header>
+      <main className="gate-main">
+        <h1>Cada vacante, en su puesto</h1>
+        <p>Tu CV a la medida de cada vacante, armado solo con lo que de verdad hiciste. Tú decides cuáles van.</p>
+        {mode === "clerk" ? <SignIn routing="hash" /> : <DevLogin />}
+      </main>
+    </div>
   );
 }
