@@ -101,7 +101,7 @@ def add_vacancy(body: VacancyIn, account: CurrentAccount) -> ApplicationOut:
     """Trae (enlace) o recibe (texto) una vacante, la analiza y la guarda. 409 si ya la tienes."""
     usage.check(account.username)
     application_id = applying.add_vacancy(account.username, _llm("extract", account), text=body.text, url=body.url,
-                                          prepare=body.prepare)
+                                          prepare=body.prepare, posted=body.posted_on)
     return _detail(account.username, application_id)
 
 

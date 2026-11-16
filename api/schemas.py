@@ -276,6 +276,7 @@ class VacancyIn(BaseModel):
     text: Annotated[str, StringConstraints(strip_whitespace=True, max_length=20000)] = ""
     url: Url = ""
     prepare: bool = Field(default=False, description="true: lista para postular; false: a la bandeja")
+    posted_on: date | None = Field(default=None, description="Publicación de la vacante, si quien la envía la conoce")
 
 
 class EvidenceOut(BaseModel):

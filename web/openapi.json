@@ -5174,6 +5174,19 @@
       "title": "Prepare",
       "description": "true: lista para postular; false: a la bandeja",
       "default": false
+     },
+     "posted_on": {
+      "anyOf": [
+       {
+        "type": "string",
+        "format": "date"
+       },
+       {
+        "type": "null"
+       }
+      ],
+      "title": "Posted On",
+      "description": "Publicación de la vacante, si quien la envía la conoce"
      }
     },
     "type": "object",

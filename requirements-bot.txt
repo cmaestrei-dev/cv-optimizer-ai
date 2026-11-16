@@ -1,0 +1,2 @@
+# Bot de postulación que corre en el computador del dueño (python -m runner). No va en el servidor.
+playwright>=1.49

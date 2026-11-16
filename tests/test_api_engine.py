@@ -106,6 +106,16 @@ class TestVacancies:
         assert client.post("/vacancies", headers=h, json={"url": "file:///etc/passwd"}).status_code == 422
         assert client.post("/vacancies", headers=h, json={}).status_code == 422
 
+    def test_text_and_link_uses_the_text_without_downloading(self, ana, monkeypatch):
+        client, h, _ = ana
+        monkeypatch.setattr(capture, "_download", lambda *a, **k: (_ for _ in ()).throw(AssertionError("no debe descargar")))
+        body = {"text": "Vacante de auxiliar administrativo...", "url": JOB + "?trk=bot", "posted_on": "2026-11-15"}
+        r = client.post("/vacancies", headers=h, json=body)
+        assert r.status_code == 201, r.text
+        assert (r.json()["platform"], r.json()["url"], r.json()["posted_on"]) == ("LinkedIn", JOB, "2026-11-15")
+        dup = client.post("/vacancies", headers=h, json={**body, "url": JOB})
+        assert dup.status_code == 409 and dup.json()["application_id"] == r.json()["id"]
+
     def test_needs_experience_first(self, client):
         r = client.post("/vacancies", headers=_h("nueva"), json={"text": "Vacante"})
         assert r.status_code == 422 and "experiencia" in r.json()["detail"]
