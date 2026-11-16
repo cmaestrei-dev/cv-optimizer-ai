@@ -3,6 +3,7 @@ import { useState } from "react";
 
 import { get, type S } from "../api/client";
 import { PlusIcon } from "../components/icons";
+import { BotCard } from "../components/profile/BotCard";
 import { ContactCard } from "../components/profile/ContactCard";
 import { EducationCard } from "../components/profile/EducationCard";
 import { ExperienceCard, ExperienceForm } from "../components/profile/ExperienceCard";
@@ -84,6 +85,7 @@ export function Profile() {
           <SkillsCard skills={p.skills} />
           <EducationCard education={p.education} />
           <ContactCard key={JSON.stringify(p.contact)} contact={p.contact} />
+          <BotCard />
           {!empty && <ImportCard onSaved={setImported} />}
         </aside>
       </div>

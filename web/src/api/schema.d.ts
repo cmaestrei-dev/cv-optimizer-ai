@@ -864,6 +864,41 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/bot-tokens": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** List Tokens */
+        get: operations["list_tokens_bot_tokens_get"];
+        put?: never;
+        /** Create Token */
+        post: operations["create_token_bot_tokens_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/bot-tokens/{token_id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post?: never;
+        /** Revoke Token */
+        delete: operations["revoke_token_bot_tokens__token_id__delete"];
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/dev/token": {
         parameters: {
             query?: never;
@@ -1168,6 +1203,58 @@ export interface components {
              * @description CV o PDF de LinkedIn
              */
             file: string;
+        };
+        /** BotTokenCreatedOut */
+        BotTokenCreatedOut: {
+            /** Id */
+            id: number;
+            /** Label */
+            label: string;
+            /**
+             * Hint
+             * @description Últimos 4 caracteres del token
+             */
+            hint: string;
+            /**
+             * Created At
+             * Format: date-time
+             */
+            created_at: string;
+            /** Last Used At */
+            last_used_at: string | null;
+            /**
+             * Token
+             * @description El token completo: se muestra SOLO esta vez
+             */
+            token: string;
+        };
+        /** BotTokenIn */
+        BotTokenIn: {
+            /**
+             * Label
+             * @description Para reconocerlo, p. ej. «Mi portátil»
+             * @default
+             */
+            label: string;
+        };
+        /** BotTokenOut */
+        BotTokenOut: {
+            /** Id */
+            id: number;
+            /** Label */
+            label: string;
+            /**
+             * Hint
+             * @description Últimos 4 caracteres del token
+             */
+            hint: string;
+            /**
+             * Created At
+             * Format: date-time
+             */
+            created_at: string;
+            /** Last Used At */
+            last_used_at: string | null;
         };
         /** CVBulletEdit */
         CVBulletEdit: {
@@ -3502,6 +3589,88 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["AlertsOut"];
+                };
+            };
+        };
+    };
+    list_tokens_bot_tokens_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["BotTokenOut"][];
+                };
+            };
+        };
+    };
+    create_token_bot_tokens_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["BotTokenIn"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["BotTokenCreatedOut"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    revoke_token_bot_tokens__token_id__delete: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                token_id: number;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
                 };
             };
         };
