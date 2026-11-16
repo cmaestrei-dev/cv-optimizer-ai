@@ -22,6 +22,7 @@ import jwt
 from fastapi import Depends, HTTPException, status
 from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
 
+from core.bot import tokens as bot_tokens
 from core.db import database_url
 from core.profile import service as profiles
 
@@ -41,6 +42,7 @@ class Account:
     subject: str  # "emisor|sub": estable aunque cambie el correo
     username: str  # clave interna que usan los servicios del núcleo
     email: str
+    via_bot: bool = False  # entró con un token del bot (programa local), no con la sesión de la persona
 
 
 def _env(name: str) -> str:
@@ -86,6 +88,11 @@ def _unauthorized(detail: str) -> HTTPException:
 def current_account(credentials: Annotated[HTTPAuthorizationCredentials | None, Depends(_bearer)]) -> Account:
     if credentials is None:
         raise _unauthorized("Falta el token de acceso")
+    if bot_tokens.looks_like_token(credentials.credentials):  # token del bot: se busca su huella en la base
+        username = bot_tokens.resolve(credentials.credentials)
+        if username is None:
+            raise _unauthorized("Token del bot inválido o revocado")
+        return Account(f"bot|{username}", username, "", via_bot=True)
     try:
         claims = decode_token(credentials.credentials)
     except AuthConfigError:
@@ -103,3 +110,13 @@ def current_account(credentials: Annotated[HTTPAuthorizationCredentials | None, 
 
 
 CurrentAccount = Annotated[Account, Depends(current_account)]
+
+
+def person_account(account: CurrentAccount) -> Account:
+    """Solo la persona con su sesión (no el bot): crear tokens, vincular perfiles y otras acciones de cuenta."""
+    if account.via_bot:
+        raise HTTPException(status.HTTP_403_FORBIDDEN, "Esto solo se puede hacer desde la web, con tu sesión")
+    return account
+
+
+PersonAccount = Annotated[Account, Depends(person_account)]

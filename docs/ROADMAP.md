@@ -233,7 +233,42 @@ La app de Streamlit sigue funcionando sobre la misma base durante toda la fase; 
 - [x] Postulación: marcador grande con su zona; requisitos y CV a la izquierda, envío y seguimiento a la derecha.
 - [x] Perfil: ficha con estadísticas y la trayectoria como historial de clubes.
 - [x] Mercado: tablas en el mismo estilo.
+- [x] Fusionado (PR #23) y desplegado (revisión 00006, 2026-11-16).
 - [x] Íconos dibujados en lugar de símbolos (✓ ✗ ↗ ×). En celular, las tablas se vuelven filas de dos líneas; sin desplazamiento horizontal en ninguna pantalla.
+
+### Fase 7: Postulación automática (dueño), plataforma por plataforma
+
+**LinkedIn (rama `fase7-linkedin`).** Decisiones del dueño (2026-11-16):
+- Automático total: postula a todo lo que pase los filtros, sin umbral de compatibilidad.
+- De 15 a 25 postulaciones al día.
+- Corre en su computador, con su IP de casa y su propio perfil de navegador.
+
+Lo que encontró la investigación (2026-11-16):
+- En septiembre de 2026 LinkedIn reemplazó la búsqueda clásica por una búsqueda con IA. Eso rompió los bots abiertos (GodsScion) y, con sesión iniciada, se ignoran los filtros `f_AL`, `f_WT` y `sortBy`.
+- La búsqueda pública (sin sesión) sí filtra por fecha (`f_TPR`) y por «Solicitud sencilla» (`f_AL`).
+- geoId verificados: Colombia `100876405`, Bogotá `102361989`, Cartagena `106336022`.
+- Los botones de la «Solicitud sencilla» (`#jobs-apply-button-id`, el modal, `data-test-form-element`) sobrevivieron a los rediseños.
+- LinkedIn tiene un tope diario de «Solicitud sencilla» que no publica (se reporta de unas 25 a 50).
+- Las condiciones de uso (§8.2) prohíben los bots: el riesgo es la cuenta, y el dueño lo asume.
+
+Entregas:
+- [x] **E1, token del bot:**
+  - Se crea y revoca desde Perfil y usa la cuenta sin contraseña.
+  - Se muestra una vez y solo se guarda su SHA-256; máximo 5 activos.
+  - El bot no puede crear tokens ni vincular perfiles. Migración 0009.
+- [ ] **E2, buscar y analizar en modo prueba:**
+  - Corre en el computador del dueño con Playwright y un perfil persistente propio (él inicia sesión una vez).
+  - Descubre vacantes en la búsqueda pública, abre cada una con la sesión, lee la descripción y la manda al motor por la API: vacante, compatibilidad y CV.
+  - No envía nada.
+- [ ] **E3, postular con «Solicitud sencilla»:**
+  - Sube el CV de esa vacante y responde con el motor de preguntas más un banco de respuestas del dueño (salario, disponibilidad…).
+  - Si una pregunta obligatoria no tiene respuesta, salta la vacante: nunca responde al azar.
+  - Desmarca «seguir empresa», envía y lo registra con el CV exacto.
+  - Tope diario y pausas de minutos entre envíos.
+  - Se detiene ante verificaciones (`/checkpoint`, captcha, tope de LinkedIn, 429/999) con 24 h de espera. Nunca resuelve captchas ni usa herramientas para ocultarse.
+- [ ] **E4:** programarlo para que corra solo y mostrar en la web lo que hizo el bot cada día.
+- [ ] Después: postulaciones externas (Greenhouse, Lever…) y los otros portales.
+- [ ] **(dueño)** Cargar su perfil (CV o PDF de LinkedIn), crear el token en la web e iniciar sesión en el navegador del bot.
 
 ### Fase 6 — Pruebas reales y retroalimentación
 - [ ] Uso diario por los dos usuarios (y amigos) con postulaciones reales
@@ -244,6 +279,8 @@ La app de Streamlit sigue funcionando sobre la misma base durante toda la fase; 
 
 | Fecha | Decisión | Por qué |
 |---|---|---|
+| 2026-11-16 | Bot de LinkedIn local con un perfil de navegador propio (Playwright persistente), no extensión ni CDP | LinkedIn busca extensiones instaladas y sus condiciones nombran los plugins; desde Chrome 136 el puerto de depuración exige otro perfil y expone la sesión a cualquier proceso local. En la IP de casa y con una sesión real, el riesgo para la cuenta es menor que desde un servidor |
+| 2026-11-16 | El bot se autentica con un token propio (solo su huella en la base), no con la sesión de Clerk | La sesión de Clerk dura minutos; un token largo, revocable y sin permisos de cuenta (no crea tokens ni vincula perfiles) permite correr sin la persona |
 | 2026-11-16 | Prioridad: búsqueda y postulación automática para el dueño; SaaS en pausa | La pareja ya consiguió empleo; el dueño necesita trabajo y quiere que la herramienta lo haga sola. Riesgo real a vigilar: los términos de LinkedIn prohíben bots (posible cierre de la cuenta) |
 | 2026-11-16 | Web clara con mundo «tabla de posiciones», fuentes servidas por la app | El tema oscuro clonado de GitHub se veía genérico y desperdiciaba la pantalla; una tabla ordenada es la forma natural de una bandeja por compatibilidad. Fuentes propias: sin dependencia de Google Fonts |
 | 2026-10-07 | Uso personal primero, SaaS después | Necesidad urgente de empleo; validar el producto con usuarios reales |
@@ -311,6 +348,5 @@ La app de Streamlit sigue funcionando sobre la misma base durante toda la fase; 
 
 ## Próximo paso
 
-1. Revisar y fusionar el rediseño de la web (rama `rediseno-web`) y desplegarlo.
-2. Automatización de LinkedIn: investigar opciones con el dueño (encontrar vacantes, «Solicitud sencilla», CV a medida por vacante, límites para no perder la cuenta) y planearla por entregas.
-3. Después, el resto de portales (Computrabajo, Magneto, elempleo) con el mismo esquema.
+1. Fase 7 LinkedIn: E2 (bot local en modo prueba) → E3 (postular) → E4 (programado). El dueño debe cargar su perfil.
+2. Después, el resto de portales (Computrabajo, Magneto, elempleo) con el mismo esquema.

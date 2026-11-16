@@ -2475,6 +2475,120 @@
     ]
    }
   },
+  "/bot-tokens": {
+   "get": {
+    "tags": [
+     "bot"
+    ],
+    "summary": "List Tokens",
+    "operationId": "list_tokens_bot_tokens_get",
+    "responses": {
+     "200": {
+      "description": "Successful Response",
+      "content": {
+       "application/json": {
+        "schema": {
+         "items": {
+          "$ref": "#/components/schemas/BotTokenOut"
+         },
+         "type": "array",
+         "title": "Response List Tokens Bot Tokens Get"
+        }
+       }
+      }
+     }
+    },
+    "security": [
+     {
+      "HTTPBearer": []
+     }
+    ]
+   },
+   "post": {
+    "tags": [
+     "bot"
+    ],
+    "summary": "Create Token",
+    "operationId": "create_token_bot_tokens_post",
+    "requestBody": {
+     "content": {
+      "application/json": {
+       "schema": {
+        "$ref": "#/components/schemas/BotTokenIn"
+       }
+      }
+     },
+     "required": true
+    },
+    "responses": {
+     "201": {
+      "description": "Successful Response",
+      "content": {
+       "application/json": {
+        "schema": {
+         "$ref": "#/components/schemas/BotTokenCreatedOut"
+        }
+       }
+      }
+     },
+     "422": {
+      "description": "Validation Error",
+      "content": {
+       "application/json": {
+        "schema": {
+         "$ref": "#/components/schemas/HTTPValidationError"
+        }
+       }
+      }
+     }
+    },
+    "security": [
+     {
+      "HTTPBearer": []
+     }
+    ]
+   }
+  },
+  "/bot-tokens/{token_id}": {
+   "delete": {
+    "tags": [
+     "bot"
+    ],
+    "summary": "Revoke Token",
+    "operationId": "revoke_token_bot_tokens__token_id__delete",
+    "security": [
+     {
+      "HTTPBearer": []
+     }
+    ],
+    "parameters": [
+     {
+      "name": "token_id",
+      "in": "path",
+      "required": true,
+      "schema": {
+       "type": "integer",
+       "title": "Token Id"
+      }
+     }
+    ],
+    "responses": {
+     "204": {
+      "description": "Successful Response"
+     },
+     "422": {
+      "description": "Validation Error",
+      "content": {
+       "application/json": {
+        "schema": {
+         "$ref": "#/components/schemas/HTTPValidationError"
+        }
+       }
+      }
+     }
+    }
+   }
+  },
   "/dev/token": {
    "post": {
     "tags": [
@@ -3206,6 +3320,111 @@
      "file"
     ],
     "title": "Body_import_cv_profile_import_post"
+   },
+   "BotTokenCreatedOut": {
+    "properties": {
+     "id": {
+      "type": "integer",
+      "title": "Id"
+     },
+     "label": {
+      "type": "string",
+      "title": "Label"
+     },
+     "hint": {
+      "type": "string",
+      "title": "Hint",
+      "description": "Últimos 4 caracteres del token"
+     },
+     "created_at": {
+      "type": "string",
+      "format": "date-time",
+      "title": "Created At"
+     },
+     "last_used_at": {
+      "anyOf": [
+       {
+        "type": "string",
+        "format": "date-time"
+       },
+       {
+        "type": "null"
+       }
+      ],
+      "title": "Last Used At"
+     },
+     "token": {
+      "type": "string",
+      "title": "Token",
+      "description": "El token completo: se muestra SOLO esta vez"
+     }
+    },
+    "type": "object",
+    "required": [
+     "id",
+     "label",
+     "hint",
+     "created_at",
+     "last_used_at",
+     "token"
+    ],
+    "title": "BotTokenCreatedOut"
+   },
+   "BotTokenIn": {
+    "properties": {
+     "label": {
+      "type": "string",
+      "maxLength": 60,
+      "title": "Label",
+      "description": "Para reconocerlo, p. ej. «Mi portátil»",
+      "default": ""
+     }
+    },
+    "type": "object",
+    "title": "BotTokenIn"
+   },
+   "BotTokenOut": {
+    "properties": {
+     "id": {
+      "type": "integer",
+      "title": "Id"
+     },
+     "label": {
+      "type": "string",
+      "title": "Label"
+     },
+     "hint": {
+      "type": "string",
+      "title": "Hint",
+      "description": "Últimos 4 caracteres del token"
+     },
+     "created_at": {
+      "type": "string",
+      "format": "date-time",
+      "title": "Created At"
+     },
+     "last_used_at": {
+      "anyOf": [
+       {
+        "type": "string",
+        "format": "date-time"
+       },
+       {
+        "type": "null"
+       }
+      ],
+      "title": "Last Used At"
+     }
+    },
+    "type": "object",
+    "required": [
+     "id",
+     "label",
+     "hint",
+     "created_at",
+     "last_used_at"
+    ],
+    "title": "BotTokenOut"
    },
    "CVBulletEdit": {
     "properties": {

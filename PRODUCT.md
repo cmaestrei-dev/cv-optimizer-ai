@@ -10,7 +10,7 @@ web
 
 ## Users
 
-Personas de **cualquier profesión** que buscan empleo activamente en Colombia (administrativos, operativos, ventas, tecnología…), muchas sin experiencia redactando CVs y que usan sobre todo el celular. Postulan en LinkedIn, Computrabajo, Magneto y elempleo y necesitan un CV distinto y honesto para cada vacante. Secundariamente (SaaS), consultores y coaches de carrera.
+Hoy, ante todo, el dueño, que busca empleo con urgencia y quiere que la herramienta postule por él. En general, personas de **cualquier profesión** que buscan empleo activamente en Colombia (administrativos, operativos, ventas, tecnología…), muchas sin experiencia redactando CVs y que usan sobre todo el celular. Postulan en LinkedIn, Computrabajo, Magneto y elempleo y necesitan un CV distinto y honesto para cada vacante. Secundariamente (SaaS), consultores y coaches de carrera.
 
 ## Product Purpose
 
@@ -18,7 +18,7 @@ CV Optimizer AI permite generar un CV ATS-optimizado único por cada vacante, cr
 
 ## Positioning
 
-Un CV a la medida de cada vacante, armado solo con lo que la persona de verdad hizo (nada se inventa), más todo lo que rodea la postulación: encontrar y ordenar vacantes, responder las preguntas del portal, escribir al reclutador y llevar el seguimiento con el CV exacto que se envió. Asistido, no automático: la persona revisa y envía.
+Un CV a la medida de cada vacante, armado solo con lo que la persona de verdad hizo (nada se inventa), más todo lo que rodea la postulación: encontrar y ordenar vacantes, responder las preguntas del portal, escribir al reclutador y llevar el seguimiento con el CV exacto que se envió. Desde 2026-11-16, para el dueño, también **automático**: un bot en su computador busca y postula en LinkedIn con un tope diario. La automatización no cambia la regla de oro: si un dato no está en el perfil, no se inventa (la vacante se salta).
 
 ## Brand Personality
 

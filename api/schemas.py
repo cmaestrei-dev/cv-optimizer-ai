@@ -497,3 +497,19 @@ class AcceptIn(BaseModel):
     accepted: list[AcceptedIn] = Field(min_length=1, max_length=30)
     answers: list[Annotated[str, StringConstraints(strip_whitespace=True, max_length=2000)]] = Field(
         min_length=1, max_length=12, description="Las respuestas de la entrevista: el servidor verifica contra ellas")
+
+
+class BotTokenIn(BaseModel):
+    label: str = Field(default="", max_length=60, description="Para reconocerlo, p. ej. «Mi portátil»")
+
+
+class BotTokenOut(BaseModel):
+    id: int
+    label: str
+    hint: str = Field(description="Últimos 4 caracteres del token")
+    created_at: datetime
+    last_used_at: datetime | None
+
+
+class BotTokenCreatedOut(BotTokenOut):
+    token: str = Field(description="El token completo: se muestra SOLO esta vez")

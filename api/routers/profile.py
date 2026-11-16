@@ -8,7 +8,7 @@ import time
 
 from fastapi import APIRouter, HTTPException, status
 
-from api.auth import CurrentAccount
+from api.auth import CurrentAccount, PersonAccount
 from api.schemas import (
     AchievementOut,
     AchievementsIn,
@@ -100,7 +100,7 @@ def me(account: CurrentAccount) -> MeOut:
 
 
 @router.post("/me/link-legacy", response_model=MeOut)
-def link_legacy(body: LinkLegacyIn, account: CurrentAccount) -> MeOut:
+def link_legacy(body: LinkLegacyIn, account: PersonAccount) -> MeOut:
     """Vincula el perfil que la persona usaba en la versión anterior (Streamlit), con su contraseña."""
     attempt = _take_link_attempt(account.subject, service.legacy_key(body.username))
     try:
