@@ -211,7 +211,7 @@ const MODES = [
 export function AssistPanel({ experience }: { experience: S["ExperienceOut"] }) {
   const [mode, setMode] = useState<(typeof MODES)[number]["key"]>("text");
   return (
-    <div className="stack" style={{ background: "var(--canvas)", borderRadius: "var(--radius)", padding: 12 }}>
+    <div className="stack" style={{ background: "var(--paper)", border: "1px solid var(--rule)", borderRadius: "var(--radius)", padding: 14 }}>
       <div className="tabs" role="tablist">
         {MODES.map((m) => (
           <button key={m.key} role="tab" aria-selected={mode === m.key} onClick={() => setMode(m.key)}>{m.label}</button>

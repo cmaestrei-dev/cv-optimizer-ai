@@ -25,9 +25,11 @@ export function ContactCard({ contact }: { contact: S["ContactOut"] }) {
   }
 
   return (
-    <form className="card stack" onSubmit={submit}>
-      <h2>Datos de contacto</h2>
-      <p className="muted">Van en el encabezado de tu CV.</p>
+    <form className="panel stack" onSubmit={submit}>
+      <div>
+        <h2 className="panel-title" style={{ marginBottom: 4 }}>Datos de contacto</h2>
+        <small>Van en el encabezado de tu CV.</small>
+      </div>
       <div className="grid-2">
         <label>Nombre completo<input type="text" value={form.full_name} onChange={set("full_name")} autoComplete="name" /></label>
         <label>Correo<input type="email" value={form.email} onChange={set("email")} autoComplete="email" /></label>

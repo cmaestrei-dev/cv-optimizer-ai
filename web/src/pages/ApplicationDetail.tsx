@@ -3,8 +3,8 @@ import { useState } from "react";
 import { useNavigate, useParams } from "react-router";
 
 import { del, download, get, post, put, safeHref, type S } from "../api/client";
-import { CopyButton, ErrorNotice, Level, Notice, ScoreBar, Spinner } from "../components/ui";
-import { date, number, PLATFORMS, STATUS_LABELS, today } from "../lib/format";
+import { CopyButton, ErrorNotice, ExternalLink, Level, Notice, Score, Spinner, ZONE_LABEL, zoneOf } from "../components/ui";
+import { date, number, pillTone, PLATFORMS, STATUS_LABELS, today } from "../lib/format";
 import { useJob } from "../lib/useJob";
 
 type Detail = S["ApplicationOut"];
@@ -64,8 +64,8 @@ function Requirement({ id, req }: { id: number; req: S["RequirementOut"] }) {
     <div className="req">
       <Level level={req.level} />
       <div>
-        <b>{req.text}</b> <small style={{ display: "inline" }}>· {req.kind}</small>
-        {req.evidence.slice(0, 2).map((e) => <small key={e.ref}>↳ {e.label}</small>)}
+        <b>{req.text}</b><span className="kind">{req.kind}</span>
+        {req.evidence.slice(0, 2).map((e) => <small key={e.ref} className="ev">{e.label}</small>)}
         {!req.evidence.length && req.note && <small>{req.note}</small>}
         {req.level !== "cubre" && !open && <button className="link" onClick={() => setOpen(true)}>Sí lo he hecho: contarlo</button>}
         {open && <GapForm id={id} requirement={req} />}
@@ -86,8 +86,8 @@ function AnalysisSection({ id }: { id: number }) {
   if (analysis.error) return <ErrorNotice error={analysis.error} />;
   const { match, stale } = analysis.data;
   return (
-    <section className="card stack">
-      <h2>Compatibilidad</h2>
+    <section className="panel stack">
+      <h2 className="panel-title" style={{ margin: 0 }}>Requisitos y tu evidencia</h2>
       {(stale || !match) && (
         <Notice kind="warn">
           <p>{match ? "Tu perfil cambió desde el análisis." : "Aún no se calcula con tu perfil."} Actualízala antes de generar el CV.</p>
@@ -97,7 +97,6 @@ function AnalysisSection({ id }: { id: number }) {
       <ErrorNotice error={refresh.error} />
       {match && (
         <>
-          <ScoreBar score={match.score} />
           <small>
             Tu experiencia: {number(match.experience_years)} años{match.required_years ? ` (piden ${number(match.required_years)})` : ""}
             {match.meets_years === false && " · No alcanzas los años pedidos; igual puedes postular si cumples lo demás."}
@@ -157,8 +156,8 @@ function CVSection({ detail }: { detail: Detail }) {
   const versions = [...detail.cvs].reverse();
 
   return (
-    <section className="card stack">
-      <h2>Tu CV para esta vacante</h2>
+    <section className="panel stack">
+      <h2 className="panel-title" style={{ margin: 0 }}>Tu CV para esta vacante</h2>
       <label>Enfoque (opcional)<input type="text" value={focus} onChange={(e) => setFocus(e.target.value)} placeholder="Ej.: destacar facturación y atención al cliente" /></label>
       <div>
         <button className="primary" disabled={generation.running} onClick={async () => {
@@ -177,7 +176,7 @@ function CVSection({ detail }: { detail: Detail }) {
         </Notice>
       )}
       {versions.map((cv, i) => (
-        <div key={cv.id} className="stack" style={{ borderTop: "1px solid var(--border)", paddingTop: 10 }}>
+        <div key={cv.id} className="stack" style={{ borderTop: "1px solid var(--rule)", paddingTop: 10 }}>
           <div className="row spread">
             <span><b>{i === 0 ? "Más reciente" : `Versión ${versions.length - i}`}</b> <small style={{ display: "inline" }}>· {date(cv.created_at)}{cv.sent_at && " · enviado"}{!cv.intact && " · no coincide con su huella"}</small></span>
             <div className="row">
@@ -199,9 +198,9 @@ function ScreeningSection({ id }: { id: number }) {
   const [questions, setQuestions] = useState("");
   const answer = useMutation({ mutationFn: () => post<S["ScreeningAnswerOut"][]>(`/applications/${id}/screening`, { questions: questions.split("\n").map((q) => q.trim()).filter(Boolean) }) });
   return (
-    <details className="card">
-      <summary><b>Preguntas del formulario del portal</b></summary>
-      <div className="stack" style={{ marginTop: 12 }}>
+    <details className="panel">
+      <summary>Preguntas del formulario del portal</summary>
+      <div className="stack">
         <p className="muted">Pega las preguntas del portal, una por línea. Respondemos con tus datos y marcamos lo que solo tú sabes.</p>
         <label>Preguntas (una por línea)
           <textarea rows={4} value={questions} onChange={(e) => setQuestions(e.target.value)} placeholder={"¿Cuántos años de experiencia tiene en facturación?\n¿Cuál es su aspiración salarial?"} />
@@ -223,9 +222,9 @@ function ScreeningSection({ id }: { id: number }) {
 function CoverSection({ id }: { id: number }) {
   const cover = useMutation({ mutationFn: () => post<S["CoverOut"]>(`/applications/${id}/cover`) });
   return (
-    <details className="card">
-      <summary><b>Mensaje para el reclutador</b></summary>
-      <div className="stack" style={{ marginTop: 12 }}>
+    <details className="panel">
+      <summary>Mensaje para el reclutador</summary>
+      <div className="stack">
         <p className="muted">Para el campo «carta de presentación», un correo o un mensaje por LinkedIn. Solo usa datos de tu perfil.</p>
         <div><button disabled={cover.isPending} onClick={() => cover.mutate()}>{cover.isPending ? "Escribiendo…" : cover.data ? "Escribir otro" : "Escribir mensaje"}</button></div>
         <ErrorNotice error={cover.error} />
@@ -258,15 +257,15 @@ function SendSection({ detail }: { detail: Detail }) {
   const chosen = detail.cvs.find((c) => c.id === selected);
   const versionLabel = (index: number) => (index === detail.cvs.length - 1 ? "Más reciente" : `Versión ${index + 1}`);
   return (
-    <section className="card stack">
-      <h2>Antes de enviar en el portal</h2>
-      <ol>
+    <section className="panel stack">
+      <h2 className="panel-title" style={{ margin: 0 }}>Antes de enviar en el portal</h2>
+      <ol className="steps">
         <li>Sube <b>{chosen?.filename ?? "el CV generado para esta vacante"}</b> (o su versión Word).</li>
         <li>Responde las preguntas del formulario (sección de arriba).</li>
         <li>Si el portal lo permite, pega el mensaje para el reclutador.</li>
         <li>Vuelve aquí y marca <b>Ya la envié</b>: queda registrado qué CV exacto enviaste.</li>
       </ol>
-      {safeHref(detail.url) && <div><a className="btn small" href={safeHref(detail.url)} target="_blank" rel="noopener noreferrer">Abrir la vacante para postular ↗</a></div>}
+      {safeHref(detail.url) && <div><ExternalLink href={safeHref(detail.url)}>Abrir la vacante para postular</ExternalLink></div>}
       {detail.cvs.length > 0 ? (
         <div className="grid-2">
           <label>CV que enviaste
@@ -310,8 +309,8 @@ function TrackingSection({ detail }: { detail: Detail }) {
   const remove = useMutation({ mutationFn: () => del(`/applications/${detail.id}`), onSuccess: () => { invalidate(); navigate("/postulaciones"); } });
 
   return (
-    <section className="card stack">
-      <h2>Seguimiento</h2>
+    <section className="panel stack">
+      <h2 className="panel-title" style={{ margin: 0 }}>Seguimiento</h2>
       <div className="grid-2">
         <label>Estado
           <select value={status} onChange={(e) => setStatus(e.target.value)}>
@@ -330,8 +329,8 @@ function TrackingSection({ detail }: { detail: Detail }) {
         <button className="small" disabled={!follow.on || followUp.isPending} onClick={() => followUp.mutate(follow.on)}>Guardar recordatorio</button>
         {detail.next_action_on && <button className="small" onClick={() => { setFollow({ on: "", what: "" }); followUp.mutate(null); }}>Quitar recordatorio</button>}
       </div>
-      <details>
-        <summary className="muted">Historial ({detail.events.length})</summary>
+      <details className="fold">
+        <summary>Historial ({detail.events.length})</summary>
         <ul>{[...detail.events].reverse().map((e) => (
           <li key={e.id}><small>{date(e.created_at)} · {e.kind === "estado" ? `${STATUS_LABELS[e.from_status] ?? e.from_status} → ${STATUS_LABELS[e.to_status] ?? e.to_status}` : e.kind}{e.detail && ` · ${e.detail}`}</small></li>
         ))}</ul>
@@ -354,26 +353,43 @@ export function ApplicationDetail() {
   if (detail.isPending) return <Spinner />;
   if (detail.error) return <ErrorNotice error={detail.error} />;
   const d = detail.data;
+  const zone = zoneOf(d.match_score);
   return (
     <>
-      <div className="page-head">
-        <small className="status activa">{d.status_label}</small>
-        <h1>{d.role}</h1>
-        <p>{[d.company, d.platform, d.applied_on && `enviada el ${date(d.applied_on)}`].filter(Boolean).join(" · ")}
-          {safeHref(d.url) && <> · <a href={safeHref(d.url)} target="_blank" rel="noopener noreferrer">ver vacante ↗</a></>}</p>
+      <div className="match-head">
+        <div>
+          <h1>{d.role}</h1>
+          <p>
+            <span className={`pill ${pillTone(d.status)}`} style={{ marginRight: 10 }}>{d.status_label}</span>
+            {[d.company, d.platform, d.applied_on && `enviada el ${date(d.applied_on)}`].filter(Boolean).join(" · ")}
+            {safeHref(d.url) && <> · <ExternalLink className="ext" href={safeHref(d.url)}>ver vacante</ExternalLink></>}
+          </p>
+        </div>
+        <div className="match-score">
+          <small>Compatibilidad</small>
+          <Score score={d.match_score} size="lg" />
+          {d.match_score !== null && <div className={`zone-name ${zone}`}>{ZONE_LABEL[zone]}</div>}
+        </div>
       </div>
       {d.vacancy ? (
-        <>
-          <AnalysisSection id={d.id} />
-          <CVSection detail={d} />
-          <ScreeningSection id={d.id} />
-          <CoverSection id={d.id} />
-          <SendSection detail={d} />
-        </>
+        <div className="detail-grid">
+          <div>
+            <AnalysisSection id={d.id} />
+            <CVSection detail={d} />
+          </div>
+          <div>
+            <SendSection detail={d} />
+            <ScreeningSection id={d.id} />
+            <CoverSection id={d.id} />
+            <TrackingSection key={`${d.status}-${d.next_action_on}`} detail={d} />
+          </div>
+        </div>
       ) : (
-        <Notice kind="info"><p>Esta postulación se registró sin el texto de la vacante: aquí solo llevas su seguimiento.</p></Notice>
+        <div className="detail-grid">
+          <div><Notice kind="info"><p>Esta postulación se registró sin el texto de la vacante: aquí solo llevas su seguimiento.</p></Notice></div>
+          <div><TrackingSection key={`${d.status}-${d.next_action_on}`} detail={d} /></div>
+        </div>
       )}
-      <TrackingSection key={`${d.status}-${d.next_action_on}`} detail={d} />
     </>
   );
 }

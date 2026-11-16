@@ -3,14 +3,46 @@ import { useState, type FormEvent } from "react";
 import { Link, useNavigate } from "react-router";
 
 import { get, post, type S } from "../api/client";
-import { EmptyState, ErrorNotice, Spinner } from "../components/ui";
-import { date, PLATFORMS } from "../lib/format";
+import { PlusIcon } from "../components/icons";
+import { EmptyState, ErrorNotice, Score, Spinner } from "../components/ui";
+import { date, pillTone, PLATFORMS, shortDate } from "../lib/format";
+
+type Item = S["ApplicationSummaryOut"];
 
 const VIEWS = [
   { key: "activas", label: "Activas" },
   { key: "cerradas", label: "Cerradas" },
   { key: "todas", label: "Todas" },
 ] as const;
+
+const OUTCOME = {
+  go: ["A", "Avanzó"],
+  wait: ["E", "Esperando respuesta"],
+  out: ["R", "Rechazada o retirada"],
+} as const;
+
+/** Racha: las últimas 5 enviadas, de la más antigua a la más reciente. */
+function FormGuide({ items }: { items: Item[] }) {
+  const sent = items
+    .filter((a) => a.applied_on && ["postulada", "en_revision", "entrevista", "oferta", "rechazada", "retirada"].includes(a.status))
+    .sort((a, b) => (a.applied_on! < b.applied_on! ? 1 : -1))
+    .slice(0, 5)
+    .reverse();
+  if (!sent.length) return <span className="faint" style={{ fontSize: "0.9rem", fontWeight: 400 }}>Sin envíos</span>;
+  return (
+    <span className="form-guide" aria-label="Últimos resultados, de la más antigua a la más reciente">
+      {sent.map((a) => {
+        const tone = pillTone(a.status);
+        const [letter, text] = tone === "prep" ? OUTCOME.wait : OUTCOME[tone];
+        return (
+          <span key={a.id} className={tone} title={`${a.role}: ${text}`}>
+            {letter}<span className="sr-only"> {a.role}: {text}</span>
+          </span>
+        );
+      })}
+    </span>
+  );
+}
 
 function NewApplication({ onDone }: { onDone: () => void }) {
   const queryClient = useQueryClient();
@@ -22,8 +54,8 @@ function NewApplication({ onDone }: { onDone: () => void }) {
   });
   const submit = (e: FormEvent) => { e.preventDefault(); create.mutate(); };
   return (
-    <form className="card stack" onSubmit={submit}>
-      <h3>Registrar una postulación hecha por fuera</h3>
+    <form className="panel stack" onSubmit={submit} style={{ marginBottom: 20 }}>
+      <h2 className="panel-title" style={{ margin: 0 }}>Registrar una postulación hecha por fuera</h2>
       <div className="grid-2">
         <label>Cargo<input type="text" required value={form.role} onChange={(e) => setForm({ ...form, role: e.target.value })} /></label>
         <label>Empresa<input type="text" value={form.company} onChange={(e) => setForm({ ...form, company: e.target.value })} /></label>
@@ -40,51 +72,87 @@ export function Applications() {
   const [view, setView] = useState<(typeof VIEWS)[number]["key"]>("activas");
   const [adding, setAdding] = useState(false);
   const summary = useQuery({ queryKey: ["applications", "summary"], queryFn: () => get<S["SummaryOut"]>("/applications/summary") });
-  const list = useQuery({ queryKey: ["applications", view], queryFn: () => get<S["ApplicationSummaryOut"][]>(`/applications?view=${view}`) });
+  const all = useQuery({ queryKey: ["applications", "todas"], queryFn: () => get<Item[]>("/applications?view=todas") });
+  const list = useQuery({ queryKey: ["applications", view], queryFn: () => get<Item[]>(`/applications?view=${view}`) });
   const s = summary.data;
   return (
     <>
       <div className="page-head">
-        <h1>Mis postulaciones</h1>
-        <p>Cada vacante a la que aplicas, con el CV exacto que enviaste, su estado y lo que pasó después.</p>
-      </div>
-      {s && (
-        <div className="metrics">
-          <div className="metric"><b>{s.total}</b><span>Postulaciones</span></div>
-          <div className="metric"><b>{s.sent}</b><span>Enviadas</span></div>
-          <div className="metric"><b>{(s.by_status.en_revision ?? 0) + (s.by_status.entrevista ?? 0)}</b><span>En proceso</span></div>
-          <div className="metric"><b>{s.by_status.oferta ?? 0}</b><span>Ofertas</span></div>
-          <div className="metric"><b>{s.response_rate === null ? "—" : `${Math.round(s.response_rate * 100)}%`}</b><span>Respuesta</span></div>
+        <div>
+          <h1>Postulaciones</h1>
+          <p>Cada vacante a la que aplicas, con el CV exacto que enviaste, su estado y lo que pasó después.</p>
         </div>
-      )}
+        {!adding && <button className="small" onClick={() => setAdding(true)}><PlusIcon />Registrar una hecha por fuera</button>}
+      </div>
+
       {s && s.due.length > 0 && (
-        <div className="notice warn">
-          <p><b>Para hacer hoy</b></p>
-          <ul>{s.due.map((a) => <li key={a.id}><Link to={`/postulaciones/${a.id}`}>{a.role}{a.company && ` — ${a.company}`}</Link>: {a.next_action || "hacer seguimiento"}</li>)}</ul>
+        <div className="next">
+          <b className="tag">Para hacer hoy</b>
+          <ul>
+            {s.due.map((a) => (
+              <li key={a.id}><Link to={`/postulaciones/${a.id}`}>{a.role}{a.company && ` en ${a.company}`}</Link>: {a.next_action || "hacer seguimiento"}</li>
+            ))}
+          </ul>
         </div>
       )}
-      <div className="tabs" role="tablist">
-        {VIEWS.map((v) => <button key={v.key} role="tab" aria-selected={view === v.key} onClick={() => setView(v.key)}>{v.label}</button>)}
-      </div>
-      {!adding && (
-        <div style={{ marginBottom: 16 }}>
-          <button className="small" onClick={() => setAdding(true)}>Registrar una postulación hecha por fuera</button>
+
+      {s && (
+        <div className="campaign">
+          <table>
+            <thead>
+              <tr>
+                <th scope="col">Postulaciones</th><th scope="col">Enviadas</th><th scope="col">En proceso</th>
+                <th scope="col">Ofertas</th><th scope="col">Respuesta</th><th scope="col">Últimos resultados</th>
+              </tr>
+            </thead>
+            <tbody>
+              <tr>
+                <td data-label="Total">{s.total}</td>
+                <td data-label="Enviadas">{s.sent}</td>
+                <td data-label="En proceso">{(s.by_status.en_revision ?? 0) + (s.by_status.entrevista ?? 0)}</td>
+                <td data-label="Ofertas">{s.by_status.oferta ?? 0}</td>
+                <td data-label="Respuesta">{s.response_rate === null ? "—" : `${Math.round(s.response_rate * 100)}%`}</td>
+                <td data-label="Últimos resultados" className="wide">
+                  {all.data ? <FormGuide items={all.data} /> : null}
+                  <span className="form-key">A avanzó · E esperando · R rechazada</span>
+                </td>
+              </tr>
+            </tbody>
+          </table>
         </div>
       )}
+
       {adding && <NewApplication onDone={() => setAdding(false)} />}
-      {list.isPending && <Spinner />}
-      <ErrorNotice error={list.error ?? summary.error} />
-      {list.data?.length === 0 && <EmptyState title="Nada aquí todavía">Prepara una vacante desde la <Link to="/bandeja">Bandeja</Link>.</EmptyState>}
-      {list.data?.map((a) => (
-        <Link key={a.id} to={`/postulaciones/${a.id}`} className="list-item">
-          <div className="row spread">
-            <h3>{a.role}</h3>
-            <span className="status">{a.status_label}</span>
+
+      <section className="section">
+        <div className="section-head">
+          <div className="tabs" role="tablist" aria-label="Qué postulaciones ver">
+            {VIEWS.map((v) => <button key={v.key} role="tab" aria-selected={view === v.key} onClick={() => setView(v.key)}>{v.label}</button>)}
           </div>
-          <small>{[a.company, a.platform, a.applied_on ? `enviada el ${date(a.applied_on)}` : `guardada el ${date(a.created_at)}`, a.match_score !== null && `${a.match_score}/100`].filter(Boolean).join(" · ")}</small>
-          {a.next_action_on && <small className="faint">Recordatorio {date(a.next_action_on)}: {a.next_action || "seguimiento"}</small>}
-        </Link>
-      ))}
+          {list.data && <small>{list.data.length} {list.data.length === 1 ? "postulación" : "postulaciones"}</small>}
+        </div>
+        {list.isPending && <Spinner />}
+        <ErrorNotice error={list.error ?? summary.error} />
+        {list.data?.length === 0 && <EmptyState title="Nada aquí todavía">Prepara una vacante desde la <Link to="/bandeja">Bandeja</Link>.</EmptyState>}
+        {!!list.data?.length && (
+          <div className="fixtures">
+            {list.data.map((a) => (
+              <Link key={a.id} to={`/postulaciones/${a.id}`} className="fixture">
+                <span className="date">{a.applied_on ? <>Enviada<br />{shortDate(a.applied_on)}</> : <>Guardada<br />{shortDate(a.created_at)}</>}</span>
+                <div>
+                  <h3>{a.role}</h3>
+                  <span className="meta">{[a.company, a.platform].filter(Boolean).join(" · ")}</span>
+                </div>
+                <span className="side">
+                  <Score score={a.match_score} />
+                  <span className={`pill ${pillTone(a.status)}`}>{a.status_label}</span>
+                </span>
+                {a.next_action_on && <span className="remind">Recordatorio {date(a.next_action_on)}: {a.next_action || "seguimiento"}</span>}
+              </Link>
+            ))}
+          </div>
+        )}
+      </section>
     </>
   );
 }

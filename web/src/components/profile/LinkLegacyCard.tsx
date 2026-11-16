@@ -14,9 +14,9 @@ export function LinkLegacyCard() {
   });
   const submit = (e: FormEvent) => { e.preventDefault(); link.mutate(); };
   return (
-    <details className="card">
-      <summary><b>¿Ya usabas CV Optimizer?</b> Trae tu perfil de la versión anterior</summary>
-      <form className="stack" style={{ marginTop: 12 }} onSubmit={submit}>
+    <details className="panel" style={{ marginBottom: 20 }}>
+      <summary>¿Ya usabas CV Optimizer? Trae tu perfil anterior</summary>
+      <form className="stack" onSubmit={submit}>
         <p className="muted">
           Usa el nombre de perfil y la contraseña con que entrabas antes. Tus experiencias, CV y postulaciones pasan
           a esta cuenta. Si tu perfil no tenía contraseña, ponle una en la versión anterior («Editar perfil») y vuelve aquí.

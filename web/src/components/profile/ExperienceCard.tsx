@@ -70,44 +70,46 @@ export function ExperienceCard({ experience }: { experience: Experience }) {
 
   if (mode === "edit") {
     return (
-      <div className="card">
+      <div className="career-row" style={{ display: "block" }}>
         <ExperienceForm initial={experience} onDone={(p) => { save(p); setMode("view"); }} onCancel={() => setMode("view")} />
       </div>
     );
   }
 
+  const total = experience.achievements.length;
   return (
-    <article className="card stack">
-      <div className="row spread">
-        <div>
-          <h3>{experience.role}</h3>
-          <small>{[experience.company, experience.period_text, experience.modality].filter(Boolean).join(" · ")}</small>
-        </div>
-        <small className="faint">{withNumbers} de {experience.achievements.length} con cifras</small>
+    <article className="career-row">
+      <div className="career-when">
+        {experience.period_text || "Sin periodo"}
+        <small>{[experience.modality, experience.country].filter(Boolean).join(" · ")}</small>
       </div>
-      {experience.achievements.length ? (
-        <ul>{experience.achievements.map((a) => <li key={a.id}>{a.text}</li>)}</ul>
-      ) : (
-        <p className="muted">Sin funciones ni logros todavía. Usa «Completar con IA»: es lo que más mejora tu CV.</p>
-      )}
-      <ErrorNotice error={error} />
-      <div className="row">
-        <button className={mode === "assist" ? "small" : "small primary"} onClick={() => setMode(mode === "assist" ? "view" : "assist")}>
-          {mode === "assist" ? "Cerrar" : "Completar con IA"}
-        </button>
-        <button className="small" onClick={() => setMode("edit")}>Editar</button>
-        {confirming ? (
-          <>
-            <button className="small danger" onClick={async () => {
-              try { save(await del<S["ProfileOut"]>(`/experiences/${experience.id}`)); } catch (e) { setError(e); }
-            }}>Sí, eliminar</button>
-            <button className="small" onClick={() => setConfirming(false)}>No</button>
-          </>
+      <div className="career-body">
+        <h3>{experience.role}</h3>
+        <div className="meta">{experience.company}{total > 0 && <> · <span className={withNumbers === total ? "lvl cubre" : withNumbers / total < 0.5 ? "lvl parcial" : ""}>{withNumbers} de {total} logros con cifras</span></>}</div>
+        {total ? (
+          <ul>{experience.achievements.map((a) => <li key={a.id}>{a.text}</li>)}</ul>
         ) : (
-          <button className="small danger" onClick={() => setConfirming(true)}>Eliminar</button>
+          <p className="muted" style={{ marginTop: 10 }}>Sin funciones ni logros todavía. Usa «Completar con IA»: es lo que más mejora tu CV.</p>
         )}
+        <ErrorNotice error={error} />
+        <div className="row acts-row">
+          <button className={mode === "assist" ? "small" : "small primary"} onClick={() => setMode(mode === "assist" ? "view" : "assist")}>
+            {mode === "assist" ? "Cerrar" : "Completar con IA"}
+          </button>
+          <button className="small" onClick={() => setMode("edit")}>Editar</button>
+          {confirming ? (
+            <>
+              <button className="small danger" onClick={async () => {
+                try { save(await del<S["ProfileOut"]>(`/experiences/${experience.id}`)); } catch (e) { setError(e); }
+              }}>Sí, eliminar</button>
+              <button className="small" onClick={() => setConfirming(false)}>No</button>
+            </>
+          ) : (
+            <button className="small ghost" onClick={() => setConfirming(true)}>Eliminar</button>
+          )}
+        </div>
+        {mode === "assist" && <div style={{ marginTop: 14 }}><AssistPanel experience={experience} /></div>}
       </div>
-      {mode === "assist" && <AssistPanel experience={experience} />}
     </article>
   );
 }

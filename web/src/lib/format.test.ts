@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 
-import { ago, date, freshness, number } from "./format";
+import { ago, date, freshness, number, pillTone, shortDate } from "./format";
 
 describe("date", () => {
   it("una fecha y hora sin zona (SQLite) es UTC: 23:30 UTC sigue siendo el mismo día en Bogotá", () => {
@@ -41,5 +41,27 @@ describe("freshness", () => {
     expect(freshness(null, "2026-10-10", "2026-10-08")).toEqual({ text: "cierra en 2 días", stale: true, closed: false });
     expect(freshness("2026-09-01", "2026-10-07", "2026-10-08")?.closed).toBe(true);
     expect(freshness(null, null, "2026-10-08")).toBeNull();
+  });
+});
+
+describe("shortDate", () => {
+  const now = new Date("2026-11-16T12:00:00");
+  it("omite el año si es el actual", () => {
+    expect(shortDate("2026-11-07", now)).toBe("7 nov");
+  });
+  it("muestra el año si es otro", () => {
+    expect(shortDate("2025-03-02", now)).toBe("2 mar 2025");
+  });
+  it("vacío sin fecha", () => {
+    expect(shortDate(null, now)).toBe("");
+  });
+});
+
+describe("pillTone", () => {
+  it("agrupa los estados por etapa", () => {
+    expect(pillTone("entrevista")).toBe("go");
+    expect(pillTone("postulada")).toBe("wait");
+    expect(pillTone("rechazada")).toBe("out");
+    expect(pillTone("cv_generado")).toBe("prep");
   });
 });

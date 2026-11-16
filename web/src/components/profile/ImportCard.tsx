@@ -3,6 +3,7 @@ import { useState } from "react";
 
 import { post, type S } from "../../api/client";
 import { useJob } from "../../lib/useJob";
+import { UploadIcon } from "../icons";
 import { ErrorNotice, Notice, Spinner } from "../ui";
 
 type ImportResult = {
@@ -67,9 +68,9 @@ export function ImportCard({ prominent = false, onSaved }: { prominent?: boolean
   }
 
   return (
-    <section className="card stack">
+    <section className="panel stack" style={prominent ? { marginBottom: 20 } : undefined}>
       <div>
-        <h2>{prominent ? "Empieza con tu CV" : "Importar CV o LinkedIn"}</h2>
+        <h2 className="panel-title" style={{ marginBottom: 6 }}>{prominent ? "Empieza con tu CV" : "Importar CV o LinkedIn"}</h2>
         <p className="muted">
           Sube tu CV en PDF o el PDF de tu perfil de LinkedIn (en LinkedIn: «Más» → «Guardar en PDF»). La IA solo
           copia lo que dice; lo que no esté en el PDF se descarta y tú eliges qué guardar.
@@ -77,9 +78,10 @@ export function ImportCard({ prominent = false, onSaved }: { prominent?: boolean
       </div>
       {saved && <Notice kind="ok"><p>{saved} Ahora completa tus logros: mientras más cifras, mejor el CV.</p></Notice>}
       {!result && (
-        <label>
-          Archivo PDF
+        <label className="file-btn">
+          <UploadIcon />Elegir PDF
           <input
+            className="sr-only"
             type="file"
             accept="application/pdf,.pdf"
             disabled={reading.running}
@@ -136,8 +138,8 @@ export function ImportCard({ prominent = false, onSaved }: { prominent?: boolean
             </label>
           ))}
           {result.discarded.length > 0 && (
-            <details>
-              <summary className="muted">No se importó ({result.discarded.length}): no aparece en el PDF</summary>
+            <details className="fold">
+              <summary>No se importó ({result.discarded.length}): no aparece en el PDF</summary>
               <ul>{result.discarded.map((d) => <li key={d}><small>{d}</small></li>)}</ul>
             </details>
           )}
