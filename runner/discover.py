@@ -40,7 +40,8 @@ class Card:
 
 
 def search_url(search: Search, start: int = 0) -> str:
-    params = {"keywords": search.keywords, "geoId": search.geo_id, "f_TPR": f"r{search.days * 86400}", "start": str(start)}
+    where = {"geoId": search.geo_id} if search.geo_id else {"location": search.place.strip()}
+    params = {"keywords": search.keywords, **where, "f_TPR": f"r{search.days * 86400}", "start": str(start)}
     if search.easy_apply:
         params["f_AL"] = "true"
     return f"{BASE}/seeMoreJobPostings/search?{urllib.parse.urlencode(params)}"

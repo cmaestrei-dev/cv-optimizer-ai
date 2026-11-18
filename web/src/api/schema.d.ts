@@ -1393,6 +1393,16 @@ export interface components {
              * @default
              */
             github_url: string;
+            /**
+             * Headline
+             * @default
+             */
+            headline: string;
+            /**
+             * City
+             * @default
+             */
+            city: string;
         };
         /**
          * ContactOut
@@ -1409,6 +1419,16 @@ export interface components {
             linkedin_url: string;
             /** Github Url */
             github_url: string;
+            /**
+             * Headline
+             * @default
+             */
+            headline: string;
+            /**
+             * City
+             * @default
+             */
+            city: string;
         };
         /** CoverOut */
         CoverOut: {

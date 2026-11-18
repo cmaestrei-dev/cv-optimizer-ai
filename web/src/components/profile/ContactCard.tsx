@@ -32,6 +32,10 @@ export function ContactCard({ contact }: { contact: S["ContactOut"] }) {
       </div>
       <div className="grid-2">
         <label>Nombre completo<input type="text" value={form.full_name} onChange={set("full_name")} autoComplete="name" /></label>
+        <label>Titular (bajo tu nombre)<input type="text" value={form.headline ?? ""} onChange={set("headline")} maxLength={160}
+          placeholder="Ej.: Desarrollador Full Stack | FastAPI | React" /></label>
+        <label>Ciudad<input type="text" value={form.city ?? ""} onChange={set("city")} maxLength={80} autoComplete="address-level2"
+          placeholder="Ej.: Cartagena, Colombia" /></label>
         <label>Correo<input type="email" value={form.email} onChange={set("email")} autoComplete="email" /></label>
         <label>Teléfono<input type="tel" value={form.phone} onChange={set("phone")} autoComplete="tel" /></label>
         <label>LinkedIn<input type="text" inputMode="url" value={form.linkedin_url} onChange={set("linkedin_url")} placeholder="www.linkedin.com/in/tu-perfil" /></label>

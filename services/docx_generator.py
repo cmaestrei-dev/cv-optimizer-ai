@@ -44,6 +44,9 @@ def generate_docx(cv_markdown: str, profile: UserProfile) -> bytes:
         run = name.add_run(strip_emojis(profile.full_name.upper()))
         run.bold = True
         run.font.size = Pt(16)
+    if profile.headline:
+        headline = doc.add_paragraph(strip_emojis(profile.headline))
+        headline.alignment = WD_ALIGN_PARAGRAPH.CENTER
     if profile.contact_line_text:
         contact = doc.add_paragraph(strip_emojis(profile.contact_line_text))
         contact.alignment = WD_ALIGN_PARAGRAPH.CENTER

@@ -10,6 +10,7 @@ from dataclasses import asdict, dataclass, field
 from weasyprint import HTML
 
 from config import PDF_PAGE_SIZE
+from core.engine import skill_groups as tech
 from core.engine.selection import Selection
 from core.engine.writing import WrittenCV
 from models import UserProfile
@@ -32,6 +33,7 @@ CATEGORY_LABELS_EN = {
     "Bases de Datos": "Databases",
     "Herramientas / DevOps": "Tools & DevOps",
     "Metodologías / Soft Skills": "Methodologies & soft skills",
+    **tech.LABELS_EN,
 }
 
 
@@ -122,7 +124,7 @@ def build_document(selection: Selection, written: WrittenCV, language: str) -> C
             )
             for a in sel.achievements
         ]
-        location = " | ".join(p for p in (exp.country, exp.modality) if p)
+        location = " · ".join(p for p in (exp.country, exp.modality) if p)
         experiences.append(CVExperience(exp.role, exp.company, exp.period_text, location, bullets))
 
     education = []
@@ -135,26 +137,42 @@ def build_document(selection: Selection, written: WrittenCV, language: str) -> C
     return CVDocument(language, written.summary, experiences, education, skill_groups)
 
 
+def _entry(left: str, right: str, below: str = "") -> str:
+    """Una entrada: lo principal a la izquierda y la fecha a la derecha (mismo orden en el texto del PDF)."""
+    row = f'<div class="fila"><span class="cargo">{left}</span>' + (f'<span class="fecha">{right}</span>' if right else "") + "</div>"
+    return row + (f'<div class="lugar">{below}</div>' if below else "")
+
+
 def render_html(doc: CVDocument, contact: UserProfile) -> str:
     esc = lambda text: html.escape(strip_emojis(text))  # noqa: E731
     t = doc.titles
-    body = [f"<h2>{esc(t[0])}</h2>", f"<p>{esc(doc.summary)}</p>", f"<h2>{esc(t[1])}</h2>"]
+    body = []
+    if doc.summary.strip():
+        body += [f"<h2>{esc(t[0])}</h2>", f"<p>{esc(doc.summary)}</p>"]
+    body.append(f"<h2>{esc(t[1])}</h2>")
     for exp in doc.visible_experiences():
-        body.append(f"<h3>{esc(exp.header)}</h3><ul>")
+        below = " · ".join(esc(p) for p in (exp.company, exp.location) if p)
+        body.append(f'<div class="entrada">{_entry(esc(exp.role), esc(exp.period_text), below)}<ul>')
         body.extend(f"<li>{esc(b.text)}</li>" for b in exp.included)
-        body.append("</ul>")
+        body.append("</ul></div>")
     if doc.education:
         body.append(f"<h2>{esc(t[2])}</h2>")
-        body.extend(f"<h3>{esc(line)}</h3>" for line in doc.education)
+        for line in doc.education:  # "Título - Institución | Periodo" (ver build_document)
+            text, sep, period = line.rpartition(" | ")
+            text, period = (text, period) if sep else (line, "")
+            title, sep, institution = text.rpartition(" - ")
+            title, institution = (title, institution) if sep else (text, "")
+            body.append(f'<div class="entrada">{_entry(esc(title), esc(period), esc(institution))}</div>')
     if doc.skill_groups:
-        body.append(f"<h2>{esc(t[3])}</h2><ul>")
-        body.extend(f"<li><strong>{esc(label)}:</strong> {esc(', '.join(items))}</li>" for label, items in doc.skill_groups)
-        body.append("</ul>")
-    name = esc(contact.full_name.upper()) if contact.full_name else ""
+        body.append(f'<h2>{esc(t[3])}</h2><div class="habilidades">')
+        body.extend(f"<p><strong>{esc(label)}:</strong> {esc(', '.join(items))}</p>" for label, items in doc.skill_groups)
+        body.append("</div>")
+    name = esc(contact.full_name) if contact.full_name else ""
+    headline = f'<div class="titular">{esc(contact.headline)}</div>' if contact.headline.strip() else ""
     css = CSS_TEMPLATE.replace("{page_size}", PDF_PAGE_SIZE)
     return (
         f'<!DOCTYPE html><html lang="{doc.language}"><head><meta charset="utf-8"><style>{css}</style></head>'
-        f'<body><h1>{name}</h1><div class="contacto">{strip_emojis(contact.contact_line_html)}</div>'
+        f'<body><h1>{name}</h1>{headline}<div class="contacto">{strip_emojis(contact.contact_line_html)}</div>'
         f"{''.join(body)}</body></html>"
     )
 

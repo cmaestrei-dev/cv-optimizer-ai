@@ -265,6 +265,10 @@ Entregas:
   - Si LinkedIn devuelve 429/999, pausa 24 h. Explica un token revocado o un perfil vacío.
   - `python -m runner entrar` abre el navegador propio (Playwright, perfil persistente en una carpeta 0700) para que el dueño inicie sesión una vez.
   - 14 pruebas, una de ellas de punta a punta contra la API de pruebas, con IA falsa y sin red.
+- [x] **E2 fusionado y desplegado** (PR #25, revisión 00007).
+- [x] El bot importa el perfil: `python -m runner importar Profile.pdf` sube el CV o el PDF de LinkedIn por la API y guarda solo lo nuevo. Con él se cargó el perfil del dueño.
+- [x] El importador ya no duplica estudios escritos distinto: el PDF de LinkedIn añade el campo («Ingeniería de Sistemas, Ingeniería informática») o el país a la institución («Universidad de Cartagena-Colombia»).
+- [x] Búsquedas con cualquier lugar por nombre («Medellín, Antioquia, Colombia»). Las exclusiones comparan palabras completas: «sr» no descarta «SRE». Las prácticas ya no se excluyen por defecto: el dueño puede hacer prácticas empresariales.
 - [ ] **E3, postular con «Solicitud sencilla»:**
   - Sube el CV de esa vacante y responde con el motor de preguntas más un banco de respuestas del dueño (salario, disponibilidad…).
   - Si una pregunta obligatoria no tiene respuesta, salta la vacante: nunca responde al azar.
@@ -274,6 +278,28 @@ Entregas:
 - [ ] **E4:** programarlo para que corra solo y mostrar en la web lo que hizo el bot cada día.
 - [ ] Después: postulaciones externas (Greenhouse, Lever…) y los otros portales.
 - [ ] **(dueño)** Cargar su perfil (CV o PDF de LinkedIn), crear el token en la web e iniciar sesión en el navegador del bot.
+
+### CV v2: legible para personas y ATS (2026-11-18, pedido del dueño)
+
+La auditoría del PDF anterior encontró:
+- La capa de texto estaba bien: completa, con tildes y fuentes incrustadas.
+- Media página vacía mientras se descartaba un proyecto relevante.
+- Letra de 8 pt justificada.
+- Títulos de sección en versalitas, que el ATS lee en minúsculas.
+- Sin ciudad ni titular.
+- Educación sin fechas.
+- Todas las habilidades técnicas en una sola categoría.
+
+Cambios:
+- [x] **Diseño** al estilo de los CV técnicos más usados:
+  - Una columna, Liberation Sans (métricas de Arial) a 10 pt, alineada a la izquierda.
+  - Títulos de sección con texto real en mayúsculas.
+  - Cargo a la izquierda y fechas a la derecha; empresa y lugar debajo, en cursiva. La educación va con el mismo formato.
+- [x] **Encabezado:** titular y ciudad (migración 0010, columnas nuevas en `users`), editables en Perfil → Datos de contacto; también van en el Word.
+- [x] **Habilidades técnicas agrupadas** (lenguajes, frameworks, bases de datos, nube y DevOps, ciberseguridad, datos) con un diccionario determinista. Solo reordena lo que la persona tiene y solo si la guardó en una categoría genérica.
+- [x] **La selección ya no descarta experiencias** mientras haya espacio (hasta 4; de 10 a 14 viñetas). El ajuste medido a 1 página recorta primero lo menos relevante.
+- [x] **Prueba de «lectura ATS»** (`tests/test_cv_ats.py`): extrae el texto del PDF y exige todos los campos, los títulos en mayúsculas en orden, el cargo antes de la fecha y de las viñetas, y que no haya ligaduras ni caracteres perdidos.
+- [ ] Correr `scripts/run_evals.py` con IA real: aquí no hay llave; hacerlo en el próximo despliegue.
 
 ### Fase 6 — Pruebas reales y retroalimentación
 - [ ] Uso diario por los dos usuarios (y amigos) con postulaciones reales
@@ -353,5 +379,6 @@ Entregas:
 
 ## Próximo paso
 
-1. Fase 7 LinkedIn: E2 (bot local en modo prueba) → E3 (postular) → E4 (programado). El dueño debe cargar su perfil.
+1. Desplegar el CV v2 (migración 0010) y que el dueño ponga su titular y ciudad. Luego Fase 7 LinkedIn E3 (postular; el dueño inicia sesión en el navegador del bot) → E4 (programado).
+   Después: Computrabajo, elempleo y Magneto (postular suele ser un clic), Get on Board y búsquedas de prácticas.
 2. Después, el resto de portales (Computrabajo, Magneto, elempleo) con el mismo esquema.

@@ -71,5 +71,5 @@ class TestCssTemplate:
         css = CSS_TEMPLATE.replace("{page_size}", "A4")
         doc = HTML(string=f"<html><head><style>{css}</style></head><body><ul><li>Logro</li></ul></body></html>")
         rendered = doc.render()
-        assert round(rendered.pages[0]._page_box.margin_left) == 48  # 0.5in
-        assert "– Logro" in (extract_text_from_pdf(rendered.write_pdf()) or "")
+        assert round(rendered.pages[0]._page_box.margin_left) == 58  # 0.6in
+        assert "- Logro" in (extract_text_from_pdf(rendered.write_pdf()) or "")  # la viñeta «•» se lee como «-»

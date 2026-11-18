@@ -66,6 +66,7 @@ def _contact(username: str) -> ContactOut:
     return ContactOut(
         full_name=user.full_name, email=user.email, phone=user.phone,
         linkedin_url=safe_link(user.linkedin_url), github_url=safe_link(user.github_url),
+        headline=user.headline, city=user.city,
     )
 
 

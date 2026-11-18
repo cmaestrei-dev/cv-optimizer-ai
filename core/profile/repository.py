@@ -6,7 +6,7 @@ from sqlalchemy.orm import Session, selectinload
 
 from core.profile.models import Achievement, Education, Experience, Skill, User
 
-USER_FIELDS = ("full_name", "email", "phone", "linkedin_url", "github_url", "password_hash", "salt")
+USER_FIELDS = ("full_name", "email", "phone", "linkedin_url", "github_url", "headline", "city", "password_hash", "salt")
 
 
 class UserExistsError(ValueError):

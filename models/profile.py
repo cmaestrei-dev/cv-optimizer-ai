@@ -22,6 +22,8 @@ class UserProfile:
     phone: str = ""
     linkedin_url: str = ""
     github_url: str = ""
+    headline: str = ""  # titular bajo el nombre en el CV
+    city: str = ""  # «Cartagena, Colombia»: los reclutadores filtran por ubicación
     password_hash: str = ""
     salt: str = ""
 
@@ -50,6 +52,8 @@ class UserProfile:
     @property
     def contact_line_html(self) -> str:
         parts = []
+        if self.city:
+            parts.append(html.escape(self.city))
         if self.email:
             email = html.escape(self.email)
             parts.append(f'<a href="mailto:{email}">{email}</a>')
@@ -63,7 +67,7 @@ class UserProfile:
 
     @property
     def contact_line_text(self) -> str:
-        parts = [self.email, self.phone, self.linkedin_url, self.github_url]
+        parts = [self.city, self.email, self.phone, self.linkedin_url, self.github_url]
         return " | ".join(
             p.replace("https://", "").replace("http://", "") for p in parts if p
         )

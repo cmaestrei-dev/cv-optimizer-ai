@@ -46,7 +46,7 @@ class Loaded:
 def contact(username: str) -> UserProfile:
     user = profiles.get_user(username)
     return UserProfile(username=username, full_name=user.full_name, email=user.email, phone=user.phone,
-                       linkedin_url=user.linkedin_url, github_url=user.github_url)
+                       linkedin_url=user.linkedin_url, github_url=user.github_url, headline=user.headline, city=user.city)
 
 
 def _snapshot_with_experience(username: str) -> ProfileSnapshot:
