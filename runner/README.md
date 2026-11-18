@@ -28,6 +28,18 @@ python -m runner postular        # postula a las preparadas (--prueba: hasta la 
 
 Las capturas de cada revisión quedan en `~/.local/share/cv-optimizer-bot/capturas/`.
 
+## Programarlo para que corra solo
+
+```bash
+python -m runner programar                      # cada día a las 9:17 y 15:47 (o --horas 8:05 14:40)
+python -m runner programar --quitar             # dejar de correrlo solo
+```
+
+- Cada vuelta es `python -m runner diario`: busca y luego postula. Nunca corren dos vueltas a la vez, y si la búsqueda falla igual postula a lo ya preparado.
+- Usa un temporizador de systemd de tu usuario (sin root), con el código de la carpeta desde donde lo programaste. Prográmalo desde una copia estable del repositorio, no desde una carpeta temporal.
+- La ventana del bot se abre en tu sesión: el computador debe estar encendido y con tu sesión iniciada. Si estaba apagado a la hora, la vuelta corre al encenderlo.
+- Lo que hace cada vuelta queda en `~/.local/share/cv-optimizer-bot/registro.log`. Al terminar te avisa en el escritorio: cuántas se enviaron, o si LinkedIn pidió una verificación o el bot perdió la sesión.
+
 ## Cómo responde el formulario
 
 1. Lo que LinkedIn ya trae (tu correo, teléfono, respuestas anteriores) se deja.
