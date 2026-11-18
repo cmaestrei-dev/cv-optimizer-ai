@@ -6,6 +6,8 @@
     python -m runner importar CV.pdf carga tu CV o el PDF de tu LinkedIn en tu perfil de la app (solo lo nuevo)
     python -m runner buscar          busca vacantes, las analiza con tu perfil y prepara el CV de cada una
     python -m runner postular        postula a las preparadas con «Solicitud sencilla» (--prueba: sin enviar)
+    python -m runner diario          una vuelta completa: buscar y luego postular (la que corre la programación)
+    python -m runner programar       lo programa cada día (temporizador de systemd del usuario; --quitar lo quita)
 """
 
 import argparse
@@ -245,6 +247,71 @@ def cmd_postular(args) -> int:
     return 0
 
 
+def _notify(text: str) -> None:
+    """Aviso de escritorio al terminar una vuelta programada (si el sistema lo permite; nunca falla la vuelta)."""
+    import contextlib
+    import shutil
+    import subprocess
+
+    if shutil.which("notify-send"):
+        with contextlib.suppress(OSError, subprocess.SubprocessError):
+            subprocess.run(["notify-send", "--app-name=CV Optimizer", "Bot de LinkedIn", text], timeout=10, check=False)
+
+
+def cmd_diario(_args) -> int:
+    """Una vuelta completa: buscar y luego postular. Nunca corren dos vueltas a la vez."""
+    import fcntl
+    import traceback
+
+    cfg.DATA_DIR.mkdir(parents=True, exist_ok=True)
+    with open(cfg.DATA_DIR / "vuelta.lock", "w") as lock:
+        try:
+            fcntl.flock(lock, fcntl.LOCK_EX | fcntl.LOCK_NB)
+        except BlockingIOError:
+            print("Ya hay una vuelta del bot corriendo: esta se omite.")
+            return 0
+        print(f"\n===== Vuelta del {datetime.now():%Y-%m-%d %H:%M} =====")
+        try:
+            cmd_buscar(argparse.Namespace(sin_cv=False, max=0))
+        except (cfg.ConfigError, ApiError):
+            raise
+        except Exception:  # noqa: BLE001 — si la búsqueda falla, igual se postula a lo ya preparado
+            traceback.print_exc()
+        code = cmd_postular(argparse.Namespace(prueba=False, max=0))
+        state = State(cfg.DATA_DIR / "estado.json")
+        notice = f"Hoy: {state.today('enviadas')} enviadas y {state.today('preparadas')} preparadas."
+        if (until := state.pause_until("cuenta")) and until > datetime.now(UTC):
+            notice += f" Postulación en pausa: {state.pause_reason('cuenta')}. Entra tú a LinkedIn y revisa."
+        elif code == 1:
+            notice += " El navegador del bot perdió la sesión de LinkedIn: python -m runner entrar."
+        print(notice)
+        _notify(notice)
+        return code
+
+
+def cmd_programar(args) -> int:
+    from pathlib import Path
+
+    from runner import schedule
+
+    if args.quitar:
+        schedule.remove()
+        print("Listo: el bot ya no corre solo.")
+        return 0
+    cfg.load()  # la configuración y el token deben estar bien antes de programar
+    workdir = Path(__file__).resolve().parent.parent
+    log = cfg.DATA_DIR / "registro.log"
+    try:
+        nxt = schedule.install(sys.executable, workdir, args.horas, log)
+    except schedule.ScheduleError as e:
+        print(e, file=sys.stderr)
+        return 2
+    print(f"Programado a las {', '.join(schedule.normalize_times(args.horas))} cada día, con el código de {workdir}.")
+    print(f"Próxima vuelta: {nxt or '(systemd no la informó)'}")
+    print(f"Lo que hace cada vuelta queda en {log}. Quitarlo: python -m runner programar --quitar")
+    return 0
+
+
 def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(prog="python -m runner", description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     sub = parser.add_subparsers(dest="cmd", required=True)
@@ -262,6 +329,11 @@ def main(argv: list[str] | None = None) -> int:
     postular.add_argument("--prueba", action="store_true", help="llegar a la revisión y descartar, aunque el modo sea auto")
     postular.add_argument("--max", type=int, default=0, help="como mucho N vacantes en esta vuelta")
     postular.set_defaults(fn=cmd_postular)
+    sub.add_parser("diario").set_defaults(fn=cmd_diario)
+    programar = sub.add_parser("programar")
+    programar.add_argument("--horas", nargs="+", default=["09:17", "15:47"], help="horas del día (HH:MM)")
+    programar.add_argument("--quitar", action="store_true", help="dejar de correrlo solo")
+    programar.set_defaults(fn=cmd_programar)
     args = parser.parse_args(argv)
     try:
         return args.fn(args)

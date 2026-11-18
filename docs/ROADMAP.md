@@ -282,7 +282,11 @@ Entregas:
   - Probado en modo prueba contra una vacante real (Comfama, 4 pasos): la revisión muestra el CV de la vacante y las respuestas. 5 pruebas con Playwright contra una copia local del formulario (se saltan sin Chromium).
 - [x] **(dueño)** Revisó la captura de prueba y activó `modo = "auto"` (2026-11-18). También excluyó los cargos «bilingüe/bilingual» (inglés A2).
 - [ ] Los primeros envíos reales, mirándolos (cuando la búsqueda pública vuelva a responder y haya preparadas).
-- [ ] **E4:** programarlo para que corra solo y mostrar en la web lo que hizo el bot cada día.
+- [ ] **E4, que corra solo:**
+  - [x] `python -m runner diario`: una vuelta (buscar y luego postular) con candado para que nunca corran dos a la vez. Si la búsqueda falla, igual postula lo preparado. Al terminar avisa en el escritorio (enviadas, verificación pendiente, sesión perdida).
+  - [x] `python -m runner programar [--horas …] [--quitar]`: temporizador de systemd del usuario, sin root. Por defecto a las 9:17 y 15:47; si el computador estaba apagado, corre al encender. El registro va a `registro.log`. Rechaza rutas temporales o que systemd leería mal.
+  - [ ] Instalarlo en el computador del dueño, desde una copia estable, tras los primeros envíos reales.
+  - [ ] Mostrar en la web lo que hizo el bot cada día.
 - [ ] Después: postulaciones externas (Greenhouse, Lever…) y los otros portales.
 - [ ] **(dueño)** Cargar su perfil (CV o PDF de LinkedIn), crear el token en la web e iniciar sesión en el navegador del bot.
 
@@ -317,6 +321,7 @@ Cambios:
 
 | Fecha | Decisión | Por qué |
 |---|---|---|
+| 2026-11-18 | Programación con un temporizador de systemd del usuario, no con cron ni una tarea en la nube | La ventana del bot necesita la sesión gráfica de la persona (DISPLAY y llavero), que systemd del usuario ya tiene; `Persistent=true` recupera la vuelta si el computador estaba apagado; no requiere root |
 | 2026-11-18 | El bot nunca envía una solicitud con un CV distinto al de la vacante | LinkedIn deja elegido el último CV subido (en la primera prueba real quedó uno de octubre); enviar con otro CV rompe el registro exacto de qué se mandó |
 | 2026-11-18 | Pausas separadas: la búsqueda pública (429 → 6 h) y la cuenta (verificación o tope → 24 h) | Un 429 de la búsqueda sin sesión no dice nada de la cuenta; con una sola pausa, frenaba también las postulaciones ya preparadas |
 | 2026-11-16 | Bot de LinkedIn local con un perfil de navegador propio (Playwright persistente), no extensión ni CDP | LinkedIn busca extensiones instaladas y sus condiciones nombran los plugins; desde Chrome 136 el puerto de depuración exige otro perfil y expone la sesión a cualquier proceso local. En la IP de casa y con una sesión real, el riesgo para la cuenta es menor que desde un servidor |
