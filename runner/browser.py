@@ -22,24 +22,34 @@ from runner.config import DATA_DIR
 PROFILE_DIR = DATA_DIR / "navegador"
 CHALLENGE = ("/checkpoint", "/authwall", "captcha", "/uas/login", "/login")
 SESSION_COOKIE = "li_at"
+# Portal → (dominio de sus cookies, cookie de sesión o None si aún no se conoce, página de inicio de sesión)
+LOGINS = {
+    "linkedin": ("linkedin.com", SESSION_COOKIE, "https://www.linkedin.com/login"),
+    "computrabajo": ("computrabajo.com", None, "https://candidato.co.computrabajo.com/acceso/"),
+}
 
 
-def has_session(profile: Path = PROFILE_DIR) -> bool:
-    """¿Hay sesión de LinkedIn guardada en el perfil? Solo se mira el NOMBRE de la cookie, nunca su valor."""
+def _cookie_names(domain: str, profile: Path = PROFILE_DIR) -> set[str]:
+    """Nombres (nunca valores) de las cookies de un dominio guardadas en el perfil."""
     cookies = profile / "Default" / "Cookies"
     if not cookies.exists():
-        return False
+        return set()
     fd, tmp = tempfile.mkstemp()
     os.close(fd)
     try:
         shutil.copy(cookies, tmp)  # Chrome puede tener la base abierta: se lee una copia
         with sqlite3.connect(tmp) as db:
-            return db.execute("select 1 from cookies where host_key like '%linkedin.com' and name = ?",
-                              (SESSION_COOKIE,)).fetchone() is not None
+            return {row[0] for row in db.execute("select name from cookies where host_key like ?", (f"%{domain}",))}
     except sqlite3.Error:
-        return False
+        return set()
     finally:
         os.remove(tmp)
+
+
+def has_session(profile: Path = PROFILE_DIR, portal: str = "linkedin") -> bool:
+    """¿Hay sesión guardada en el perfil? Solo se mira el NOMBRE de la cookie, nunca su valor."""
+    domain, cookie, _ = LOGINS[portal]
+    return cookie is not None and cookie in _cookie_names(domain, profile)
 
 
 def _prepare_profile() -> None:
@@ -55,18 +65,36 @@ def open_context(playwright, *, headless: bool = False):
     )
 
 
-def login(*, timeout_minutes: int = 25) -> int:
-    """Abre un Chrome normal con el perfil del bot, espera a que la persona inicie sesión y lo cierra solo."""
+def login(portal: str = "linkedin", *, timeout_minutes: int = 25) -> int:
+    """Abre un Chrome normal con el perfil del bot y espera a que la persona inicie sesión."""
     _prepare_profile()
     chrome = shutil.which("google-chrome") or shutil.which("google-chrome-stable")
     if not chrome:
         print("No encuentro Google Chrome instalado.")
         return 1
-    if has_session():
-        print("Ya hay una sesión de LinkedIn guardada en el navegador del bot.")
+    domain, cookie, page = LOGINS[portal]
+    if os.path.lexists(PROFILE_DIR / "SingletonLock"):  # otro Chrome tiene el perfil: el nuevo se cerraría al instante
+        print("El navegador del bot ya está abierto (¿hay una vuelta corriendo?). Ciérralo o espera a que termine.")
+        return 1
+    if has_session(portal=portal):
+        print(f"Ya hay una sesión de {portal.capitalize()} guardada en el navegador del bot.")
         return 0
-    process = subprocess.Popen([chrome, f"--user-data-dir={PROFILE_DIR}", "--no-first-run", "https://www.linkedin.com/login"],
+    process = subprocess.Popen([chrome, f"--user-data-dir={PROFILE_DIR}", "--no-first-run", page],
                                stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+    if cookie is None:  # aún no se sabe qué cookie marca la sesión: la persona cierra la ventana al terminar
+        before = _cookie_names(domain)
+        print("1. En la ventana que se abrió, entra a Computrabajo con tu correo y tu contraseña.")
+        print("   Si quieres, actualiza ahí mismo tu hoja de vida.")
+        print("2. Cuando hayas entrado, cierra la ventana.\n")
+        try:
+            process.wait(timeout=timeout_minutes * 60)
+        except subprocess.TimeoutExpired:
+            process.send_signal(signal.SIGTERM)
+            print(f"Pasaron {timeout_minutes} minutos: cerré la ventana.")
+        time.sleep(2)
+        new = len(_cookie_names(domain) - before)
+        print(f"Ventana cerrada. Quedaron {new} cookies nuevas de Computrabajo en el navegador del bot.")
+        return 0
     print("1. En la ventana que se abrió, entra con tu correo y tu contraseña de LinkedIn («Email or phone»).")
     print("   Si tu LinkedIn no está ligado a esa cuenta de Google, el botón «Continuar con Google» crea una cuenta nueva.")
     print("2. Si LinkedIn te pide un código, escríbelo.")

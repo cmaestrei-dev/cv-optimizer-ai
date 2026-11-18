@@ -2,7 +2,7 @@
 
     python -m runner configurar      crea la configuración para editar
     python -m runner token           guarda el token del bot (se crea en la app: Perfil → Bot de LinkedIn)
-    python -m runner entrar          abre el navegador del bot para que inicies sesión en LinkedIn (una vez)
+    python -m runner entrar [portal] abre el navegador del bot para que inicies sesión (linkedin o computrabajo)
     python -m runner importar CV.pdf carga tu CV o el PDF de tu LinkedIn en tu perfil de la app (solo lo nuevo)
     python -m runner buscar          busca vacantes, las analiza con tu perfil y prepara el CV de cada una
     python -m runner postular        postula a las preparadas con «Solicitud sencilla» (--prueba: sin enviar)
@@ -65,10 +65,10 @@ def cmd_importar(args) -> int:
     return 0
 
 
-def cmd_entrar(_args) -> int:
+def cmd_entrar(args) -> int:
     from runner.browser import login  # Playwright solo hace falta para el navegador
 
-    return login()
+    return login(args.portal)
 
 
 def _key(kind: str, portal: str) -> str:
@@ -91,7 +91,7 @@ def cmd_buscar(args) -> int:
         print("Tu perfil no tiene experiencia todavía: cárgalo en la app (Perfil → Importar CV) antes de usar el bot.")
         return 1
     print(f"Modo {conf.mode}.")
-    prepared_now = 0
+    prepared_now, told = 0, set()
 
     def full(portal: str) -> bool:
         return state.today(_key("preparadas", portal)) >= conf.cap(portal) or bool(args.max and prepared_now >= args.max)
@@ -101,7 +101,9 @@ def cmd_buscar(args) -> int:
             portal, name = search.portal, cfg.PORTALS[search.portal]
             paused = _key("busqueda", portal)
             if (until := state.pause_until(paused)) and until > datetime.now(UTC):
-                print(f"\n{name}: búsqueda en pausa hasta {until:%Y-%m-%d %H:%M} UTC ({state.pause_reason(paused)}).")
+                if portal not in told:  # una vez por portal, no por cada búsqueda
+                    told.add(portal)
+                    print(f"\n{name}: búsqueda en pausa hasta {until:%Y-%m-%d %H:%M} UTC ({state.pause_reason(paused)}).")
                 continue
             if full(portal):
                 continue
@@ -140,7 +142,8 @@ def cmd_buscar(args) -> int:
                     if not vacancy.created and not vacancy.unfinished:
                         state.mark(card.job_id, "repetida", portal=portal, app=vacancy.id)
                         continue
-                    line = f"  ✓ {vacancy.score if vacancy.score is not None else '—':>3}  {vacancy.role} — {vacancy.company}"
+                    line = f"  ✓ {vacancy.score if vacancy.score is not None else '—':>3}  {vacancy.role}"
+                    line += f" — {vacancy.company}" if vacancy.company else ""
                     if vacancy.missing:
                         line += f"  (falta: {'; '.join(vacancy.missing[:2])})"
                     print(line)
@@ -352,7 +355,9 @@ def main(argv: list[str] | None = None) -> int:
     sub = parser.add_subparsers(dest="cmd", required=True)
     sub.add_parser("configurar").set_defaults(fn=cmd_configurar)
     sub.add_parser("token").set_defaults(fn=cmd_token)
-    sub.add_parser("entrar").set_defaults(fn=cmd_entrar)
+    entrar = sub.add_parser("entrar")
+    entrar.add_argument("portal", nargs="?", default="linkedin", choices=list(cfg.PORTALS), help="linkedin (si no se dice) o computrabajo")
+    entrar.set_defaults(fn=cmd_entrar)
     importar = sub.add_parser("importar")
     importar.add_argument("pdf", help="ruta del PDF (tu CV o «Guardar en PDF» de tu perfil de LinkedIn)")
     importar.set_defaults(fn=cmd_importar)
