@@ -80,3 +80,10 @@ def test_selects_the_uploaded_cv_when_linkedin_keeps_the_old_one(page, cv):
     result = linkedin.apply(page, FIXTURE.as_uri(), cv, answerer, submit=True)
     assert result.status == "enviada", result
     assert page.evaluate("window.answers")["new"] is True
+
+
+def test_counts_as_sent_when_the_job_shows_applied_without_the_notice(page, cv):
+    page.add_init_script("window.quietSend = true")
+    result = linkedin.apply(page, FIXTURE.as_uri(), cv, answerer, submit=True)
+    assert result.status == "enviada", result
+    assert page.evaluate("window.sent") is True

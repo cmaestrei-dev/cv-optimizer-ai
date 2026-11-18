@@ -49,6 +49,9 @@
   function go(n) { save(); current = n; render(); }
   function check(n) { save(); if (!values.py || values.en === 'Selecciona una opción' || !(values.si || values.no)) return; go(n); }
   function submitForm() { save(); window.sent = true; window.follow = values.fw; window.answers = {...values};
+    if (window.quietSend) {  // sin aviso: el diálogo se cierra y la vacante pasa a «Postulado»
+      const d = document.getElementById('dlg'); d.hidden = true; d.innerHTML = '';
+      document.body.insertAdjacentHTML('beforeend', '<p>Postulado hace 1 minuto</p>'); return; }
     document.getElementById('dlg').innerHTML = '<p>Se envió tu solicitud a Empresa</p><button aria-label="Descartar">Listo</button>'; }
   function closeForm() { const d = document.getElementById('dlg');
     d.innerHTML = '<p>¿Guardar esta solicitud?</p><button>Descartar</button><button>Guardar</button>';

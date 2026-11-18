@@ -278,8 +278,10 @@ Entregas:
   - Tope diario y pausas al azar de 2 a 4 minutos entre envíos.
   - Se detiene ante verificaciones (`/checkpoint`, captcha, tope de LinkedIn): 24 h sin postular. El 429 de la búsqueda pública solo frena la búsqueda (6 h). Nunca resuelve captchas ni usa herramientas para ocultarse.
   - Modo prueba (`--prueba` o `modo = "prueba"`): llega a la revisión, guarda una captura y descarta sin enviar.
+  - Confirmación del envío: el aviso de LinkedIn o que la vacante pase a «Postulado»; si no aparece ninguno, recarga la vacante para comprobarlo antes de dar error (el texto real del aviso aún no se ha visto).
   - Probado en modo prueba contra una vacante real (Comfama, 4 pasos): la revisión muestra el CV de la vacante y las respuestas. 5 pruebas con Playwright contra una copia local del formulario (se saltan sin Chromium).
-- [ ] **(dueño)** Revisar las capturas de prueba y cambiar a `modo = "auto"`; los primeros envíos, mirándolos.
+- [x] **(dueño)** Revisó la captura de prueba y activó `modo = "auto"` (2026-11-18). También excluyó los cargos «bilingüe/bilingual» (inglés A2).
+- [ ] Los primeros envíos reales, mirándolos (cuando la búsqueda pública vuelva a responder y haya preparadas).
 - [ ] **E4:** programarlo para que corra solo y mostrar en la web lo que hizo el bot cada día.
 - [ ] Después: postulaciones externas (Greenhouse, Lever…) y los otros portales.
 - [ ] **(dueño)** Cargar su perfil (CV o PDF de LinkedIn), crear el token en la web e iniciar sesión en el navegador del bot.
@@ -386,6 +388,6 @@ Cambios:
 
 ## Próximo paso
 
-1. Fase 7 LinkedIn: el dueño revisa las capturas del modo prueba y activa `modo = "auto"` → E4 (programarlo y ver en la web lo que hizo el bot).
+1. Fase 7 LinkedIn: primeros envíos reales en `modo = "auto"`, mirándolos → E4 (programarlo y ver en la web lo que hizo el bot).
    Después: Computrabajo, elempleo y Magneto (postular suele ser un clic), Get on Board y búsquedas de prácticas.
 2. Después, el resto de portales (Computrabajo, Magneto, elempleo) con el mismo esquema.

@@ -19,7 +19,8 @@ from runner.answers import pick_option
 EASY = re.compile(r"^(solicitud sencilla|easy apply)", re.I)
 NAV = re.compile(r"^(siguiente|next|continuar|continue|revisar|review|enviar solicitud|submit application)", re.I)
 SUBMIT = re.compile(r"^(enviar solicitud|submit application)", re.I)
-SENT = re.compile(r"(se envi[oó] tu solicitud|solicitud enviada|application (was )?sent|your application was sent)", re.I)
+SENT = re.compile(r"(se envi[oó] tu solicitud|tu solicitud se (ha )?envi[oó]|se ha enviado tu solicitud|solicitud enviada"
+                  r"|application (was )?sent|your application was sent)", re.I)
 APPLIED = re.compile(r"^(postulado|solicitado|applied)\b", re.I)
 LIMIT = re.compile(r"(l[ií]mite diario|daily (application )?limit|has alcanzado el l[ií]mite|reached the .*limit)", re.I)
 FOLLOW = re.compile(r"(seguir a|follow )", re.I)
@@ -85,6 +86,12 @@ def _challenge(page) -> bool:
     if any(part in page.url for part in CHALLENGE_URL):
         return True
     return page.locator("iframe[src*='captcha'], iframe[title*='captcha' i]").count() > 0
+
+
+def _applied(page) -> bool:
+    """La vacante ya figura como postulada («Postulado hace 1 minuto», «Solicitado», «Applied»)."""
+    return bool(page.get_by_role("button", name=APPLIED).count()
+                or page.get_by_text(re.compile(r"^(Postulado|Solicitado|Applied)\b")).count())
 
 
 def _nav_button(dialog):
@@ -189,7 +196,7 @@ def apply(page, job_url: str, cv_pdf: Path, answerer: Answerer, *, submit: bool,
         return ApplyResult("verificacion", page.url)
     if page.get_by_text(LIMIT).count():
         return ApplyResult("tope", "LinkedIn avisó el tope diario de solicitudes")
-    if page.get_by_role("button", name=APPLIED).count() or page.get_by_text(re.compile(r"^Postulado\b|^Applied\b")).count():
+    if _applied(page):
         return ApplyResult("ya_postulada")
     button = page.get_by_role("button", name=EASY).first
     if not button.count():
@@ -249,13 +256,18 @@ def apply(page, job_url: str, cv_pdf: Path, answerer: Answerer, *, submit: bool,
             nav.click()
             deadline = time.monotonic() + 45
             while time.monotonic() < deadline:
-                if page.get_by_text(SENT).count():
+                if page.get_by_text(SENT).count() or _applied(page):
                     close = page.get_by_role("button", name=re.compile(r"^(descartar|dismiss|cerrar|close|listo|done)", re.I))
                     if close.count():
                         close.first.click()
                     return ApplyResult("enviada", screenshot=shot)
                 time.sleep(1.5)
-            return ApplyResult("error", "No apareció la confirmación de envío: revísala en LinkedIn")
+            # Sin el aviso esperado: la página de la vacante dice si quedó postulada.
+            page.goto(job_url, wait_until="domcontentloaded")
+            time.sleep(5)
+            if _applied(page):
+                return ApplyResult("enviada", "Confirmada en la página de la vacante", screenshot=shot)
+            return ApplyResult("error", "No apareció la confirmación de envío: revísala en LinkedIn", screenshot=shot)
         before = dialog.inner_text()[:400]
         nav.click()
         time.sleep(3)
