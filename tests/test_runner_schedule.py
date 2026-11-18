@@ -74,6 +74,7 @@ def test_round_searches_then_applies_even_if_the_search_breaks(data_dir, monkeyp
         order.append("postular")
         state = State(tmp_path / "estado.json")
         state.count("enviadas")
+        state.count("preparadas_computrabajo")
         state.save()
         return 0
 
@@ -81,7 +82,7 @@ def test_round_searches_then_applies_even_if_the_search_breaks(data_dir, monkeyp
     monkeypatch.setattr(cli, "cmd_postular", postular)
     assert cli.cmd_diario(None) == 0
     assert order == ["buscar", "postular"]
-    assert notices == ["Hoy: 1 enviadas y 0 preparadas."]
+    assert notices == ["Hoy: 1 enviadas y 0 preparadas. Computrabajo: 1 preparadas."]
     assert "RuntimeError" in capsys.readouterr().err
 
 

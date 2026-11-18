@@ -8,8 +8,8 @@ import pytest
 
 from core.jobs import worker
 from runner import __main__ as cli
+from runner import computrabajo, discover
 from runner import config as cfg
-from runner import discover
 from runner.api import Api, ApiError
 from runner.state import State
 from tests.test_api_assist import (
@@ -34,6 +34,76 @@ POSTING_HTML = """
 <ul><li><h3 class="description__job-criteria-subheader">Tipo de empleo</h3>
 <span class="description__job-criteria-text">Jornada completa</span></li></ul>
 """
+
+# Computrabajo: misma estructura que la página real (2026-11-18), con datos inventados.
+CT_SEARCH_HTML = """
+<article class="box_offer sel " data-id='2B8F7CDED6FA648661373E686DCF3405' data-blind="false">
+  <h2 class="fs18 fwB prB"><a class="js-o-link fc_base" href="/ofertas-de-trabajo/oferta-de-trabajo-de-auxiliar-contable-en-cartagena-de-indias-2B8F7CDED6FA648661373E686DCF3405#lc=ListOffers-Score4-0">
+    Auxiliar contable</a><div class="tags"><span class="tag postulated hide">Postulado</span></div></h2>
+  <p class="dFlex vm_fx fs16 fc_base mt5"><a class="fc_base t_ellipsis" href="#" offer-grid-article-company-url>Contadores &amp; Cía</a></p>
+  <p class="fs16 fc_base mt5"><span class="mr10">Cartagena de Indias, Bol&#xED;var</span></p>
+  <p class="fs13 fc_aux mt15">Hace  2  horas</p>
+</article>
+<article class="box_offer" data-id='68F75B8F0F1E682961373E686DCF3405' data-blind="false">
+  <h2><a class="js-o-link fc_base" href="/ofertas-de-trabajo/oferta-de-trabajo-de-asesor-comercial-senior-68F75B8F0F1E682961373E686DCF3405#lc=x">Asesor comercial senior</a></h2>
+  <p class="fs16 fc_base mt5"><span class="mr10">Bogot&#xE1;, D.C.</span></p>
+  <p class="fs13 fc_aux mt15">Ayer</p>
+</article>
+"""
+CT_POSTING_HTML = """
+<div class="mb40 pb40 bb1" div-link="oferta"><h2>Descripción de la oferta</h2>
+  <div class="mbB"><span class="tag base mb10">$ 1.800.000,00 (Mensual)</span><span class="tag base mb10">Tiempo Completo</span></div>
+  <p class="mbB">Buscamos <b>auxiliar contable</b>.<br /><br />Funciones:<br />Conciliaciones bancarias<br />Facturación</p>
+  <p class="fwB fs18 mtB mb10">Requerimientos</p>
+  <ul class="disc mbB"><li class='mb10'>Educación mínima: Técnico</li><li class='mb10'>1 año de experiencia</li></ul>
+  <span class="tag bg_brand_light" data-skill-id="EC2456E4BF054B47">Excel</span>
+  <p class="fc_aux fs13 mbB mtB">Palabras clave: developer, desarrollador, programador</p>
+  <a data-href-offer-apply="https://candidato.co.computrabajo.com/match/?oi=2B8F" class="b_primary">Aplicar</a>
+</div>
+"""
+
+
+class TestComputrabajoPages:
+    def test_search_url_by_city_remote_and_date(self):
+        url = computrabajo.search_url(cfg.Search("desarrollador de software", "Cartagena", days=7, portal="computrabajo"), 2)
+        assert url == ("https://co.computrabajo.com/trabajo-de-desarrollador-de-software-en-cartagena-de-indias"
+                       "?pubdate=7&by=publicationtime&p=2")
+        assert "-en-remoto?" in computrabajo.search_url(cfg.Search("qa", "Remoto", portal="computrabajo"))
+        assert "-en-medellin?" in computrabajo.search_url(cfg.Search("qa", "Medellín, Antioquia", portal="computrabajo"))
+        assert "/trabajo-de-practicante-de-sistemas?pubdate=1" in computrabajo.search_url(
+            cfg.Search("Practicante de Sistemas", "Colombia", portal="computrabajo"))
+
+    def test_parse_cards(self):
+        cards = computrabajo.parse_cards(CT_SEARCH_HTML, today=date(2026, 11, 18))
+        first = cards[0]
+        assert first.job_id == "ct:2B8F7CDED6FA648661373E686DCF3405" and first.title == "Auxiliar contable"
+        assert (first.company, first.place, first.posted) == ("Contadores & Cía", "Cartagena de Indias, Bolívar", date(2026, 11, 18))
+        assert first.url == ("https://co.computrabajo.com/ofertas-de-trabajo/"
+                             "oferta-de-trabajo-de-auxiliar-contable-en-cartagena-de-indias-2B8F7CDED6FA648661373E686DCF3405")
+        assert cards[1].posted == date(2026, 11, 17) and cards[1].company == ""
+
+    def test_parse_posting_drops_the_seo_keywords(self):
+        text = computrabajo.parse_posting(CT_POSTING_HTML)
+        assert text.startswith("$ 1.800.000,00 (Mensual) · Tiempo Completo")
+        assert "Funciones:\nConciliaciones bancarias\nFacturación" in text
+        assert "Requerimientos:\n- Educación mínima: Técnico\n- 1 año de experiencia" in text and "Aptitudes: Excel" in text
+        assert "developer" not in text and "Aplicar" not in text
+        assert computrabajo.parse_posting("<html>sin oferta</html>") == ""
+
+    def test_a_browser_check_is_a_block_never_solved(self, monkeypatch):
+        class Page:
+            def __enter__(self):
+                return self
+
+            def __exit__(self, *a):
+                return False
+
+            def read(self, n):
+                return b"<html><title>Just a moment...</title></html>"
+
+        monkeypatch.setattr(computrabajo.urllib.request, "urlopen", lambda *a, **k: Page())
+        with pytest.raises(discover.BlockedError, match="verificación"):
+            computrabajo.fetch("https://co.computrabajo.com/trabajo-de-qa")
 
 
 class TestLinkedInPages:
@@ -155,6 +225,8 @@ class TestRun:
         pages = {"search": SEARCH_HTML, "posting": POSTING_HTML}
         monkeypatch.setattr(discover, "fetch", lambda url, **k: pages["posting" if "/jobPosting/" in url else "search"])
         monkeypatch.setattr(discover, "pause", lambda *a, **k: None)
+        ct = {"search": CT_SEARCH_HTML, "posting": CT_POSTING_HTML}
+        monkeypatch.setattr(computrabajo, "fetch", lambda url, **k: ct["posting" if "/ofertas-de-trabajo/" in url else "search"])
         return client, h, tmp_path
 
     def test_prepares_new_vacancies_skips_excluded_and_repeats(self, bot, capsys):
@@ -184,7 +256,49 @@ class TestRun:
         assert cli.main(["buscar"]) == 0
         assert "Pausa de 6 horas" in capsys.readouterr().out
         assert cli.main(["buscar"]) == 0
-        assert "Búsqueda en pausa hasta" in capsys.readouterr().out
+        assert "LinkedIn: búsqueda en pausa hasta" in capsys.readouterr().out
+
+    def _config(self, tmp_path: Path, minimum: int) -> None:
+        conf = tmp_path / "config.toml"
+        conf.write_text(conf.read_text(encoding="utf-8").replace("compatibilidad_minima = 60", f"compatibilidad_minima = {minimum}"),
+                        encoding="utf-8")
+
+    def test_computrabajo_vacancies_are_prepared_apart_from_linkedin(self, bot, capsys):
+        client, h, tmp_path = bot
+        self._config(tmp_path, 0)
+        assert cli.main(["buscar"]) == 0
+        apps = {a["platform"]: a for a in client.get("/applications?view=todas", headers=h).json()}
+        assert set(apps) == {"LinkedIn", "Computrabajo"} and apps["Computrabajo"]["status"] == "cv_generado"
+        state = State(tmp_path / "estado.json")
+        ct = state.data["vistas"]["ct:2B8F7CDED6FA648661373E686DCF3405"]
+        assert ct["estado"] == "preparada" and ct["portal"] == "computrabajo" and Path(ct["cv"]).is_file()
+        assert state.data["vistas"]["ct:68F75B8F0F1E682961373E686DCF3405"]["estado"] == "excluida"
+        assert state.today("preparadas") == 1 and state.today("preparadas_computrabajo") == 1  # topes aparte
+        assert "Computrabajo 1 de 20" in capsys.readouterr().out
+
+    def test_below_the_minimum_is_discarded_in_the_app_without_a_cv(self, bot):
+        client, h, tmp_path = bot
+        self._config(tmp_path, 100)
+        assert cli.main(["buscar"]) == 0
+        app = next(a for a in client.get("/applications?view=descartadas", headers=h).json() if a["platform"] == "Computrabajo")
+        assert app["status"] == "descartada"
+        detail = client.get(f"/applications/{app['id']}", headers=h).json()
+        assert not detail["cvs"] and any("mínimo 100" in str(e) for e in detail["events"])
+        ct = State(tmp_path / "estado.json").data["vistas"]["ct:2B8F7CDED6FA648661373E686DCF3405"]
+        assert ct["estado"] == "baja_compatibilidad"
+
+    def test_a_blocked_portal_pauses_only_its_own_search(self, bot, monkeypatch, capsys):
+        client, h, tmp_path = bot
+
+        def blocked(url, **k):
+            raise discover.BlockedError("Computrabajo frenó las peticiones (HTTP 403).")
+
+        monkeypatch.setattr(computrabajo, "fetch", blocked)
+        assert cli.main(["buscar"]) == 0
+        state = State(tmp_path / "estado.json")
+        assert state.pause_until("busqueda_computrabajo") and not state.pause_until("busqueda")
+        assert state.today("preparadas") == 1  # LinkedIn siguió
+        assert "Paro la búsqueda en Computrabajo" in capsys.readouterr().out
 
     def test_revoked_token_is_explained(self, bot, capsys):
         client, h, _ = bot
