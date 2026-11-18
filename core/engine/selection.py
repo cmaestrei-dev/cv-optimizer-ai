@@ -170,7 +170,24 @@ def _select_skills(
     return sorted(groups.items(), key=lambda g: (min(priority(s) for s in g[1]), order.get(g[0], len(order))))
 
 
+# Títulos de educación formal (para cualquier profesión) frente a cursos y certificados.
+_DEGREE = re.compile(
+    r"\b(ingenier[ií]a|ingenier[oa]|licenciatura|licenciad[oa]|tecn[oó]log[oa]|t[eé]cnic[oa] (en|profesional)|"
+    r"profesional en|pregrado|carrera|maestr[ií]a|mag[ií]ster|especializaci[oó]n|especialista en|doctorado|"
+    r"bachiller|bachillerato|bachelor|master|mba|degree|grado en|administrador[a]? de|contador[a]? p[uú]blic[oa]|"
+    r"abogad[oa]|m[eé]dic[oa]|enfermer[oa]|psic[oó]log[oa]|economista|arquitect[oa])\b", re.I)
+_COURSE = re.compile(r"\b(certificad[oa]|certificaci[oó]n|certificate|curso|course|bootcamp|diplomado|taller|"
+                     r"seminario|career path|ruta de aprendizaje)\b", re.I)
+
+
+def is_degree(education: EducationSnap) -> bool:
+    return bool(_DEGREE.search(education.title)) and not _COURSE.search(education.title)
+
+
 def _select_education(profile: ProfileSnapshot, match: MatchResult, budget: Budget) -> list[EducationSnap]:
-    ranked = sorted(profile.education, key=lambda e: (e.id not in match.cited_education, -e.period.sort_key[0]))
+    # El título formal va siempre (aunque no tenga fechas ni lo cite el análisis); luego lo citado y lo reciente.
+    ranked = sorted(profile.education,
+                    key=lambda e: (not is_degree(e), e.id not in match.cited_education, -e.period.sort_key[0]))
     chosen = {e.id for e in ranked[: budget.max_education]}
-    return [e for e in profile.education if e.id in chosen]  # orden cronológico inverso del perfil
+    # Títulos primero y, dentro de cada grupo, el orden del perfil: al recortar se quita antes un curso.
+    return sorted((e for e in profile.education if e.id in chosen), key=lambda e: not is_degree(e))

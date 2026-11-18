@@ -155,6 +155,18 @@ class TestSelection:
         assert sel.skill_groups[0][1][0].name == "Excel"  # citada como evidencia
         assert [e.id for e in sel.education] == [1]
 
+    def test_the_degree_always_goes_first_even_without_dates(self):
+        # Caso real: el título sin fechas quedaba fuera, tras cuatro certificados recientes.
+        base = _profile()
+        courses = tuple(Ed(10 + i, title, inst, "2024", parse_period("2024")) for i, (title, inst) in enumerate([
+            ("Cybersecurity Threat Vectors and Mitigation", "Microsoft"), ("Certificado en Analítica de Datos", "Universidad"),
+            ("Aspectos básicos: Datos, datos, en todas partes", "Google"), ("Junior Cybersecurity Analyst Career Path", "Cisco")]))
+        degree = Ed(9, "Ingeniería de Sistemas", "Universidad de Cartagena", "", parse_period(""))
+        profile = ProfileSnapshot("laura", experiences=base.experiences, skills=base.skills, education=(*courses, degree))
+        vacancy, m = _match(profile)
+        sel = select_content(profile, m, vacancy, Budget(max_education=4))
+        assert sel.education[0].id == 9 and len(sel.education) == 4
+
 
 class TestVerification:
     SRC = "Gestioné la facturación y cartera de 120 clientes en Excel para Logística Andina."
