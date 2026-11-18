@@ -3717,6 +3717,18 @@
       "maxLength": 500,
       "title": "Github Url",
       "default": ""
+     },
+     "headline": {
+      "type": "string",
+      "maxLength": 160,
+      "title": "Headline",
+      "default": ""
+     },
+     "city": {
+      "type": "string",
+      "maxLength": 80,
+      "title": "City",
+      "default": ""
      }
     },
     "type": "object",
@@ -3744,6 +3756,16 @@
      "github_url": {
       "type": "string",
       "title": "Github Url"
+     },
+     "headline": {
+      "type": "string",
+      "title": "Headline",
+      "default": ""
+     },
+     "city": {
+      "type": "string",
+      "title": "City",
+      "default": ""
      }
     },
     "type": "object",

@@ -12,6 +12,9 @@ from runner import config as cfg
 from runner import discover
 from runner.api import Api, ApiError
 from runner.state import State
+from tests.test_api_assist import (
+    diana,  # noqa: F401  (fixture: cuenta vacía con IA falsa de importación)
+)
 from tests.test_api_engine import ana  # noqa: F401  (fixture: cuenta con perfil e IA falsa)
 
 SEARCH_HTML = """
@@ -37,6 +40,18 @@ class TestLinkedInPages:
     def test_search_url_uses_the_public_filters(self):
         url = discover.search_url(cfg.Search("auxiliar administrativo", "Cartagena", days=7), start=10)
         assert "geoId=106336022" in url and "f_TPR=r604800" in url and "f_AL=true" in url and "start=10" in url
+
+    def test_unknown_places_go_by_name(self):
+        url = discover.search_url(cfg.Search("desarrollador", "Medellín, Antioquia, Colombia"))
+        assert "location=Medell%C3%ADn%2C+Antioquia%2C+Colombia" in url and "geoId" not in url
+
+    def test_exclusions_match_whole_words(self):
+        conf = cfg.Config(api="https://x/api", token="cvb_x", exclude_words=["sr", "semi senior"], exclude_companies=["acme"])
+        card = lambda title, company="Otra": discover.Card("1", title, company, "", None)  # noqa: E731
+        assert cli._excluded(card("Ingeniero SRE"), conf) == ""
+        assert cli._excluded(card("Desarrollador Sr. Python"), conf) == "el cargo contiene «sr»"
+        assert cli._excluded(card("Analista Semi Senior"), conf) == "el cargo contiene «semi senior»"
+        assert cli._excluded(card("Desarrollador", "ACME Corp"), conf) == "empresa excluida"
 
     def test_parse_cards(self):
         cards = discover.parse_cards(SEARCH_HTML)
@@ -69,11 +84,11 @@ class TestConfig:
         monkeypatch.setenv("CVO_BOT_TOKEN", "cvb_x")
         conf = cfg.load(self._write(tmp_path, cfg.TEMPLATE.replace("https://TU-SERVICIO.run.app/api", "https://app.example.com/api/")))
         assert conf.api == "https://app.example.com/api" and conf.mode == "prueba" and conf.daily_cap == 20
-        assert conf.searches[0].geo_id == "100876405" and conf.exclude_words == ["senior", "practicante"]
+        assert conf.searches[0].geo_id == "100876405" and conf.exclude_words == ["senior", "lead"]
 
     @pytest.mark.parametrize("change, message", [
         (('modo = "prueba"', 'modo = "turbo"'), "modo"),
-        (('lugar = "Colombia"', 'lugar = "Narnia"'), "Narnia"),
+        (('lugar = "Colombia"', 'lugar = ""'), "lugar"),
         (("tope_diario = 20", "tope_diario = 500"), "tope_diario"),
         (('api = "https://app.example.com/api"', 'api = "ftp://x"'), "https"),
     ])
@@ -164,3 +179,37 @@ class TestRun:
             client.delete(f"/bot-tokens/{t['id']}", headers=h)
         assert cli.main(["buscar"]) == 1
         assert "revocado" in capsys.readouterr().err
+
+
+class TestImportCommand:
+    def test_imports_the_pdf_into_the_profile_once(self, diana, tmp_path, monkeypatch, capsys):  # noqa: F811
+        from tests.test_api_assist import CV_HTML, _pdf
+
+        client, h, _fake = diana
+        token = client.post("/bot-tokens", json={}, headers=h).json()["token"]
+
+        def request(self, method, path, body=None, *, raw=None, content_type="application/json"):
+            kwargs = {"content": raw} if raw is not None else {"json": body}
+            r = client.request(method, path, headers={"Authorization": f"Bearer {self.token}", "Content-Type": content_type}, **kwargs)
+            if path == "/profile/import":
+                worker.run_once()
+            if r.status_code >= 400:
+                raise ApiError(r.status_code, r.json().get("detail", ""), r.json())
+            return r.status_code, r.content
+
+        monkeypatch.setattr(Api, "_request", request)
+        monkeypatch.setenv("CVO_BOT_TOKEN", token)
+        conf = tmp_path / "config.toml"
+        conf.write_text(cfg.TEMPLATE.replace("https://TU-SERVICIO.run.app/api", "https://app.example.com/api"), encoding="utf-8")
+        monkeypatch.setattr(cfg, "load", lambda path=conf, _load=cfg.load: _load(path))
+        pdf = tmp_path / "Profile.pdf"
+        pdf.write_bytes(_pdf(CV_HTML))
+
+        assert cli.main(["importar", str(pdf)]) == 0
+        assert "Guardado: 1 experiencias, 2 logros, 1 habilidades y 1 estudios." in capsys.readouterr().out
+        profile = client.get("/profile", headers=h).json()
+        assert [e["role"] for e in profile["experiences"]] == ["Auxiliar Administrativa"]
+        assert cli.main(["importar", str(pdf)]) == 0  # otra vez: nada repetido
+        assert "Guardado: 0 experiencias" in capsys.readouterr().out
+        assert len(client.get("/profile", headers=h).json()["experiences"]) == 1
+        assert cli.main(["importar", str(tmp_path / "no-existe.pdf")]) == 2

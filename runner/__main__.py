@@ -3,11 +3,13 @@
     python -m runner configurar      crea la configuración para editar
     python -m runner token           guarda el token del bot (se crea en la app: Perfil → Bot de LinkedIn)
     python -m runner entrar          abre el navegador del bot para que inicies sesión en LinkedIn (una vez)
+    python -m runner importar CV.pdf carga tu CV o el PDF de tu LinkedIn en tu perfil de la app (solo lo nuevo)
     python -m runner buscar          busca vacantes, las analiza con tu perfil y prepara el CV de cada una
 """
 
 import argparse
 import getpass
+import re
 import sys
 from datetime import UTC, date, datetime
 
@@ -19,7 +21,8 @@ from runner.state import State
 
 def _excluded(card: discover.Card, conf: cfg.Config) -> str:
     title, company = card.title.lower(), card.company.lower()
-    if word := next((w for w in conf.exclude_words if w and w in title), ""):
+    words = set(re.findall(r"\w+", title))  # palabras completas: «sr» no descarta «SRE»
+    if word := next((w for w in conf.exclude_words if w and (w in words if " " not in w else w in title)), ""):
         return f"el cargo contiene «{word}»"
     if company and any(c and c in company for c in conf.exclude_companies):
         return "empresa excluida"
@@ -35,6 +38,27 @@ def cmd_configurar(_args) -> int:
 def cmd_token(_args) -> int:
     path = cfg.save_token(getpass.getpass("Pega el token del bot (no se muestra): "))
     print(f"Token guardado en {path} (solo tú puedes leerlo).")
+    return 0
+
+
+def cmd_importar(args) -> int:
+    from pathlib import Path
+
+    pdf = Path(args.pdf).expanduser()
+    if not pdf.is_file() or pdf.suffix.lower() != ".pdf":
+        print(f"No encuentro el PDF «{pdf}».", file=sys.stderr)
+        return 2
+    conf = cfg.load()
+    print("Leyendo tu PDF con la app (puede tardar un minuto)…")
+    result, applied = Api(conf.api, conf.token).import_profile(pdf)
+    c = applied["counts"]
+    print(f"Guardado: {c.get('experiencias', 0)} experiencias, {c.get('logros', 0)} logros, "
+          f"{c.get('habilidades', 0)} habilidades y {c.get('estudios', 0)} estudios.")
+    if result.get("duplicate_experiences"):
+        print(f"Ya estaban en tu perfil: {len(result['duplicate_experiences'])} experiencias (no se repitieron).")
+    if result.get("discarded"):
+        print(f"No se importó (no aparece tal cual en el PDF): {len(result['discarded'])} elementos.")
+    print("Revísalo en la app: Perfil.")
     return 0
 
 
@@ -122,6 +146,9 @@ def main(argv: list[str] | None = None) -> int:
     sub.add_parser("configurar").set_defaults(fn=cmd_configurar)
     sub.add_parser("token").set_defaults(fn=cmd_token)
     sub.add_parser("entrar").set_defaults(fn=cmd_entrar)
+    importar = sub.add_parser("importar")
+    importar.add_argument("pdf", help="ruta del PDF (tu CV o «Guardar en PDF» de tu perfil de LinkedIn)")
+    importar.set_defaults(fn=cmd_importar)
     buscar = sub.add_parser("buscar")
     buscar.add_argument("--sin-cv", action="store_true", help="solo analizar, sin generar el CV")
     buscar.set_defaults(fn=cmd_buscar)

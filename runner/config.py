@@ -11,7 +11,8 @@ DATA_DIR = Path(os.environ.get("CVO_BOT_DATA_DIR", Path.home() / ".local" / "sha
 CONFIG_FILE = CONFIG_DIR / "config.toml"
 TOKEN_FILE = CONFIG_DIR / "token"
 
-# geoId de LinkedIn verificados (2026-11-16); cualquier otro lugar se puede dar como número.
+# geoId de LinkedIn verificados (2026-11-16). Cualquier otro lugar va por nombre («Medellín, Antioquia, Colombia»)
+# o como geoId numérico.
 GEO_IDS = {"colombia": "100876405", "bogota": "102361989", "bogotá": "102361989", "cartagena": "106336022"}
 MODES = ("prueba", "auto")
 
@@ -23,12 +24,12 @@ generar_cv = true      # hacer el CV a la medida de cada vacante (usa cupo de IA
 
 [[busqueda]]
 palabras = "analista de operaciones"
-lugar = "Colombia"     # Colombia, Bogotá, Cartagena o un geoId de LinkedIn
+lugar = "Colombia"     # Colombia, Bogotá, Cartagena, «Medellín, Antioquia, Colombia» o un geoId
 dias = 1               # 1 = últimas 24 horas, 7 = última semana
 solicitud_sencilla = true
 
 [excluir]
-palabras = ["senior", "practicante"]   # en el cargo
+palabras = ["senior", "lead"]   # palabras completas del cargo que no te interesan
 empresas = []
 """
 
@@ -110,8 +111,8 @@ def load(path: Path = CONFIG_FILE) -> Config:
                         days=int(item.get("dias", 1)), easy_apply=bool(item.get("solicitud_sencilla", True)))
         if not search.keywords:
             raise ConfigError("Cada [[busqueda]] necesita «palabras».")
-        if not search.geo_id:
-            raise ConfigError(f"No conozco el lugar «{search.place}»: usa Colombia, Bogotá, Cartagena o un geoId.")
+        if not search.place.strip():
+            raise ConfigError("Cada [[busqueda]] necesita «lugar».")
         if search.days not in (1, 7, 30):
             raise ConfigError("«dias» debe ser 1, 7 o 30.")
         searches.append(search)

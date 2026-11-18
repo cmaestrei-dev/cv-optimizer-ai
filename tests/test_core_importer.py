@@ -108,3 +108,43 @@ class TestInvalidKeyMessages:
         with patch("core.llm.client.requests.post", return_value=resp), pytest.raises(LLMAuthError) as exc:
             LLMClient(PROVIDERS["gemini"], "AQ.mala", "m").complete("x")
         assert "GEMINI_API_KEY" in str(exc.value) and "AQ.mala" not in str(exc.value)
+
+
+class TestSameStudy:
+    """El PDF de LinkedIn escribe distinto los estudios que la persona ya tiene: no deben duplicarse."""
+
+    @pytest.mark.parametrize("imported, existing", [
+        (("Ingeniería de Sistemas, Ingeniería informática", "Universidad de Cartagena-Colombia"),
+         ("Ingeniería de Sistemas", "Universidad de Cartagena")),
+        (("Creación de APIs con FastAPI, Computer Programming", "Platzi"), ("Creación de APIs", "Platzi")),
+        (("Certificado en Analítica de Datos, Procesamiento de datos", "Universidad Distrital"),
+         ("Certificado en Analítica de Datos", "Universidad Distrital")),
+        (("tecnologa en gestion administrativa", "sena"), ("Tecnóloga en Gestión Administrativa", "SENA")),
+    ])
+    def test_same(self, imported, existing):
+        from core.profile.importer import same_study
+
+        assert same_study(*imported, *existing)
+
+    @pytest.mark.parametrize("imported, existing", [
+        (("Ingeniería de Sistemas", "Universidad de Cartagena"), ("Ingeniería de Sistemas", "Universidad del Norte")),
+        (("Desarrollo con Ruby On Rails", "Platzi"), ("Creación de APIs", "Platzi")),
+    ])
+    def test_different(self, imported, existing):
+        from core.profile.importer import same_study
+
+        assert not same_study(*imported, *existing)
+
+    def test_plan_skips_near_duplicates_and_repeats_inside_the_pdf(self):
+        from core.profile.periods import parse_period as period
+        from core.profile.snapshot import EducationSnap
+
+        data = {**EXTRACTED, "education": [
+            {"title": "Tecnóloga en Gestión Administrativa, Administración", "institution": "SENA-Colombia"},
+            {"title": "Curso de Excel", "institution": "Platzi"},
+            {"title": "Curso de Excel, Hojas de cálculo", "institution": "Platzi"},
+        ]}
+        profile = ProfileSnapshot("laura", education=[
+            EducationSnap(1, "Tecnóloga en Gestión Administrativa", "SENA", "", period(""))])
+        plan = plan_import(ImportedCV.model_validate(data), PDF_TEXT + " Curso de Excel Platzi Hojas de cálculo", profile)
+        assert plan.new_education == [1]

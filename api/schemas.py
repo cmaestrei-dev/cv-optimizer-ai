@@ -46,6 +46,8 @@ class Contact(BaseModel):
     phone: Text = ""
     linkedin_url: Url = ""
     github_url: Url = ""
+    headline: Annotated[str, StringConstraints(strip_whitespace=True, max_length=160)] = ""
+    city: Annotated[str, StringConstraints(strip_whitespace=True, max_length=80)] = ""
 
 
 class ContactOut(BaseModel):
@@ -56,6 +58,8 @@ class ContactOut(BaseModel):
     phone: str
     linkedin_url: str
     github_url: str
+    headline: str = ""
+    city: str = ""
 
 
 class AchievementOut(BaseModel):

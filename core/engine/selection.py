@@ -10,6 +10,7 @@ import re
 from dataclasses import dataclass, field
 
 from config import SKILL_CATEGORIES
+from core.engine import skill_groups as tech
 from core.engine.matching import MatchResult
 from core.profile.repository import skill_key
 from core.profile.snapshot import (
@@ -21,15 +22,15 @@ from core.profile.snapshot import (
 )
 from core.vacancy import VacancyAnalysis
 
-CHARS_PER_LINE = 110
+CHARS_PER_LINE = 100  # a 10 pt en una hoja carta con márgenes de 0,6 in
 _WORD = re.compile(r"[a-z0-9áéíóúñü+#]{3,}")
 
 
 @dataclass
 class Budget:
-    max_experiences: int = 3
-    max_bullets: int = 12
-    min_bullets: int = 8
+    max_experiences: int = 4
+    max_bullets: int = 14
+    min_bullets: int = 10  # una hoja llena rinde más que una medio vacía; el ajuste medido recorta si no cabe
     max_bullets_per_experience: int = 6
     line_budget: int = 40
     max_education: int = 4
@@ -80,12 +81,11 @@ def _choose_experiences(profile: ProfileSnapshot, scores: dict[int, float], budg
         return sum(sorted((scores[a.id] for a in exp.achievements), reverse=True)[:3])
 
     chosen = [experiences[0]]  # la más reciente siempre: evita huecos inexplicados
-    others = sorted(experiences[1:], key=relevance, reverse=True)
-    for exp in others:
-        if len(chosen) >= budget.max_experiences:
-            break
-        if relevance(exp) > 0.1 or len(chosen) < 2:
-            chosen.append(exp)
+    # Las demás, de la más relevante a la menos, hasta el máximo: una experiencia poco relacionada igual muestra
+    # trayectoria, y una hoja medio vacía rinde menos que una llena. Si no cabe, el ajuste medido a 1 página
+    # quita primero las viñetas menos relevantes y al final la experiencia más antigua.
+    for exp in sorted(experiences[1:], key=relevance, reverse=True)[: budget.max_experiences - 1]:
+        chosen.append(exp)
     order = {exp.id: i for i, exp in enumerate(profile.experiences)}
     return sorted(chosen, key=lambda e: order[e.id])
 
@@ -163,10 +163,10 @@ def _select_skills(
         return 2
 
     ranked = sorted(profile.skills, key=priority)[: budget.max_skills]
-    order = {c: i for i, c in enumerate(SKILL_CATEGORIES)}
+    order = {c: i for i, c in enumerate([*tech.ORDER, *SKILL_CATEGORIES])}
     groups: dict[str, list[SkillSnap]] = {}
     for skill in ranked:
-        groups.setdefault(skill.category, []).append(skill)
+        groups.setdefault(tech.display_category(skill.name, skill.category), []).append(skill)
     return sorted(groups.items(), key=lambda g: (min(priority(s) for s in g[1]), order.get(g[0], len(order))))
 
 

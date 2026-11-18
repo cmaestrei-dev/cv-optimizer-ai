@@ -21,94 +21,120 @@ def strip_emojis(text: str) -> str:
     return _EMOJI_PATTERN.sub("", text)
 
 # Se rellena con .replace("{page_size}", ...), NO con .format: llaves simples.
+# Diseño pensado para ATS y para leerse en 6 segundos: una sola columna, texto real (nada de versalitas ni
+# imágenes), una sola familia sans incrustada (Liberation Sans = métricas de Arial), 10 pt, sin justificar,
+# cargo a la izquierda y fechas a la derecha en la misma línea.
 CSS_TEMPLATE = """
 @page {
     size: {page_size};
-    margin: 0.5in 0.5in 0.5in 0.5in;
-    @bottom-center {
-        content: none;
-    }
+    margin: 0.55in 0.6in 0.5in 0.6in;
 }
 
 body {
-    font-family: 'Helvetica Neue', Helvetica, Arial, sans-serif;
-    font-size: 8pt;
-    color: #1e1e1e;
-    line-height: 1.25;
+    font-family: 'Liberation Sans', Arial, Helvetica, sans-serif;
+    font-size: 10pt;
+    color: #1a1a1a;
+    line-height: 1.32;
     margin: 0;
     padding: 0;
 }
 
 h1 {
-    font-family: Georgia, 'Times New Roman', serif;
     text-align: center;
-    font-size: 17pt;
+    font-size: 21pt;
     font-weight: 700;
-    text-transform: uppercase;
-    letter-spacing: 3pt;
+    letter-spacing: 0.3pt;
     color: #111111;
-    margin: 0 0 2pt 0;
+    margin: 0;
     padding: 0;
+    line-height: 1.1;
+}
+
+.titular {
+    text-align: center;
+    font-size: 10.5pt;
+    color: #333333;
+    margin: 3pt 0 0 0;
 }
 
 .contacto {
     text-align: center;
-    font-size: 7pt;
-    color: #555555;
-    margin: 0 0 12pt 0;
-    letter-spacing: 0.2pt;
+    font-size: 9pt;
+    color: #444444;
+    margin: 4pt 0 10pt 0;
 }
 
 .contacto a {
-    color: #555555;
+    color: #444444;
     text-decoration: none;
+    white-space: nowrap;
 }
 
 h2 {
-    font-family: 'Helvetica Neue', Helvetica, Arial, sans-serif;
-    font-size: 7.5pt;
+    font-size: 10.5pt;
     font-weight: 700;
-    font-variant: small-caps;
-    letter-spacing: 1.8pt;
-    text-transform: lowercase;
-    color: #2a2a2a;
-    border-bottom: 0.4pt solid #444444;
-    margin: 12pt 0 4pt 0;
-    padding: 0 0 2pt 0;
+    text-transform: uppercase;
+    letter-spacing: 0.6pt;
+    color: #111111;
+    border-bottom: 0.8pt solid #222222;
+    margin: 10pt 0 4pt 0;
+    padding: 0 0 1.5pt 0;
 }
 
-h3 {
-    font-size: 8pt;
-    font-weight: 600;
-    margin: 7pt 0 1pt 0;
-    color: #1e1e1e;
-    padding: 0;
+.entrada {
+    margin: 6pt 0 0 0;
+    break-inside: avoid;
+}
+
+.fila {
+    display: flex;
+    justify-content: space-between;
+    align-items: baseline;
+    gap: 12pt;
+}
+
+.cargo {
+    font-weight: 700;
+    font-size: 10.5pt;
+    color: #111111;
+}
+
+.fecha {
+    white-space: nowrap;
+    font-size: 9.5pt;
+    color: #333333;
+}
+
+.lugar {
+    font-style: italic;
+    font-size: 9.5pt;
+    color: #333333;
 }
 
 p {
-    font-size: 8pt;
     margin: 0 0 2pt 0;
-    text-align: justify;
-    color: #2a2a2a;
+    color: #1a1a1a;
     orphans: 2;
     widows: 2;
 }
 
 ul {
-    margin: 1pt 0 3pt 0;
-    padding-left: 12pt;
-    list-style-type: "– ";
-}
-
-ul li::marker {
-    color: #666666;
+    margin: 2pt 0 0 0;
+    padding-left: 13pt;
+    list-style-type: disc;
 }
 
 ul li {
-    font-size: 8pt;
-    margin-bottom: 1pt;
-    color: #2a2a2a;
-    text-align: justify;
+    margin-bottom: 1.5pt;
+    padding-left: 1pt;
+}
+
+ul li::marker {
+    color: #333333;
+}
+
+.habilidades p {
+    margin: 0 0 2pt 0;
 }
 
 strong {

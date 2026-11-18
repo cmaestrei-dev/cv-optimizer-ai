@@ -131,9 +131,25 @@ def plan_import(imported: ImportedCV, pdf_text: str, profile: ProfileSnapshot) -
             seen.add(key)
             plan.new_skills.append(i)
 
-    existing_edu = {(skill_key(e.title), skill_key(e.institution)) for e in profile.education}
-    plan.new_education = [
-        i for i, e in enumerate(imported.education)
-        if e.title.strip() and (skill_key(e.title), skill_key(e.institution)) not in existing_edu
-    ]
+    known = [(e.title, e.institution) for e in profile.education]
+    for i, e in enumerate(imported.education):
+        if e.title.strip() and not any(same_study(e.title, e.institution, t, inst) for t, inst in known):
+            plan.new_education.append(i)
+            known.append((e.title, e.institution))  # dos estudios casi iguales en el mismo PDF: uno solo
     return plan
+
+
+def _study_key(text: str) -> str:
+    return re.sub(r"[^\w ]+", " ", skill_key(text)).strip()
+
+
+def same_study(title_a: str, institution_a: str, title_b: str, institution_b: str) -> bool:
+    """El mismo estudio escrito distinto. El PDF de LinkedIn añade el campo («Ingeniería de Sistemas, Ingeniería
+    informática») o el país a la institución («Universidad de Cartagena-Colombia»): se compara el título hasta la
+    primera coma y la institución por su comienzo."""
+    inst_a, inst_b = _study_key(institution_a), _study_key(institution_b)
+    if inst_a != inst_b and not (inst_a and inst_b and (inst_a.startswith(inst_b) or inst_b.startswith(inst_a))):
+        return False
+    head_a, head_b = (_study_key(t.split(",")[0]) for t in (title_a, title_b))
+    full_a, full_b = _study_key(title_a), _study_key(title_b)
+    return bool(head_a) and (head_a == head_b or full_a.startswith(full_b) or full_b.startswith(full_a))

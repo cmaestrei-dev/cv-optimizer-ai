@@ -31,6 +31,9 @@ class User(TimestampMixin, Base):
     phone: Mapped[str] = mapped_column(String, default="")
     linkedin_url: Mapped[str] = mapped_column(String, default="")
     github_url: Mapped[str] = mapped_column(String, default="")
+    # Encabezado del CV: titular («Desarrollador Full Stack | FastAPI | React») y ciudad («Cartagena, Colombia»).
+    headline: Mapped[str] = mapped_column(String, default="", server_default="")
+    city: Mapped[str] = mapped_column(String, default="", server_default="")
     password_hash: Mapped[str] = mapped_column(String, default="")
     salt: Mapped[str] = mapped_column(String, default="")
     # Cuenta del SaaS: "emisor|sub" del token del proveedor de identidad. Vacío = perfil de Streamlit.
