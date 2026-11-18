@@ -215,72 +215,107 @@ def _answerer(api: Api, conf: cfg.Config, application_id: int):
     return answer
 
 
-def cmd_postular(args) -> int:
+def _pending(state: State, portal: str) -> list[tuple[str, dict]]:
+    from pathlib import Path
+
+    return [(job_id, v) for job_id, v in state.data["vistas"].items()
+            if v.get("estado") == "preparada" and v.get("portal", "linkedin") == portal
+            and v.get("cv") and Path(v["cv"]).is_file() and v.get("cv_id")]
+
+
+def _apply_portal(page, portal: str, pending, *, conf: cfg.Config, api: Api, state: State, submit: bool, limit: int) -> None:
+    """Postula a las preparadas de un portal. Se detiene ante una verificación, el tope o una sesión perdida."""
     import random
     import time as _time
     from pathlib import Path
 
+    from runner import computrabajo_apply, linkedin
+
+    name, sent_key = cfg.PORTALS[portal], _key("enviadas", portal)
+    for n, (job_id, v) in enumerate(pending[: limit or len(pending)]):
+        if submit and state.today(sent_key) >= conf.cap(portal):
+            print("Tope diario de envíos alcanzado.")
+            break
+        print(f"\n· {v.get('url')}  (compatibilidad {v.get('puntaje')})")
+        answerer = _answerer(api, conf, v["app"])
+        if portal == "linkedin":
+            result = linkedin.apply(page, v["url"], Path(v["cv"]), answerer, submit=submit, shots=cfg.DATA_DIR / "capturas")
+        else:
+            result = computrabajo_apply.apply(page, v["url"], Path(v["cv"]), answerer, submit=submit,
+                                              general=Path(conf.general_cvs[portal]),
+                                              uploaded=state.data.setdefault(f"pdfs_{portal}", []))
+        print(f"  → {result.status}{': ' + result.detail if result.detail else ''}")
+        if result.unanswered:
+            print("    Sin respuesta (agrégalas a [respuestas] o a tu perfil):", "; ".join(result.unanswered[:4]))
+        if result.status in ("verificacion", "tope"):
+            state.pause(24, f"{name}: {result.status} ({result.detail[:80]})", kind=_key("cuenta", portal))
+            print(f"Paro {name} 24 horas. Si fue una verificación, entra tú a {name} y complétala.")
+            break
+        if result.status == "sin_espacio":
+            print(f"Paro {name}: {result.detail}")
+            break
+        if result.status == "sin_sesion":
+            state.data.setdefault("sesion_perdida", []).append(portal)
+            print(f"Sin sesión de {name}: python -m runner entrar {portal}")
+            break
+        if result.status == "enviada":
+            try:
+                api.post(f"/applications/{v['app']}/sent", {"cv_id": v["cv_id"], "platform": name})
+            except ApiError as e:
+                print(f"    Enviada en {name}, pero la app no la registró: {e.detail}")
+            state.mark(job_id, "enviada", portal=portal, **{k: v[k] for k in ("app", "cv", "cv_id", "url", "puntaje")})
+            state.count(sent_key)
+        elif result.status in ("saltada", "externa", "ya_postulada"):
+            state.mark(job_id, result.status, portal=portal, app=v["app"], url=v["url"],
+                       preguntas=result.unanswered[:6], detalle=result.detail[:200])
+        state.save()
+        if n < min(len(pending), limit or len(pending)) - 1:
+            _time.sleep(random.uniform(*conf.pause_seconds) if result.status == "enviada" else random.uniform(8, 20))
+
+
+def cmd_postular(args) -> int:
     from playwright.sync_api import sync_playwright
 
-    from runner import browser, linkedin
+    from runner import browser
 
     conf = cfg.load()
     submit = conf.mode == "auto" and not args.prueba
     api = Api(conf.api, conf.token)
     state = State(cfg.DATA_DIR / "estado.json")
-    if (until := state.pause_until("cuenta")) and until > datetime.now(UTC):
-        print(f"Postulación en pausa hasta {until:%Y-%m-%d %H:%M} UTC: {state.pause_reason('cuenta')}")
-        return 0
-    if not browser.has_session():
-        print("El navegador del bot no tiene sesión de LinkedIn: python -m runner entrar")
-        return 1
-    pending = [(job_id, v) for job_id, v in state.data["vistas"].items()
-               if v.get("estado") == "preparada" and v.get("portal", "linkedin") == "linkedin"
-               and v.get("cv") and Path(v["cv"]).is_file() and v.get("cv_id")]
-    sent_today = state.today("enviadas")
-    print(f"{'Modo AUTOMÁTICO: se envían' if submit else 'Modo PRUEBA: se llega a la revisión y se descarta'}. "
-          f"{len(pending)} preparadas; hoy van {sent_today} de {conf.daily_cap} enviadas.")
-    if not pending:
-        return 0
-    with sync_playwright() as p:
-        context = browser.open_context(p)
-        page = context.pages[0] if context.pages else context.new_page()
-        page.set_default_timeout(90_000)
-        page.set_default_navigation_timeout(120_000)
-        try:
-            for n, (job_id, v) in enumerate(pending[: args.max or len(pending)]):
-                if submit and sent_today >= conf.daily_cap:
-                    print("Tope diario de envíos alcanzado.")
-                    break
-                print(f"\n· {v.get('url')}  (compatibilidad {v.get('puntaje')})")
-                result = linkedin.apply(page, v["url"], Path(v["cv"]), _answerer(api, conf, v["app"]), submit=submit,
-                                        shots=cfg.DATA_DIR / "capturas")
-                print(f"  → {result.status}{': ' + result.detail if result.detail else ''}")
-                if result.unanswered:
-                    print("    Sin respuesta (agrégalas a [respuestas] o a tu perfil):", "; ".join(result.unanswered[:4]))
-                if result.status in ("verificacion", "tope"):
-                    state.pause(24, f"LinkedIn: {result.status} ({result.detail[:80]})", kind="cuenta")
-                    print("Paro todo 24 horas. Si fue una verificación, entra tú a LinkedIn y complétala.")
-                    break
-                if result.status == "enviada":
-                    try:
-                        api.post(f"/applications/{v['app']}/sent", {"cv_id": v["cv_id"], "platform": "LinkedIn"})
-                    except ApiError as e:
-                        print(f"    Enviada en LinkedIn, pero la app no la registró: {e.detail}")
-                    state.mark(job_id, "enviada", **{k: v[k] for k in ("app", "cv", "cv_id", "url", "puntaje")})
-                    state.count("enviadas")
-                    sent_today += 1
-                elif result.status in ("saltada", "externa", "ya_postulada"):
-                    state.mark(job_id, result.status, app=v["app"], url=v["url"], preguntas=result.unanswered[:6],
-                               detalle=result.detail[:200])
+    state.data["sesion_perdida"] = []
+    print("Modo AUTOMÁTICO: se envían." if submit else "Modo PRUEBA: no se envía nada.")
+    todo = []
+    for portal, name in cfg.PORTALS.items():
+        pending = _pending(state, portal)
+        if not pending:
+            continue
+        paused = _key("cuenta", portal)
+        if (until := state.pause_until(paused)) and until > datetime.now(UTC):
+            print(f"{name}: postulación en pausa hasta {until:%Y-%m-%d %H:%M} UTC ({state.pause_reason(paused)}).")
+            continue
+        if portal == "linkedin" and not browser.has_session():
+            print("El navegador del bot no tiene sesión de LinkedIn: python -m runner entrar")
+            state.data["sesion_perdida"].append(portal)
+            continue
+        if portal != "linkedin" and not conf.general_cvs.get(portal):
+            print(f"{name}: falta «cv_general» en [{portal}] (el PDF que queda por defecto): no se postula.")
+            continue
+        print(f"{name}: {len(pending)} preparadas; hoy van {state.today(_key('enviadas', portal))} de {conf.cap(portal)} enviadas.")
+        todo.append((portal, pending))
+    if todo:
+        with sync_playwright() as p:
+            context = browser.open_context(p)
+            page = context.pages[0] if context.pages else context.new_page()
+            page.set_default_timeout(90_000)
+            page.set_default_navigation_timeout(120_000)
+            try:
+                for portal, pending in todo:
+                    _apply_portal(page, portal, pending, conf=conf, api=api, state=state, submit=submit, limit=args.max)
+            finally:
                 state.save()
-                if n < len(pending) - 1:
-                    wait = random.uniform(*conf.pause_seconds) if result.status == "enviada" else random.uniform(8, 20)
-                    _time.sleep(wait)
-        finally:
-            state.save()
-            context.close()
-    return 0
+                context.close()
+    state.save()
+    return 1 if state.data["sesion_perdida"] else 0
 
 
 def _notify(text: str) -> None:
@@ -316,12 +351,15 @@ def cmd_diario(_args) -> int:
         code = cmd_postular(argparse.Namespace(prueba=False, max=0))
         state = State(cfg.DATA_DIR / "estado.json")
         notice = f"Hoy: {state.today('enviadas')} enviadas y {state.today('preparadas')} preparadas."
-        if ct := state.today(_key("preparadas", "computrabajo")):
-            notice += f" Computrabajo: {ct} preparadas."
-        if (until := state.pause_until("cuenta")) and until > datetime.now(UTC):
-            notice += f" Postulación en pausa: {state.pause_reason('cuenta')}. Entra tú a LinkedIn y revisa."
-        elif code == 1:
-            notice += " El navegador del bot perdió la sesión de LinkedIn: python -m runner entrar."
+        ct_sent, ct_ready = state.today(_key("enviadas", "computrabajo")), state.today(_key("preparadas", "computrabajo"))
+        if ct_sent or ct_ready:
+            notice += f" Computrabajo: {ct_sent} enviadas y {ct_ready} preparadas."
+        for portal, name in cfg.PORTALS.items():
+            paused = _key("cuenta", portal)
+            if (until := state.pause_until(paused)) and until > datetime.now(UTC):
+                notice += f" Postulación en pausa: {state.pause_reason(paused)}. Entra tú a {name} y revisa."
+        for portal in state.data.get("sesion_perdida", []):
+            notice += f" El navegador del bot perdió la sesión de {cfg.PORTALS[portal]}: python -m runner entrar {portal}."
         print(notice)
         _notify(notice)
         return code
