@@ -213,3 +213,19 @@ class TestImportCommand:
         assert "Guardado: 0 experiencias" in capsys.readouterr().out
         assert len(client.get("/profile", headers=h).json()["experiences"]) == 1
         assert cli.main(["importar", str(tmp_path / "no-existe.pdf")]) == 2
+
+
+def test_session_detection_reads_only_cookie_names(tmp_path):
+    import sqlite3
+
+    from runner import browser
+
+    assert browser.has_session(tmp_path) is False  # sin perfil
+    (tmp_path / "Default").mkdir()
+    with sqlite3.connect(tmp_path / "Default" / "Cookies") as db:
+        db.execute("create table cookies (host_key text, name text, encrypted_value blob)")
+        db.execute("insert into cookies values ('.www.linkedin.com', 'bcookie', x'00')")
+    assert browser.has_session(tmp_path) is False  # visitante
+    with sqlite3.connect(tmp_path / "Default" / "Cookies") as db:
+        db.execute("insert into cookies values ('.www.linkedin.com', 'li_at', x'00')")
+    assert browser.has_session(tmp_path) is True

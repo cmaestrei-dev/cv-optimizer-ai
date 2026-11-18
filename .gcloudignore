@@ -12,3 +12,7 @@ web/dist/
 tests/
 evals/
 *.db
+# Herramientas locales y el bot del dueño (no van al servidor; las capturas de diseño pesan megas)
+.impeccable/
+.gemini/
+runner/
