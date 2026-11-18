@@ -47,8 +47,20 @@ Las búsquedas con `portal = "computrabajo"` usan la búsqueda pública de Compu
 mínima en la tabla `[computrabajo]` (al final del archivo): debajo del mínimo, la vacante queda **descartada** en la
 app, con el motivo, y no se le hace CV. Si Computrabajo frena las peticiones, solo su búsqueda espera 6 horas.
 
-Por ahora el bot prepara las vacantes de Computrabajo; postular allí llega en la siguiente entrega. Para eso, inicia
-sesión una vez en el navegador del bot (con el bot detenido):
+Para postular, `python -m runner postular` usa tu sesión de Computrabajo en el navegador del bot:
+
+1. Sube el CV de la vacante a «Hoja de Vida en Word/PDF» y lo marca **por defecto**: es el que recibe la empresa,
+   junto con tu hoja de vida en línea (que siempre se ve en su última versión).
+2. Pulsa «Aplicar», que en Computrabajo envía de inmediato. Si la oferta tiene preguntas de filtro, las responde
+   con el mismo banco y el mismo perfil que en LinkedIn; si alguna queda sin respuesta, no envía.
+3. Comprueba que la oferta quede «Postulado» y deja otra vez por defecto tu CV general (`cv_general` en
+   `[computrabajo]`), el que va cuando postulas tú a mano.
+
+Computrabajo guarda como máximo 10 PDF. Para hacer espacio, el bot borra el más viejo que subió él; nunca el
+general ni los tuyos (si no hay ninguno suyo, se detiene y te avisa). En modo prueba deja listo el CV y vuelve al
+general sin pulsar «Aplicar».
+
+Inicia sesión una vez en el navegador del bot (con el bot detenido):
 
 ```bash
 python -m runner entrar computrabajo   # entra con tu correo y contraseña; cierra la ventana al terminar

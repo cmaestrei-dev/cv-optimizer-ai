@@ -41,6 +41,7 @@ dias = 1                  # 1, 3, 7, 15 o 30
 [computrabajo]
 tope_diario = 20             # aparte del de LinkedIn
 compatibilidad_minima = 60   # debajo de esto la vacante se descarta en la app (con el motivo) y no se hace CV
+cv_general = ""              # PDF que queda por defecto entre postulaciones (sin él, el bot no postula en Computrabajo)
 
 [excluir]
 palabras = ["senior", "lead"]   # palabras completas del cargo que no te interesan
@@ -92,6 +93,7 @@ class Config:
     pause_seconds: tuple[int, int] = (120, 240)  # entre envíos
     portal_caps: dict[str, int] = field(default_factory=dict)  # tope diario de cada portal (LinkedIn: daily_cap)
     min_scores: dict[str, int] = field(default_factory=dict)  # compatibilidad mínima de cada portal (0 = sin mínimo)
+    general_cvs: dict[str, str] = field(default_factory=dict)  # PDF general fijo de cada portal (Computrabajo)
 
     def cap(self, portal: str) -> int:
         return self.daily_cap if portal == "linkedin" else self.portal_caps.get(portal, 20)
@@ -168,10 +170,12 @@ def load(path: Path = CONFIG_FILE) -> Config:
     cap = int(raw.get("tope_diario", 20))
     if not 1 <= cap <= 50:
         raise ConfigError("«tope_diario» debe estar entre 1 y 50.")
-    portal_caps, min_scores = {}, {}
+    portal_caps, min_scores, general_cvs = {}, {}, {}
     for portal, rules in ((p, raw.get(p, {})) for p in PORTALS if p != "linkedin"):
         portal_caps[portal] = int(rules.get("tope_diario", 20))
         min_scores[portal] = int(rules.get("compatibilidad_minima", 0))
+        if general := str(rules.get("cv_general", "")).strip():
+            general_cvs[portal] = str(Path(general).expanduser())
         if not 1 <= portal_caps[portal] <= 50:
             raise ConfigError(f"[{portal}] «tope_diario» debe estar entre 1 y 50.")
     min_scores["linkedin"] = int(raw.get("compatibilidad_minima", 0))
@@ -190,5 +194,5 @@ def load(path: Path = CONFIG_FILE) -> Config:
         exclude_companies=[str(c).lower() for c in exclude.get("empresas", [])],
         answers={str(k): str(v) for k, v in raw.get("respuestas", {}).items()},
         no_evidence=no_evidence, pause_seconds=(int(pause[0]), int(pause[1])),
-        portal_caps=portal_caps, min_scores=min_scores,
+        portal_caps=portal_caps, min_scores=min_scores, general_cvs=general_cvs,
     )

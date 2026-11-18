@@ -309,7 +309,19 @@ Entregas:
 - [x] Probado con la búsqueda real (2026-11-18): 3 preparadas (79, 75 y 64) y 3 descartadas por debajo de 60 (aprendices SENA).
 - [x] `python -m runner entrar computrabajo` abre su inicio de sesión en el navegador del bot. La cookie de sesión aún no se conoce: la persona cierra la ventana al terminar. No abre si el navegador del bot ya está abierto.
 - [ ] **(dueño)** Actualizar la hoja de vida en Computrabajo e iniciar sesión en el navegador del bot (`entrar computrabajo`).
-- [ ] **C2, postular:** estudiar el flujo con sesión (¿preguntas de filtro?, ¿qué CV ve la empresa?) y postular con el mismo esquema que LinkedIn.
+- [x] **C2, estudio con la sesión del dueño, sin postular (2026-11-18):**
+  - «Aplicar» lleva a `/match/?oi=` y postula de inmediato; las preguntas de filtro van en `/candidate/apply-kq`, y `/candidate/apply-exists` es «ya aplicaste». No hay revisión, así que tampoco hay un modo prueba completo.
+  - La ayuda oficial dice que la empresa siempre ve la **última versión** de la hoja de vida en línea, también en postulaciones viejas.
+  - Del PDF adjunto la ayuda oficial no dice nada. Una guía independiente dice que «se guarda con tu postulación». Hay un máximo de 10 y uno «por defecto» que va «a mis candidaturas».
+  - El dueño tenía 10 PDF de vacantes viejas y marcado «No adjuntar ninguna»: sus postulaciones salían sin PDF.
+- [x] **C2, postular** (`runner/computrabajo_apply.py`):
+  - Sube el CV de la vacante, lo marca por defecto y aplica. Responde las preguntas de filtro con el banco y el perfil; si alguna queda sin respuesta, no envía.
+  - Confirma con el aviso o con la oferta marcada «Postulado». Luego vuelve a dejar por defecto el CV general (`cv_general`).
+  - Para hacer espacio borra el PDF más viejo que subió el bot; nunca el general ni uno ajeno (`sin_espacio`).
+  - 7 pruebas contra un Computrabajo falso con Playwright. Las redirecciones van con JavaScript, porque las HTTP de una respuesta simulada no pasan por la intercepción y saldrían a la red.
+- [x] **(dueño)** Decidió: CV por vacante más uno general fijo; borrar sus 10 PDF viejos; el primer envío, mirándolo.
+- [ ] Borrar los 10 PDF viejos, subir el CV general (tras desplegar el arreglo del título) y hacer el primer envío real mirándolo.
+- [ ] Hoja de vida en línea de Computrabajo consecuente con LinkedIn (cargos de El Arte de Nicolás y Equimat, falta Karta), en el navegador de Claude con la sesión del dueño.
 - [ ] **(dueño)** Cargar su perfil (CV o PDF de LinkedIn), crear el token en la web e iniciar sesión en el navegador del bot.
 
 ### CV v2: legible para personas y ATS (2026-11-18, pedido del dueño)
@@ -343,6 +355,7 @@ Cambios:
 
 | Fecha | Decisión | Por qué |
 |---|---|---|
+| 2026-11-18 | En Computrabajo, CV por vacante marcado «por defecto» al postular, más un CV general fijo | La empresa recibe el PDF por defecto; un CV general en uno de los 10 espacios garantiza que nunca quede sin PDF si Computrabajo solo guardara una referencia y el bot rotara el de la vacante (decisión del dueño) |
 | 2026-11-18 | En el CV, el título de educación formal siempre entra y va primero | La educación se ordenaba por «citada» y fecha: un título sin fechas quedaba fuera tras cuatro certificados recientes (pasó con el del dueño). Para cualquier profesión, el título pesa más que un curso |
 | 2026-11-18 | En Computrabajo, compatibilidad mínima de 60 y descartar en la app lo que no llega | Su búsqueda mezcla oficios con el mismo nombre (ventas, producción); descartarlo con el motivo deja la bandeja limpia y el registro de por qué no se postuló |
 | 2026-11-18 | Programación con un temporizador de systemd del usuario, no con cron ni una tarea en la nube | La ventana del bot necesita la sesión gráfica de la persona (DISPLAY y llavero), que systemd del usuario ya tiene; `Persistent=true` recupera la vuelta si el computador estaba apagado; no requiere root |
@@ -418,6 +431,6 @@ Cambios:
 ## Próximo paso
 
 1. Fase 7 LinkedIn: primeros envíos reales en `modo = "auto"`, mirándolos → E4 (programarlo y ver en la web lo que hizo el bot).
-   Fase 8 Computrabajo: el dueño actualiza su hoja de vida allá e inicia sesión en el navegador del bot → C2 (postular).
+   Fase 8 Computrabajo: desplegar el arreglo del título → CV general → limpiar los 10 PDF viejos → primer envío real mirándolo; hoja de vida en línea igual a LinkedIn.
    Después: Computrabajo, elempleo y Magneto (postular suele ser un clic), Get on Board y búsquedas de prácticas.
 2. Después, el resto de portales (Computrabajo, Magneto, elempleo) con el mismo esquema.

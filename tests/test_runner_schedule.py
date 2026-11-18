@@ -82,16 +82,27 @@ def test_round_searches_then_applies_even_if_the_search_breaks(data_dir, monkeyp
     monkeypatch.setattr(cli, "cmd_postular", postular)
     assert cli.cmd_diario(None) == 0
     assert order == ["buscar", "postular"]
-    assert notices == ["Hoy: 1 enviadas y 0 preparadas. Computrabajo: 1 preparadas."]
+    assert notices == ["Hoy: 1 enviadas y 0 preparadas. Computrabajo: 0 enviadas y 1 preparadas."]
     assert "RuntimeError" in capsys.readouterr().err
 
 
 def test_round_warns_about_a_lost_session_and_a_paused_account(data_dir, monkeypatch):
     tmp_path, notices = data_dir
     monkeypatch.setattr(cli, "cmd_buscar", lambda _args: 0)
-    monkeypatch.setattr(cli, "cmd_postular", lambda _args: 1)
+
+    def postular(_args):
+        state = State(tmp_path / "estado.json")
+        state.data["sesion_perdida"] = ["computrabajo"]
+        state.save()
+        return 1
+
+    monkeypatch.setattr(cli, "cmd_postular", postular)
     cli.cmd_diario(None)
-    assert "perdió la sesión" in notices[-1]
+    assert "perdió la sesión de Computrabajo: python -m runner entrar computrabajo" in notices[-1]
+    state = State(tmp_path / "estado.json")
+    state.data["sesion_perdida"] = []
+    state.save()
+    monkeypatch.setattr(cli, "cmd_postular", lambda _args: 0)
     state = State(tmp_path / "estado.json")
     state.pause(24, "LinkedIn: verificacion", kind="cuenta")
     state.save()
