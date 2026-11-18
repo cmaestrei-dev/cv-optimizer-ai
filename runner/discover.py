@@ -23,7 +23,7 @@ PAGE_SIZE = 10
 
 
 class BlockedError(RuntimeError):
-    """LinkedIn está frenando las peticiones (429/999): hay que parar y esperar."""
+    """El portal está frenando las peticiones (LinkedIn: 429/999): hay que parar y esperar."""
 
 
 @dataclass(frozen=True)
@@ -96,6 +96,10 @@ def parse_posting(page: str) -> str:
     if criteria:
         text += "\n\n" + "\n".join(f"{_text(k)}: {_text(v)}" for k, v in criteria)
     return text
+
+
+def posting_text(card: Card) -> str:
+    return parse_posting(fetch(posting_url(card.job_id)))
 
 
 def fetch(url: str, *, timeout: float = 20) -> str:

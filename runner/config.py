@@ -15,6 +15,8 @@ TOKEN_FILE = CONFIG_DIR / "token"
 # o como geoId numérico.
 GEO_IDS = {"colombia": "100876405", "bogota": "102361989", "bogotá": "102361989", "cartagena": "106336022"}
 MODES = ("prueba", "auto")
+PORTALS = {"linkedin": "LinkedIn", "computrabajo": "Computrabajo"}
+DAYS = {"linkedin": (1, 7, 30), "computrabajo": (1, 3, 7, 15, 30)}
 
 TEMPLATE = """# Bot de postulación de CV Optimizer. Edita y guarda; luego: python -m runner buscar
 api = "https://TU-SERVICIO.run.app/api"   # la dirección de tu app, terminada en /api
@@ -30,6 +32,16 @@ lugar = "Colombia"     # Colombia, Bogotá, Cartagena, «Medellín, Antioquia, C
 dias = 1               # 1 = últimas 24 horas, 7 = última semana
 solicitud_sencilla = true
 
+[[busqueda]]
+portal = "computrabajo"   # linkedin (si no se dice) o computrabajo
+palabras = "analista de operaciones"
+lugar = "Colombia"        # Colombia, Remoto, Cartagena, Medellín, Bogotá…
+dias = 1                  # 1, 3, 7, 15 o 30
+
+[computrabajo]
+tope_diario = 20             # aparte del de LinkedIn
+compatibilidad_minima = 60   # debajo de esto la vacante se descarta en la app (con el motivo) y no se hace CV
+
 [excluir]
 palabras = ["senior", "lead"]   # palabras completas del cargo que no te interesan
 empresas = []
@@ -43,7 +55,8 @@ empresas = []
 """
 
 
-GENERAL_KEYS = {"api", "modo", "tope_diario", "generar_cv", "sin_evidencia", "pausa_entre_envios_seg"}
+GENERAL_KEYS = {"api", "modo", "tope_diario", "generar_cv", "sin_evidencia", "pausa_entre_envios_seg",
+                "compatibilidad_minima"}
 
 
 class ConfigError(ValueError):
@@ -55,7 +68,8 @@ class Search:
     keywords: str
     place: str = "Colombia"
     days: int = 1
-    easy_apply: bool = True
+    easy_apply: bool = True  # solo LinkedIn
+    portal: str = "linkedin"
 
     @property
     def geo_id(self) -> str:
@@ -76,6 +90,14 @@ class Config:
     answers: dict[str, str] = field(default_factory=dict)  # banco: «patrón|patrón» → respuesta
     no_evidence: str = "saltar"  # años con una tecnología que el perfil no muestra: "saltar" la vacante o "cero"
     pause_seconds: tuple[int, int] = (120, 240)  # entre envíos
+    portal_caps: dict[str, int] = field(default_factory=dict)  # tope diario de cada portal (LinkedIn: daily_cap)
+    min_scores: dict[str, int] = field(default_factory=dict)  # compatibilidad mínima de cada portal (0 = sin mínimo)
+
+    def cap(self, portal: str) -> int:
+        return self.daily_cap if portal == "linkedin" else self.portal_caps.get(portal, 20)
+
+    def min_score(self, portal: str) -> int:
+        return self.min_scores.get(portal, 0)
 
 
 def write_template() -> Path:
@@ -128,20 +150,33 @@ def load(path: Path = CONFIG_FILE) -> Config:
         raise ConfigError(f"«modo» debe ser uno de: {', '.join(MODES)}.")
     searches = []
     for item in raw.get("busqueda", []):
+        portal = str(item.get("portal", "linkedin")).strip().lower()
+        if portal not in PORTALS:
+            raise ConfigError(f"«portal» debe ser uno de: {', '.join(PORTALS)}.")
         search = Search(keywords=str(item.get("palabras", "")).strip(), place=str(item.get("lugar", "Colombia")),
-                        days=int(item.get("dias", 1)), easy_apply=bool(item.get("solicitud_sencilla", True)))
+                        days=int(item.get("dias", 1)), easy_apply=bool(item.get("solicitud_sencilla", True)),
+                        portal=portal)
         if not search.keywords:
             raise ConfigError("Cada [[busqueda]] necesita «palabras».")
         if not search.place.strip():
             raise ConfigError("Cada [[busqueda]] necesita «lugar».")
-        if search.days not in (1, 7, 30):
-            raise ConfigError("«dias» debe ser 1, 7 o 30.")
+        if search.days not in DAYS[portal]:
+            raise ConfigError(f"En {PORTALS[portal]}, «dias» debe ser {', '.join(map(str, DAYS[portal]))}.")
         searches.append(search)
     if not searches:
         raise ConfigError("Agrega al menos una [[busqueda]].")
     cap = int(raw.get("tope_diario", 20))
     if not 1 <= cap <= 50:
         raise ConfigError("«tope_diario» debe estar entre 1 y 50.")
+    portal_caps, min_scores = {}, {}
+    for portal, rules in ((p, raw.get(p, {})) for p in PORTALS if p != "linkedin"):
+        portal_caps[portal] = int(rules.get("tope_diario", 20))
+        min_scores[portal] = int(rules.get("compatibilidad_minima", 0))
+        if not 1 <= portal_caps[portal] <= 50:
+            raise ConfigError(f"[{portal}] «tope_diario» debe estar entre 1 y 50.")
+    min_scores["linkedin"] = int(raw.get("compatibilidad_minima", 0))
+    if not all(0 <= m <= 100 for m in min_scores.values()):
+        raise ConfigError("«compatibilidad_minima» debe estar entre 0 y 100.")
     exclude = raw.get("excluir", {})
     no_evidence = str(raw.get("sin_evidencia", "saltar")).strip().lower()
     if no_evidence not in ("saltar", "cero"):
@@ -155,4 +190,5 @@ def load(path: Path = CONFIG_FILE) -> Config:
         exclude_companies=[str(c).lower() for c in exclude.get("empresas", [])],
         answers={str(k): str(v) for k, v in raw.get("respuestas", {}).items()},
         no_evidence=no_evidence, pause_seconds=(int(pause[0]), int(pause[1])),
+        portal_caps=portal_caps, min_scores=min_scores,
     )

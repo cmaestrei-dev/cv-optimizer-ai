@@ -288,6 +288,26 @@ Entregas:
   - [ ] Instalarlo en el computador del dueño, desde una copia estable, tras los primeros envíos reales.
   - [ ] Mostrar en la web lo que hizo el bot cada día.
 - [ ] Después: postulaciones externas (Greenhouse, Lever…) y los otros portales.
+
+**Computrabajo (Fase 8, rama `fase8-computrabajo`).** Decisiones del dueño (2026-11-18):
+- Tope de 15 a 25 al día (se usa 20), aparte de LinkedIn.
+- Compatibilidad mínima de 60: la búsqueda por «desarrollador» trae ventas («desarrollador comercial motorizado»).
+- Su cuenta existe, pero la hoja de vida de Computrabajo está desactualizada.
+
+Lo que encontró la investigación (2026-11-18):
+- La búsqueda y la oferta son públicas, en HTML sin Cloudflare: `/trabajo-de-<cargo>[-en-<ciudad>|-en-remoto]?pubdate=<días>&by=publicationtime&p=<n>`, con 20 por página.
+- Ciudades como `cartagena-de-indias` y `bogota-dc`. Si hay pocas en la ciudad, rellena con otras.
+- La oferta trae condiciones, descripción, requisitos y aptitudes en `div-link="oferta"`, y al final unas «Palabras clave» de SEO que confunden el análisis: a un planeador de producción le ponen «developer».
+- Postular exige sesión en `candidato.co.computrabajo.com` (`/match/?oi=<código>`) y usa la hoja de vida del perfil de Computrabajo.
+
+Entregas:
+- [x] **C1, buscar y preparar** (`runner/computrabajo.py`):
+  - Se activa con `portal = "computrabajo"` en `[[busqueda]]`. Tope y compatibilidad mínima van en la tabla `[computrabajo]`.
+  - Debajo del mínimo, la vacante queda «descartada» en la app con el motivo y sin CV (no gasta cupo de IA en CV).
+  - Pausas y conteos por portal (`busqueda_computrabajo`, `preparadas_computrabajo`); el postulador de LinkedIn ignora las de Computrabajo.
+  - Se detiene ante 403/429/503 o la página de verificación de Cloudflare; nunca la resuelve.
+- [ ] **(dueño)** Actualizar la hoja de vida en Computrabajo e iniciar sesión en el navegador del bot.
+- [ ] **C2, postular:** estudiar el flujo con sesión (¿preguntas de filtro?, ¿qué CV ve la empresa?) y postular con el mismo esquema que LinkedIn.
 - [ ] **(dueño)** Cargar su perfil (CV o PDF de LinkedIn), crear el token en la web e iniciar sesión en el navegador del bot.
 
 ### CV v2: legible para personas y ATS (2026-11-18, pedido del dueño)
@@ -321,6 +341,7 @@ Cambios:
 
 | Fecha | Decisión | Por qué |
 |---|---|---|
+| 2026-11-18 | En Computrabajo, compatibilidad mínima de 60 y descartar en la app lo que no llega | Su búsqueda mezcla oficios con el mismo nombre (ventas, producción); descartarlo con el motivo deja la bandeja limpia y el registro de por qué no se postuló |
 | 2026-11-18 | Programación con un temporizador de systemd del usuario, no con cron ni una tarea en la nube | La ventana del bot necesita la sesión gráfica de la persona (DISPLAY y llavero), que systemd del usuario ya tiene; `Persistent=true` recupera la vuelta si el computador estaba apagado; no requiere root |
 | 2026-11-18 | El bot nunca envía una solicitud con un CV distinto al de la vacante | LinkedIn deja elegido el último CV subido (en la primera prueba real quedó uno de octubre); enviar con otro CV rompe el registro exacto de qué se mandó |
 | 2026-11-18 | Pausas separadas: la búsqueda pública (429 → 6 h) y la cuenta (verificación o tope → 24 h) | Un 429 de la búsqueda sin sesión no dice nada de la cuenta; con una sola pausa, frenaba también las postulaciones ya preparadas |
@@ -394,5 +415,6 @@ Cambios:
 ## Próximo paso
 
 1. Fase 7 LinkedIn: primeros envíos reales en `modo = "auto"`, mirándolos → E4 (programarlo y ver en la web lo que hizo el bot).
+   Fase 8 Computrabajo: el dueño actualiza su hoja de vida allá e inicia sesión en el navegador del bot → C2 (postular).
    Después: Computrabajo, elempleo y Magneto (postular suele ser un clic), Get on Board y búsquedas de prácticas.
 2. Después, el resto de portales (Computrabajo, Magneto, elempleo) con el mismo esquema.

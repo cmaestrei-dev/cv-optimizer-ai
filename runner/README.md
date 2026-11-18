@@ -1,4 +1,4 @@
-# Bot de postulación (LinkedIn)
+# Bot de postulación (LinkedIn y Computrabajo)
 
 Corre en **tu computador**, con tu IP de casa y un navegador propio donde inicias sesión una vez. Busca vacantes
 en LinkedIn y las pasa por la app: compatibilidad con tu perfil y CV a la medida de cada una. Todo queda en
@@ -39,6 +39,15 @@ python -m runner programar --quitar             # dejar de correrlo solo
 - Usa un temporizador de systemd de tu usuario (sin root), con el código de la carpeta desde donde lo programaste. Prográmalo desde una copia estable del repositorio, no desde una carpeta temporal.
 - La ventana del bot se abre en tu sesión: el computador debe estar encendido y con tu sesión iniciada. Si estaba apagado a la hora, la vuelta corre al encenderlo.
 - Lo que hace cada vuelta queda en `~/.local/share/cv-optimizer-bot/registro.log`. Al terminar te avisa en el escritorio: cuántas se enviaron, o si LinkedIn pidió una verificación o el bot perdió la sesión.
+
+## Computrabajo
+
+Las búsquedas con `portal = "computrabajo"` usan la búsqueda pública de Computrabajo Colombia (sin sesión):
+`lugar` acepta Colombia, Remoto o una ciudad, y `dias` 1, 3, 7, 15 o 30. Tiene su propio tope y una compatibilidad
+mínima en la tabla `[computrabajo]` (al final del archivo): debajo del mínimo, la vacante queda **descartada** en la
+app, con el motivo, y no se le hace CV. Si Computrabajo frena las peticiones, solo su búsqueda espera 6 horas.
+
+Por ahora el bot prepara las vacantes de Computrabajo; postular allí llega en la siguiente entrega.
 
 ## Cómo responde el formulario
 

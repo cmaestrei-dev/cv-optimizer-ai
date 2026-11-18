@@ -22,7 +22,7 @@ from runner.api import Api, ApiError
 from runner.state import State
 
 
-def _excluded(card: discover.Card, conf: cfg.Config) -> str:
+def _excluded(card, conf: cfg.Config) -> str:  # tarjeta de cualquier portal
     title, company = card.title.lower(), card.company.lower()
     words = set(re.findall(r"\w+", title))  # palabras completas: «sr» no descarta «SRE»
     if word := next((w for w in conf.exclude_words if w and (w in words if " " not in w else w in title)), ""):
@@ -71,81 +71,113 @@ def cmd_entrar(_args) -> int:
     return login()
 
 
+def _key(kind: str, portal: str) -> str:
+    """Claves del estado por portal; las de LinkedIn conservan su nombre de antes."""
+    return kind if portal == "linkedin" else f"{kind}_{portal}"
+
+
+def _portal(name: str):
+    from runner import computrabajo
+
+    return {"linkedin": discover, "computrabajo": computrabajo}[name]
+
+
 def cmd_buscar(args) -> int:
     conf = cfg.load()
     api = Api(conf.api, conf.token)
     state = State(cfg.DATA_DIR / "estado.json")
-    if (until := state.pause_until("busqueda")) and until > datetime.now(UTC):
-        print(f"Búsqueda en pausa hasta {until:%Y-%m-%d %H:%M} UTC: {state.pause_reason('busqueda')}")
-        return 0
     me = api.me()
     if not me.get("has_experience"):
         print("Tu perfil no tiene experiencia todavía: cárgalo en la app (Perfil → Importar CV) antes de usar el bot.")
         return 1
-    done = state.today("preparadas")
-    cap = min(conf.daily_cap, done + args.max) if args.max else conf.daily_cap
-    print(f"Modo {conf.mode}. Hoy van {done} de {conf.daily_cap}.")
+    print(f"Modo {conf.mode}.")
+    prepared_now = 0
+
+    def full(portal: str) -> bool:
+        return state.today(_key("preparadas", portal)) >= conf.cap(portal) or bool(args.max and prepared_now >= args.max)
+
     try:
         for search in conf.searches:
-            if done >= cap:
-                break
-            cards = discover.discover(search)
-            print(f"\n«{search.keywords}» en {search.place}: {len(cards)} vacantes")
-            for card in cards:
-                if done >= cap:
-                    print("Tope alcanzado.")
-                    break
-                if state.seen(card.job_id):
-                    continue
-                if reason := _excluded(card, conf):
-                    state.mark(card.job_id, "excluida", motivo=reason)
-                    print(f"  · {card.title} — {card.company}: omitida ({reason})")
-                    continue
-                discover.pause()
-                text = discover.parse_posting(discover.fetch(discover.posting_url(card.job_id)))
-                if not text:
-                    state.mark(card.job_id, "sin_texto")
-                    continue
-                header = f"{card.title}\n{card.company}\n{card.place}\n\n"
-                try:
-                    vacancy = api.add_vacancy(text=header + text, url=card.url, posted=card.posted)
-                except ApiError as e:
-                    if e.status == 429:  # cupo diario de IA de la cuenta
-                        print(f"Cupo de IA agotado por hoy: {e.detail}")
-                        return 0
-                    if e.status >= 500:  # corte o servidor ocupado: se reintenta en la próxima vuelta
-                        print(f"  ✗ {card.title}: {e.detail} (se reintenta en la próxima vuelta)")
+            portal, name = search.portal, cfg.PORTALS[search.portal]
+            paused = _key("busqueda", portal)
+            if (until := state.pause_until(paused)) and until > datetime.now(UTC):
+                print(f"\n{name}: búsqueda en pausa hasta {until:%Y-%m-%d %H:%M} UTC ({state.pause_reason(paused)}).")
+                continue
+            if full(portal):
+                continue
+            source = _portal(portal)
+            try:
+                cards = source.discover(search)
+                print(f"\n{name} · «{search.keywords}» en {search.place}: {len(cards)} vacantes")
+                for card in cards:
+                    if full(portal):
+                        print("Tope alcanzado.")
+                        break
+                    if state.seen(card.job_id):
                         continue
-                    state.mark(card.job_id, "error", detalle=e.detail[:200])
-                    print(f"  ✗ {card.title}: {e.detail}")
-                    continue
-                if not vacancy.created and not vacancy.unfinished:
-                    state.mark(card.job_id, "repetida", app=vacancy.id)
-                    continue
-                line = f"  ✓ {vacancy.score if vacancy.score is not None else '—':>3}  {vacancy.role} — {vacancy.company}"
-                if vacancy.missing:
-                    line += f"  (falta: {'; '.join(vacancy.missing[:2])})"
-                print(line)
-                cv_path, cv_id = "", None
-                if conf.make_cv and not args.sin_cv:
+                    if reason := _excluded(card, conf):
+                        state.mark(card.job_id, "excluida", portal=portal, motivo=reason)
+                        print(f"  · {card.title} — {card.company}: omitida ({reason})")
+                        continue
+                    discover.pause()
+                    text = source.posting_text(card)
+                    if not text:
+                        state.mark(card.job_id, "sin_texto", portal=portal)
+                        continue
+                    header = f"{card.title}\n{card.company}\n{card.place}\n\n"
                     try:
-                        cv = api.make_cv(vacancy.id)
-                        # con su nombre real: es el que ve el reclutador en el portal
-                        cv_path = str(api.download_cv(cv["id"], cfg.DATA_DIR / "cvs" / str(vacancy.id) / cv["filename"]))
-                        cv_id = cv["id"]
-                        print(f"        CV: {cv['filename']}")
+                        vacancy = api.add_vacancy(text=header + text, url=card.url, posted=card.posted)
                     except ApiError as e:
-                        print(f"        CV no generado: {e.detail}")
-                state.mark(card.job_id, "preparada", app=vacancy.id, puntaje=vacancy.score, cv=cv_path, cv_id=cv_id, url=card.url)
-                state.count("preparadas")
-                done += 1
-                state.save()
-    except discover.BlockedError as e:
-        state.pause(6, str(e), kind="busqueda")
-        print(f"\nParo la búsqueda: {e} Pausa de 6 horas (tu cuenta no se toca).")
+                        if e.status == 429:  # cupo diario de IA de la cuenta
+                            print(f"Cupo de IA agotado por hoy: {e.detail}")
+                            return 0
+                        if e.status >= 500:  # corte o servidor ocupado: se reintenta en la próxima vuelta
+                            print(f"  ✗ {card.title}: {e.detail} (se reintenta en la próxima vuelta)")
+                            continue
+                        state.mark(card.job_id, "error", portal=portal, detalle=e.detail[:200])
+                        print(f"  ✗ {card.title}: {e.detail}")
+                        continue
+                    if not vacancy.created and not vacancy.unfinished:
+                        state.mark(card.job_id, "repetida", portal=portal, app=vacancy.id)
+                        continue
+                    line = f"  ✓ {vacancy.score if vacancy.score is not None else '—':>3}  {vacancy.role} — {vacancy.company}"
+                    if vacancy.missing:
+                        line += f"  (falta: {'; '.join(vacancy.missing[:2])})"
+                    print(line)
+                    minimum = conf.min_score(portal)
+                    if minimum and (vacancy.score is None or vacancy.score < minimum):
+                        note = f"El bot la descartó: compatibilidad {vacancy.score if vacancy.score is not None else '—'} (mínimo {minimum})."
+                        try:
+                            api.post(f"/applications/{vacancy.id}/status", {"status": "descartada", "note": note})
+                        except ApiError as e:
+                            print(f"        No se pudo descartar en la app: {e.detail}")
+                        state.mark(card.job_id, "baja_compatibilidad", portal=portal, app=vacancy.id, puntaje=vacancy.score)
+                        print(f"        Menos de {minimum}: descartada, sin CV.")
+                        state.save()
+                        continue
+                    cv_path, cv_id = "", None
+                    if conf.make_cv and not args.sin_cv:
+                        try:
+                            cv = api.make_cv(vacancy.id)
+                            # con su nombre real: es el que ve el reclutador en el portal
+                            cv_path = str(api.download_cv(cv["id"], cfg.DATA_DIR / "cvs" / str(vacancy.id) / cv["filename"]))
+                            cv_id = cv["id"]
+                            print(f"        CV: {cv['filename']}")
+                        except ApiError as e:
+                            print(f"        CV no generado: {e.detail}")
+                    state.mark(card.job_id, "preparada", portal=portal, app=vacancy.id, puntaje=vacancy.score, cv=cv_path,
+                               cv_id=cv_id, url=card.url)
+                    state.count(_key("preparadas", portal))
+                    prepared_now += 1
+                    state.save()
+            except discover.BlockedError as e:
+                state.pause(6, str(e), kind=paused)
+                print(f"\nParo la búsqueda en {name}: {e} Pausa de 6 horas (tu cuenta no se toca).")
     finally:
         state.save()
-    print(f"\nListo: {done} de {conf.daily_cap} hoy ({date.today()}). Revísalas en la app: Postulaciones.")
+    today = ", ".join(f"{name} {state.today(_key('preparadas', p))} de {conf.cap(p)}" for p, name in cfg.PORTALS.items()
+                      if any(s.portal == p for s in conf.searches))
+    print(f"\nListo ({date.today()}): preparadas hoy — {today}. Revísalas en la app: Postulaciones.")
     return 0
 
 
@@ -200,7 +232,8 @@ def cmd_postular(args) -> int:
         print("El navegador del bot no tiene sesión de LinkedIn: python -m runner entrar")
         return 1
     pending = [(job_id, v) for job_id, v in state.data["vistas"].items()
-               if v.get("estado") == "preparada" and v.get("cv") and Path(v["cv"]).is_file() and v.get("cv_id")]
+               if v.get("estado") == "preparada" and v.get("portal", "linkedin") == "linkedin"
+               and v.get("cv") and Path(v["cv"]).is_file() and v.get("cv_id")]
     sent_today = state.today("enviadas")
     print(f"{'Modo AUTOMÁTICO: se envían' if submit else 'Modo PRUEBA: se llega a la revisión y se descarta'}. "
           f"{len(pending)} preparadas; hoy van {sent_today} de {conf.daily_cap} enviadas.")
@@ -280,6 +313,8 @@ def cmd_diario(_args) -> int:
         code = cmd_postular(argparse.Namespace(prueba=False, max=0))
         state = State(cfg.DATA_DIR / "estado.json")
         notice = f"Hoy: {state.today('enviadas')} enviadas y {state.today('preparadas')} preparadas."
+        if ct := state.today(_key("preparadas", "computrabajo")):
+            notice += f" Computrabajo: {ct} preparadas."
         if (until := state.pause_until("cuenta")) and until > datetime.now(UTC):
             notice += f" Postulación en pausa: {state.pause_reason('cuenta')}. Entra tú a LinkedIn y revisa."
         elif code == 1:
