@@ -85,6 +85,15 @@ class TestConfig:
         conf = cfg.load(self._write(tmp_path, cfg.TEMPLATE.replace("https://TU-SERVICIO.run.app/api", "https://app.example.com/api/")))
         assert conf.api == "https://app.example.com/api" and conf.mode == "prueba" and conf.daily_cap == 20
         assert conf.searches[0].geo_id == "100876405" and conf.exclude_words == ["senior", "lead"]
+        assert conf.no_evidence == "saltar" and conf.pause_seconds == (120, 240)
+        assert conf.answers["aspiracion salarial|salario|expectativa salarial|salary"] == "3000000"
+
+    def test_general_options_written_under_a_table_still_apply(self, tmp_path, monkeypatch):
+        monkeypatch.setenv("CVO_BOT_TOKEN", "cvb_x")
+        body = (cfg.TEMPLATE.replace("https://TU-SERVICIO.run.app/api", "https://app.example.com/api")
+                .replace('sin_evidencia = "saltar"', "") + 'sin_evidencia = "cero"\n')  # quedó dentro de [respuestas]
+        conf = cfg.load(self._write(tmp_path, body))
+        assert conf.no_evidence == "cero" and "sin_evidencia" not in conf.answers
 
     @pytest.mark.parametrize("change, message", [
         (('modo = "prueba"', 'modo = "turbo"'), "modo"),
@@ -111,11 +120,12 @@ def test_state_round_trip(tmp_path):
     state = State(tmp_path / "estado.json")
     state.mark("1", "preparada", app=7)
     state.count("preparadas")
-    state.pause(24, "HTTP 429")
+    state.pause(6, "HTTP 429", kind="busqueda")
     state.save()
     again = State(tmp_path / "estado.json")
     assert again.seen("1") and not again.seen("2") and again.today("preparadas") == 1
-    assert again.pause_until() is not None and again.data["pausa_motivo"] == "HTTP 429"
+    assert again.pause_until("busqueda") is not None and again.pause_reason("busqueda") == "HTTP 429"
+    assert again.pause_until("cuenta") is None  # la búsqueda frenada no detiene la postulación
 
 
 class TestRun:
@@ -155,9 +165,12 @@ class TestRun:
         apps = client.get("/applications?view=todas", headers=h).json()
         assert len(apps) == 1 and apps[0]["url"] == "https://www.linkedin.com/jobs/view/4012345678"
         assert apps[0]["status"] == "cv_generado" and apps[0]["posted_on"] == "2026-11-15"
-        assert (tmp_path / "cvs" / f"{apps[0]['id']}.pdf").read_bytes().startswith(b"%PDF")
+        cv = client.get(f"/applications/{apps[0]['id']}", headers=h).json()["cvs"][-1]
+        saved = tmp_path / "cvs" / str(apps[0]["id"]) / cv["filename"]  # con su nombre real (lo ve el reclutador)
+        assert saved.read_bytes().startswith(b"%PDF")
         state = json.loads((tmp_path / "estado.json").read_text())
         assert state["vistas"]["4012345678"]["estado"] == "preparada"
+        assert state["vistas"]["4012345678"]["cv_id"] == cv["id"] and state["vistas"]["4012345678"]["cv"] == str(saved)
         assert state["vistas"]["4012345679"]["estado"] == "excluida"
 
         assert cli.main(["buscar"]) == 0  # segunda vuelta: nada nuevo, nada repetido en la app
@@ -169,9 +182,9 @@ class TestRun:
 
         monkeypatch.setattr(discover, "fetch", blocked)
         assert cli.main(["buscar"]) == 0
-        assert "Pausa de 24 horas" in capsys.readouterr().out
+        assert "Pausa de 6 horas" in capsys.readouterr().out
         assert cli.main(["buscar"]) == 0
-        assert "En pausa hasta" in capsys.readouterr().out
+        assert "Búsqueda en pausa hasta" in capsys.readouterr().out
 
     def test_revoked_token_is_explained(self, bot, capsys):
         client, h, _ = bot

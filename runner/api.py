@@ -24,10 +24,17 @@ class Vacancy:
     company: str
     score: int | None
     missing: list[str]
+    status: str = ""
+    has_cv: bool = False
+
+    @property
+    def unfinished(self) -> bool:
+        """Ya estaba en la app pero sin CV ni envío (p. ej. una vuelta anterior se cortó): se termina de preparar."""
+        return not self.created and not self.has_cv and self.status in ("por_revisar", "guardada")
 
 
 class Api:
-    def __init__(self, base: str, token: str, *, timeout: float = 60):
+    def __init__(self, base: str, token: str, *, timeout: float = 180):  # análisis con IA + arranque en frío
         self.base, self.token, self.timeout = base.rstrip("/"), token, timeout
 
     def _request(self, method: str, path: str, body: dict | None = None, *, raw: bytes | None = None,
@@ -38,14 +45,22 @@ class Api:
         try:
             with urllib.request.urlopen(request, timeout=self.timeout) as response:
                 return response.status, response.read()
+        except (TimeoutError, urllib.error.URLError) as e:
+            if isinstance(e, urllib.error.HTTPError):
+                raise self._http_error(e) from None
+            raise ApiError(504, "La app no respondió a tiempo (¿conexión lenta o servidor arrancando?)") from None
         except urllib.error.HTTPError as e:
-            raw = e.read()
-            try:
-                payload = json.loads(raw or b"{}")
-            except json.JSONDecodeError:
-                payload = {}
-            detail = payload.get("detail") if isinstance(payload.get("detail"), str) else raw[:200].decode("utf-8", "replace")
-            raise ApiError(e.code, detail, payload) from None
+            raise self._http_error(e) from None
+
+    @staticmethod
+    def _http_error(e: urllib.error.HTTPError) -> "ApiError":
+        raw = e.read()
+        try:
+            payload = json.loads(raw or b"{}")
+        except json.JSONDecodeError:
+            payload = {}
+        detail = payload.get("detail") if isinstance(payload.get("detail"), str) else raw[:200].decode("utf-8", "replace")
+        return ApiError(e.code, detail, payload)
 
     def get(self, path: str) -> dict | list:
         return json.loads(self._request("GET", path)[1])
@@ -67,7 +82,8 @@ class Api:
             if e.status != 409 or "application_id" not in e.body:
                 raise
             out, created = self.get(f"/applications/{e.body['application_id']}"), False
-        return Vacancy(out["id"], created, out["role"], out["company"], out["match_score"], out.get("missing_musts") or [])
+        return Vacancy(out["id"], created, out["role"], out["company"], out["match_score"], out.get("missing_musts") or [],
+                       out.get("status", ""), bool(out.get("cvs")))
 
     def make_cv(self, application_id: int, *, wait: float = 180) -> dict:
         """Genera el CV a la medida (trabajo en segundo plano) y devuelve su registro (id, archivo, huella)."""
