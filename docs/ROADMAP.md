@@ -343,6 +343,7 @@ Cambios:
 
 | Fecha | Decisión | Por qué |
 |---|---|---|
+| 2026-11-18 | En el CV, el título de educación formal siempre entra y va primero | La educación se ordenaba por «citada» y fecha: un título sin fechas quedaba fuera tras cuatro certificados recientes (pasó con el del dueño). Para cualquier profesión, el título pesa más que un curso |
 | 2026-11-18 | En Computrabajo, compatibilidad mínima de 60 y descartar en la app lo que no llega | Su búsqueda mezcla oficios con el mismo nombre (ventas, producción); descartarlo con el motivo deja la bandeja limpia y el registro de por qué no se postuló |
 | 2026-11-18 | Programación con un temporizador de systemd del usuario, no con cron ni una tarea en la nube | La ventana del bot necesita la sesión gráfica de la persona (DISPLAY y llavero), que systemd del usuario ya tiene; `Persistent=true` recupera la vuelta si el computador estaba apagado; no requiere root |
 | 2026-11-18 | El bot nunca envía una solicitud con un CV distinto al de la vacante | LinkedIn deja elegido el último CV subido (en la primera prueba real quedó uno de octubre); enviar con otro CV rompe el registro exacto de qué se mandó |
