@@ -1,0 +1,56 @@
+<!doctype html><html lang="es"><head><meta charset="utf-8"><title>Vacante</title></head><body>
+<!-- Copia mínima del formulario de «Solicitud sencilla» (estructura observada el 2026-11-18, clases omitidas). -->
+<h1>Desarrollador Backend</h1>
+<button aria-label="Solicitud sencilla" onclick="openForm()">Solicitud sencilla</button>
+<div id="dlg" role="dialog" aria-label="Aplicar a Empresa" hidden></div>
+<script>
+  window.sent = false;
+  const steps = [
+    `<h3>Aplicar a Empresa</h3>
+     <label for="mail">Email*</label><select id="mail" required><option></option><option selected>yo@example.com</option></select>
+     <label for="tel">Teléfono móvil*</label><input id="tel" type="tel" required value="3000000000">
+     <button onclick="go(1)">Siguiente</button>`,
+    `<h3>Currículum</h3>
+     <fieldset id="cvs"><input type="radio" name="cv" id="old" aria-label="CV_viejo_que_LinkedIn_tenia.pdf" checked>
+       <input type="radio" name="cv" id="old2" aria-label="Camilo_Maestre_Backend_Otra.pdf"></fieldset>
+     <button onclick="pick()">Cargar currículum</button>
+     <button onclick="go(0)">Volver</button><button onclick="go(2)">Siguiente</button>`,
+    `<h3>Preguntas adicionales</h3>
+     <p>¿Cuántos años de experiencia tienes con Python?*</p>
+     <input id="py" required aria-label="¿Cuántos años de experiencia tienes con Python?" type="text" value="">
+     <label for="en">¿Cuál es tu nivel de inglés?*</label>
+     <select id="en" required><option>Selecciona una opción</option><option>A2</option><option>B1</option></select>
+     <fieldset aria-required="true"><legend>¿Puedes hacer práctica empresarial?*</legend>
+       <input type="radio" name="pr" id="si"><label for="si">Sí</label>
+       <input type="radio" name="pr" id="no"><label for="no">No</label></fieldset>
+     <button onclick="go(1)">Volver</button><button onclick="check(3)">Revisar</button>`,
+    `<h3>Revisa tu solicitud</h3><p>Currículum: {{cv}}</p>
+     <input type="checkbox" id="fw" checked><label for="fw">Seguir a Empresa para estar al día</label>
+     <button onclick="go(2)">Volver</button><button onclick="submitForm()">Enviar solicitud</button>`,
+  ];
+  let current = 0;
+  const values = {};
+  function save() { document.querySelectorAll('#dlg input, #dlg select').forEach(e => values[e.id] = e.type === 'radio' || e.type === 'checkbox' ? e.checked : e.value); }
+  function render() {
+    const d = document.getElementById('dlg');
+    d.innerHTML = steps[current].replace('{{cv}}', values.new ? window.cvName : 'CV_viejo_que_LinkedIn_tenia.pdf') + '<button aria-label="Descartar" onclick="closeForm()">×</button>';
+    d.querySelectorAll('input, select').forEach(e => { if (e.id in values) { if (e.type === 'radio' || e.type === 'checkbox') e.checked = values[e.id]; else e.value = values[e.id]; } });
+  }
+  function pick() {  // como LinkedIn: el campo de archivo aparece al pulsar el botón
+    const input = document.createElement('input'); input.type = 'file'; input.accept = '.pdf';
+    input.onchange = () => { setTimeout(() => {  // tarda un poco, como la subida real
+      window.cvName = input.files[0].name;
+      document.getElementById('cvs').insertAdjacentHTML('afterbegin', `<input type="radio" name="cv" id="new" aria-label="${window.cvName}">`);
+      if (!window.keepOld) document.getElementById('new').checked = true;
+    }, 300); };
+    input.click();
+  }
+  function openForm() { document.getElementById('dlg').hidden = false; current = 0; render(); }
+  function go(n) { save(); current = n; render(); }
+  function check(n) { save(); if (!values.py || values.en === 'Selecciona una opción' || !(values.si || values.no)) return; go(n); }
+  function submitForm() { save(); window.sent = true; window.follow = values.fw; window.answers = {...values};
+    document.getElementById('dlg').innerHTML = '<p>Se envió tu solicitud a Empresa</p><button aria-label="Descartar">Listo</button>'; }
+  function closeForm() { const d = document.getElementById('dlg');
+    d.innerHTML = '<p>¿Guardar esta solicitud?</p><button>Descartar</button><button>Guardar</button>';
+    d.querySelectorAll('button')[0].onclick = () => { d.hidden = true; d.innerHTML = ''; }; }
+</script></body></html>

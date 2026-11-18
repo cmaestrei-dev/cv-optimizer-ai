@@ -5,6 +5,7 @@
     python -m runner entrar          abre el navegador del bot para que inicies sesión en LinkedIn (una vez)
     python -m runner importar CV.pdf carga tu CV o el PDF de tu LinkedIn en tu perfil de la app (solo lo nuevo)
     python -m runner buscar          busca vacantes, las analiza con tu perfil y prepara el CV de cada una
+    python -m runner postular        postula a las preparadas con «Solicitud sencilla» (--prueba: sin enviar)
 """
 
 import argparse
@@ -72,24 +73,25 @@ def cmd_buscar(args) -> int:
     conf = cfg.load()
     api = Api(conf.api, conf.token)
     state = State(cfg.DATA_DIR / "estado.json")
-    if (until := state.pause_until()) and until > datetime.now(UTC):
-        print(f"En pausa hasta {until:%Y-%m-%d %H:%M} UTC: {state.data.get('pausa_motivo', '')}")
+    if (until := state.pause_until("busqueda")) and until > datetime.now(UTC):
+        print(f"Búsqueda en pausa hasta {until:%Y-%m-%d %H:%M} UTC: {state.pause_reason('busqueda')}")
         return 0
     me = api.me()
     if not me.get("has_experience"):
         print("Tu perfil no tiene experiencia todavía: cárgalo en la app (Perfil → Importar CV) antes de usar el bot.")
         return 1
     done = state.today("preparadas")
+    cap = min(conf.daily_cap, done + args.max) if args.max else conf.daily_cap
     print(f"Modo {conf.mode}. Hoy van {done} de {conf.daily_cap}.")
     try:
         for search in conf.searches:
-            if done >= conf.daily_cap:
+            if done >= cap:
                 break
             cards = discover.discover(search)
             print(f"\n«{search.keywords}» en {search.place}: {len(cards)} vacantes")
             for card in cards:
-                if done >= conf.daily_cap:
-                    print("Tope diario alcanzado.")
+                if done >= cap:
+                    print("Tope alcanzado.")
                     break
                 if state.seen(card.job_id):
                     continue
@@ -109,34 +111,137 @@ def cmd_buscar(args) -> int:
                     if e.status == 429:  # cupo diario de IA de la cuenta
                         print(f"Cupo de IA agotado por hoy: {e.detail}")
                         return 0
+                    if e.status >= 500:  # corte o servidor ocupado: se reintenta en la próxima vuelta
+                        print(f"  ✗ {card.title}: {e.detail} (se reintenta en la próxima vuelta)")
+                        continue
                     state.mark(card.job_id, "error", detalle=e.detail[:200])
                     print(f"  ✗ {card.title}: {e.detail}")
                     continue
-                if not vacancy.created:
+                if not vacancy.created and not vacancy.unfinished:
                     state.mark(card.job_id, "repetida", app=vacancy.id)
                     continue
                 line = f"  ✓ {vacancy.score if vacancy.score is not None else '—':>3}  {vacancy.role} — {vacancy.company}"
                 if vacancy.missing:
                     line += f"  (falta: {'; '.join(vacancy.missing[:2])})"
                 print(line)
-                cv_path = ""
+                cv_path, cv_id = "", None
                 if conf.make_cv and not args.sin_cv:
                     try:
                         cv = api.make_cv(vacancy.id)
-                        cv_path = str(api.download_cv(cv["id"], cfg.DATA_DIR / "cvs" / f"{vacancy.id}.pdf"))
+                        # con su nombre real: es el que ve el reclutador en el portal
+                        cv_path = str(api.download_cv(cv["id"], cfg.DATA_DIR / "cvs" / str(vacancy.id) / cv["filename"]))
+                        cv_id = cv["id"]
                         print(f"        CV: {cv['filename']}")
                     except ApiError as e:
                         print(f"        CV no generado: {e.detail}")
-                state.mark(card.job_id, "preparada", app=vacancy.id, puntaje=vacancy.score, cv=cv_path, url=card.url)
+                state.mark(card.job_id, "preparada", app=vacancy.id, puntaje=vacancy.score, cv=cv_path, cv_id=cv_id, url=card.url)
                 state.count("preparadas")
                 done += 1
                 state.save()
     except discover.BlockedError as e:
-        state.pause(24, str(e))
-        print(f"\nParo: {e} Pausa de 24 horas.")
+        state.pause(6, str(e), kind="busqueda")
+        print(f"\nParo la búsqueda: {e} Pausa de 6 horas (tu cuenta no se toca).")
     finally:
         state.save()
     print(f"\nListo: {done} de {conf.daily_cap} hoy ({date.today()}). Revísalas en la app: Postulaciones.")
+    return 0
+
+
+def _answerer(api: Api, conf: cfg.Config, application_id: int):
+    """Respuestas: primero el banco de la persona; lo demás, el motor de la app con su perfil (verificado)."""
+    from runner import answers
+
+    def answer(questions) -> dict[str, str]:
+        out, ask = {}, []
+        for q in questions:
+            value = answers.bank_answer(q.label, conf.answers)
+            if value is not None:
+                out[q.label] = value
+            else:
+                ask.append(q)
+        if ask:
+            try:
+                replies = api.post(f"/applications/{application_id}/screening", {"questions": [q.label for q in ask]})
+            except ApiError as e:
+                print(f"        No se pudieron preparar respuestas: {e.detail}")
+                replies = []
+            by_question = {r["question"]: r for r in replies} if isinstance(replies, list) else {}
+            for q in ask:
+                reply = by_question.get(q.label, {})
+                text = "" if reply.get("needs_you") else (reply.get("answer") or "")
+                if q.numeric or answers.is_years(q.label):
+                    text = answers.to_integer(text) or ("0" if answers.is_years(q.label) and conf.no_evidence == "cero" else "")
+                if text:
+                    out[q.label] = text
+        return out
+
+    return answer
+
+
+def cmd_postular(args) -> int:
+    import random
+    import time as _time
+    from pathlib import Path
+
+    from playwright.sync_api import sync_playwright
+
+    from runner import browser, linkedin
+
+    conf = cfg.load()
+    submit = conf.mode == "auto" and not args.prueba
+    api = Api(conf.api, conf.token)
+    state = State(cfg.DATA_DIR / "estado.json")
+    if (until := state.pause_until("cuenta")) and until > datetime.now(UTC):
+        print(f"Postulación en pausa hasta {until:%Y-%m-%d %H:%M} UTC: {state.pause_reason('cuenta')}")
+        return 0
+    if not browser.has_session():
+        print("El navegador del bot no tiene sesión de LinkedIn: python -m runner entrar")
+        return 1
+    pending = [(job_id, v) for job_id, v in state.data["vistas"].items()
+               if v.get("estado") == "preparada" and v.get("cv") and Path(v["cv"]).is_file() and v.get("cv_id")]
+    sent_today = state.today("enviadas")
+    print(f"{'Modo AUTOMÁTICO: se envían' if submit else 'Modo PRUEBA: se llega a la revisión y se descarta'}. "
+          f"{len(pending)} preparadas; hoy van {sent_today} de {conf.daily_cap} enviadas.")
+    if not pending:
+        return 0
+    with sync_playwright() as p:
+        context = browser.open_context(p)
+        page = context.pages[0] if context.pages else context.new_page()
+        page.set_default_timeout(90_000)
+        page.set_default_navigation_timeout(120_000)
+        try:
+            for n, (job_id, v) in enumerate(pending[: args.max or len(pending)]):
+                if submit and sent_today >= conf.daily_cap:
+                    print("Tope diario de envíos alcanzado.")
+                    break
+                print(f"\n· {v.get('url')}  (compatibilidad {v.get('puntaje')})")
+                result = linkedin.apply(page, v["url"], Path(v["cv"]), _answerer(api, conf, v["app"]), submit=submit,
+                                        shots=cfg.DATA_DIR / "capturas")
+                print(f"  → {result.status}{': ' + result.detail if result.detail else ''}")
+                if result.unanswered:
+                    print("    Sin respuesta (agrégalas a [respuestas] o a tu perfil):", "; ".join(result.unanswered[:4]))
+                if result.status in ("verificacion", "tope"):
+                    state.pause(24, f"LinkedIn: {result.status} ({result.detail[:80]})", kind="cuenta")
+                    print("Paro todo 24 horas. Si fue una verificación, entra tú a LinkedIn y complétala.")
+                    break
+                if result.status == "enviada":
+                    try:
+                        api.post(f"/applications/{v['app']}/sent", {"cv_id": v["cv_id"], "platform": "LinkedIn"})
+                    except ApiError as e:
+                        print(f"    Enviada en LinkedIn, pero la app no la registró: {e.detail}")
+                    state.mark(job_id, "enviada", **{k: v[k] for k in ("app", "cv", "cv_id", "url", "puntaje")})
+                    state.count("enviadas")
+                    sent_today += 1
+                elif result.status in ("saltada", "externa", "ya_postulada"):
+                    state.mark(job_id, result.status, app=v["app"], url=v["url"], preguntas=result.unanswered[:6],
+                               detalle=result.detail[:200])
+                state.save()
+                if n < len(pending) - 1:
+                    wait = random.uniform(*conf.pause_seconds) if result.status == "enviada" else random.uniform(8, 20)
+                    _time.sleep(wait)
+        finally:
+            state.save()
+            context.close()
     return 0
 
 
@@ -151,7 +256,12 @@ def main(argv: list[str] | None = None) -> int:
     importar.set_defaults(fn=cmd_importar)
     buscar = sub.add_parser("buscar")
     buscar.add_argument("--sin-cv", action="store_true", help="solo analizar, sin generar el CV")
+    buscar.add_argument("--max", type=int, default=0, help="preparar como mucho N vacantes en esta vuelta")
     buscar.set_defaults(fn=cmd_buscar)
+    postular = sub.add_parser("postular")
+    postular.add_argument("--prueba", action="store_true", help="llegar a la revisión y descartar, aunque el modo sea auto")
+    postular.add_argument("--max", type=int, default=0, help="como mucho N vacantes en esta vuelta")
+    postular.set_defaults(fn=cmd_postular)
     args = parser.parse_args(argv)
     try:
         return args.fn(args)

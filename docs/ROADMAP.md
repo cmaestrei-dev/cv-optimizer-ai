@@ -247,7 +247,7 @@ Lo que encontró la investigación (2026-11-16):
 - En septiembre de 2026 LinkedIn reemplazó la búsqueda clásica por una búsqueda con IA. Eso rompió los bots abiertos (GodsScion) y, con sesión iniciada, se ignoran los filtros `f_AL`, `f_WT` y `sortBy`.
 - La búsqueda pública (sin sesión) sí filtra por fecha (`f_TPR`) y por «Solicitud sencilla» (`f_AL`).
 - geoId verificados: Colombia `100876405`, Bogotá `102361989`, Cartagena `106336022`.
-- Los botones de la «Solicitud sencilla» (`#jobs-apply-button-id`, el modal, `data-test-form-element`) sobrevivieron a los rediseños.
+- ~~Los botones de la «Solicitud sencilla» (`#jobs-apply-button-id`, el modal, `data-test-form-element`) sobrevivieron a los rediseños.~~ Ya no (2026-11-18): las clases y los ids de la página de la vacante son aleatorios. Se ubica todo por roles y nombres accesibles.
 - LinkedIn tiene un tope diario de «Solicitud sencilla» que no publica (se reporta de unas 25 a 50).
 - Las condiciones de uso (§8.2) prohíben los bots: el riesgo es la cuenta, y el dueño lo asume.
 
@@ -269,12 +269,17 @@ Entregas:
 - [x] El bot importa el perfil: `python -m runner importar Profile.pdf` sube el CV o el PDF de LinkedIn por la API y guarda solo lo nuevo. Con él se cargó el perfil del dueño.
 - [x] El importador ya no duplica estudios escritos distinto: el PDF de LinkedIn añade el campo («Ingeniería de Sistemas, Ingeniería informática») o el país a la institución («Universidad de Cartagena-Colombia»).
 - [x] Búsquedas con cualquier lugar por nombre («Medellín, Antioquia, Colombia»). Las exclusiones comparan palabras completas: «sr» no descarta «SRE». Las prácticas ya no se excluyen por defecto: el dueño puede hacer prácticas empresariales.
-- [ ] **E3, postular con «Solicitud sencilla»:**
-  - Sube el CV de esa vacante y responde con el motor de preguntas más un banco de respuestas del dueño (salario, disponibilidad…).
+- [x] **E3, postular con «Solicitud sencilla»** (`python -m runner postular`, `runner/linkedin.py`, `runner/answers.py`):
+  - Ubica todo por nombres accesibles («Solicitud sencilla», el diálogo, «Siguiente», «Revisar», «Enviar solicitud»).
+  - Sube el CV de esa vacante con «Cargar currículum» (el campo de archivo no existe hasta pulsarlo), lo deja elegido y, antes de enviar, comprueba que el CV elegido sea ese. Si no, salta la vacante: LinkedIn deja elegido el último CV subido.
+  - Solo llena lo obligatorio vacío: primero el banco `[respuestas]` del dueño (salario, inglés, disponibilidad, prácticas…), luego el motor de preguntas con su perfil. Años con una tecnología: redondeo hacia abajo; sin evidencia, `sin_evidencia` decide si salta o responde 0.
   - Si una pregunta obligatoria no tiene respuesta, salta la vacante: nunca responde al azar.
-  - Desmarca «seguir empresa», envía y lo registra con el CV exacto.
-  - Tope diario y pausas de minutos entre envíos.
-  - Se detiene ante verificaciones (`/checkpoint`, captcha, tope de LinkedIn, 429/999) con 24 h de espera. Nunca resuelve captchas ni usa herramientas para ocultarse.
+  - Desmarca «seguir empresa», envía y lo registra en la postulación con el CV exacto (`/sent`).
+  - Tope diario y pausas al azar de 2 a 4 minutos entre envíos.
+  - Se detiene ante verificaciones (`/checkpoint`, captcha, tope de LinkedIn): 24 h sin postular. El 429 de la búsqueda pública solo frena la búsqueda (6 h). Nunca resuelve captchas ni usa herramientas para ocultarse.
+  - Modo prueba (`--prueba` o `modo = "prueba"`): llega a la revisión, guarda una captura y descarta sin enviar.
+  - Probado en modo prueba contra una vacante real (Comfama, 4 pasos): la revisión muestra el CV de la vacante y las respuestas. 5 pruebas con Playwright contra una copia local del formulario (se saltan sin Chromium).
+- [ ] **(dueño)** Revisar las capturas de prueba y cambiar a `modo = "auto"`; los primeros envíos, mirándolos.
 - [ ] **E4:** programarlo para que corra solo y mostrar en la web lo que hizo el bot cada día.
 - [ ] Después: postulaciones externas (Greenhouse, Lever…) y los otros portales.
 - [ ] **(dueño)** Cargar su perfil (CV o PDF de LinkedIn), crear el token en la web e iniciar sesión en el navegador del bot.
@@ -310,6 +315,8 @@ Cambios:
 
 | Fecha | Decisión | Por qué |
 |---|---|---|
+| 2026-11-18 | El bot nunca envía una solicitud con un CV distinto al de la vacante | LinkedIn deja elegido el último CV subido (en la primera prueba real quedó uno de octubre); enviar con otro CV rompe el registro exacto de qué se mandó |
+| 2026-11-18 | Pausas separadas: la búsqueda pública (429 → 6 h) y la cuenta (verificación o tope → 24 h) | Un 429 de la búsqueda sin sesión no dice nada de la cuenta; con una sola pausa, frenaba también las postulaciones ya preparadas |
 | 2026-11-16 | Bot de LinkedIn local con un perfil de navegador propio (Playwright persistente), no extensión ni CDP | LinkedIn busca extensiones instaladas y sus condiciones nombran los plugins; desde Chrome 136 el puerto de depuración exige otro perfil y expone la sesión a cualquier proceso local. En la IP de casa y con una sesión real, el riesgo para la cuenta es menor que desde un servidor |
 | 2026-11-16 | El bot se autentica con un token propio (solo su huella en la base), no con la sesión de Clerk | La sesión de Clerk dura minutos; un token largo, revocable y sin permisos de cuenta (no crea tokens ni vincula perfiles) permite correr sin la persona |
 | 2026-11-16 | Prioridad: búsqueda y postulación automática para el dueño; SaaS en pausa | La pareja ya consiguió empleo; el dueño necesita trabajo y quiere que la herramienta lo haga sola. Riesgo real a vigilar: los términos de LinkedIn prohíben bots (posible cierre de la cuenta) |
@@ -379,6 +386,6 @@ Cambios:
 
 ## Próximo paso
 
-1. Desplegar el CV v2 (migración 0010) y que el dueño ponga su titular y ciudad. Luego Fase 7 LinkedIn E3 (postular; el dueño inicia sesión en el navegador del bot) → E4 (programado).
+1. Fase 7 LinkedIn: el dueño revisa las capturas del modo prueba y activa `modo = "auto"` → E4 (programarlo y ver en la web lo que hizo el bot).
    Después: Computrabajo, elempleo y Magneto (postular suele ser un clic), Get on Board y búsquedas de prácticas.
 2. Después, el resto de portales (Computrabajo, Magneto, elempleo) con el mismo esquema.

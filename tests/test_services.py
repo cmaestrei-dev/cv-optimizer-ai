@@ -43,6 +43,13 @@ class TestBuildPdfFilename:
         assert "@" not in result
         assert "María_José" in result
 
+    def test_gendered_titles_read_well(self):
+        profile = UserProfile(username="test", full_name="Camilo Maestre")
+        assert build_pdf_filename(profile, "Ingeniero/a desarrollador/a") == "Camilo_Maestre_Ingeniero_desarrollador.pdf"
+        assert build_pdf_filename(profile, "Analista (a) de datos") == "Camilo_Maestre_Analista_de_datos.pdf"
+        assert build_pdf_filename(profile, "Dev Frontend/Backend") == "Camilo_Maestre_Dev_Frontend_Backend.pdf"
+        assert build_pdf_filename(profile, "Data/Analytics") == "Camilo_Maestre_Data_Analytics.pdf"
+
     def test_empty_fallback(self):
         profile = UserProfile(username="test")
         result = build_pdf_filename(profile)

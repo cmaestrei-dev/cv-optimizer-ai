@@ -155,6 +155,8 @@ def clean_markdown_output(raw: str) -> str:
 
 
 def _sanitize_filename_part(text: str) -> str:
+    text = re.sub(r"(?<=\w)\s*(/|\()\s*(as?|os?|es?)\b\)?", "", text)  # «Ingeniero/a», «Analista(o)» → sin el sufijo
+    text = text.replace("/", " ")  # «Frontend/Backend» → dos palabras, no «FrontendBackend»
     cleaned = re.sub(r"[^a-zA-Z0-9áéíóúÁÉÍÓÚñÑ\s\-_]", "", text)
     cleaned = re.sub(r"\s+", "_", cleaned.strip())
     cleaned = re.sub(r"_+", "_", cleaned)

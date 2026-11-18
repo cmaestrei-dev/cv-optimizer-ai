@@ -4,8 +4,9 @@ Corre en **tu computador**, con tu IP de casa y un navegador propio donde inicia
 en LinkedIn y las pasa por la app: compatibilidad con tu perfil y CV a la medida de cada una. Todo queda en
 **Postulaciones**, con el CV exacto.
 
-Hoy (entrega 2) funciona en **modo prueba**: busca, analiza y prepara el CV, pero **no envía**. Postular con la
-«Solicitud sencilla» llega en la entrega 3.
+Postula con la **«Solicitud sencilla»**: sube el CV hecho para esa vacante, responde el formulario y registra el
+envío con ese CV. Empieza en **modo prueba** (`modo = "prueba"`): llega a la revisión, guarda una captura y descarta
+sin enviar. Cuando las capturas se vean bien, cambia a `modo = "auto"`.
 
 ## Una sola vez
 
@@ -21,13 +22,30 @@ Antes, carga tu perfil en la app (Perfil → Importar CV): sin tu experiencia el
 ## Cada día
 
 ```bash
-python -m runner buscar          # o --sin-cv para solo analizar (gasta menos cupo de IA)
+python -m runner buscar          # busca, analiza y prepara el CV de cada vacante (--sin-cv: solo analizar)
+python -m runner postular        # postula a las preparadas (--prueba: hasta la revisión, sin enviar; --max N)
 ```
+
+Las capturas de cada revisión quedan en `~/.local/share/cv-optimizer-bot/capturas/`.
+
+## Cómo responde el formulario
+
+1. Lo que LinkedIn ya trae (tu correo, teléfono, respuestas anteriores) se deja.
+2. Lo obligatorio que falte se busca primero en tu banco `[respuestas]` de la configuración (salario,
+   disponibilidad, inglés…): la clave son partes de la pregunta separadas por `|`, sin tildes.
+3. Lo demás lo responde la app con tu perfil, verificado contra él. «¿Cuántos años con X?» usa las fechas de tus
+   empleos y se redondea hacia abajo; si tu perfil no muestra X, `sin_evidencia` decide: `"saltar"` la vacante o
+   responder `"cero"`.
+4. Si una pregunta obligatoria queda sin respuesta, la vacante se salta y el bot te dice cuál era. Nunca responde al azar.
+
+El CV: LinkedIn deja elegido el último que subiste. El bot sube el de la vacante, lo elige y, antes de enviar,
+comprueba que sea ese; si no, salta la vacante. Cada CV subido queda en tu lista de currículums de LinkedIn.
 
 ## Reglas
 
 - **Contraseña:** nunca se guarda la de LinkedIn. La sesión vive en `~/.local/share/cv-optimizer-bot/navegador`, cifrada con el llavero de tu sistema, y solo tu usuario puede leerla; trátala como un secreto.
 - **Inicio de sesión:** se hace en un Chrome normal, porque LinkedIn rechaza iniciar sesión en una ventana automatizada. Luego el bot abre ese mismo perfil con el aislamiento normal de Chrome.
-- **Captchas y verificaciones:** el bot nunca los resuelve ni intenta ocultarse. Si LinkedIn frena las peticiones o pide verificación, se detiene 24 horas.
-- **Tope:** el tope diario (`tope_diario`) se cuenta en `~/.local/share/cv-optimizer-bot/estado.json`, junto con las vacantes ya vistas, para no repetirlas.
+- **Captchas y verificaciones:** el bot nunca los resuelve ni intenta ocultarse. Si LinkedIn pide verificación o avisa su tope de solicitudes, postular se detiene 24 horas; si la búsqueda pública devuelve 429, solo la búsqueda espera 6 horas.
+- **Tope y pausas:** el tope diario (`tope_diario`) se cuenta en `~/.local/share/cv-optimizer-bot/estado.json`, junto con las vacantes ya vistas, para no repetirlas. Entre dos envíos espera `pausa_entre_envios_seg` (por defecto de 2 a 4 minutos, al azar).
+- **«Seguir a la empresa»** se desmarca siempre.
 - **Riesgo:** las condiciones de LinkedIn (§8.2) prohíben los bots. El riesgo es la cuenta (restricción o cierre).

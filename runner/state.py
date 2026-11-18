@@ -35,10 +35,14 @@ class State:
         day = self.data["dias"].setdefault((on or date.today()).isoformat(), {})
         day[kind] = day.get(kind, 0) + 1
 
-    def pause_until(self) -> datetime | None:
-        raw = self.data.get("pausa_hasta")
+    # Dos pausas: «busqueda» (la búsqueda pública frenó la IP) y «cuenta» (verificación o tope en la cuenta).
+    def pause_until(self, kind: str = "cuenta") -> datetime | None:
+        raw = self.data.get(f"pausa_{kind}_hasta")
         return datetime.fromisoformat(raw) if raw else None
 
-    def pause(self, hours: int, reason: str) -> None:
-        self.data["pausa_hasta"] = (datetime.now(UTC) + timedelta(hours=hours)).isoformat(timespec="seconds")
-        self.data["pausa_motivo"] = reason
+    def pause_reason(self, kind: str = "cuenta") -> str:
+        return self.data.get(f"pausa_{kind}_motivo", "")
+
+    def pause(self, hours: int, reason: str, kind: str = "cuenta") -> None:
+        self.data[f"pausa_{kind}_hasta"] = (datetime.now(UTC) + timedelta(hours=hours)).isoformat(timespec="seconds")
+        self.data[f"pausa_{kind}_motivo"] = reason
