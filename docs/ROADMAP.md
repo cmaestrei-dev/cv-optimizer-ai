@@ -306,7 +306,9 @@ Entregas:
   - Debajo del mínimo, la vacante queda «descartada» en la app con el motivo y sin CV (no gasta cupo de IA en CV).
   - Pausas y conteos por portal (`busqueda_computrabajo`, `preparadas_computrabajo`); el postulador de LinkedIn ignora las de Computrabajo.
   - Se detiene ante 403/429/503 o la página de verificación de Cloudflare; nunca la resuelve.
-- [ ] **(dueño)** Actualizar la hoja de vida en Computrabajo e iniciar sesión en el navegador del bot.
+- [x] Probado con la búsqueda real (2026-11-18): 3 preparadas (79, 75 y 64) y 3 descartadas por debajo de 60 (aprendices SENA).
+- [x] `python -m runner entrar computrabajo` abre su inicio de sesión en el navegador del bot. La cookie de sesión aún no se conoce: la persona cierra la ventana al terminar. No abre si el navegador del bot ya está abierto.
+- [ ] **(dueño)** Actualizar la hoja de vida en Computrabajo e iniciar sesión en el navegador del bot (`entrar computrabajo`).
 - [ ] **C2, postular:** estudiar el flujo con sesión (¿preguntas de filtro?, ¿qué CV ve la empresa?) y postular con el mismo esquema que LinkedIn.
 - [ ] **(dueño)** Cargar su perfil (CV o PDF de LinkedIn), crear el token en la web e iniciar sesión en el navegador del bot.
 

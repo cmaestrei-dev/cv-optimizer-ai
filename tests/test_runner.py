@@ -256,7 +256,7 @@ class TestRun:
         assert cli.main(["buscar"]) == 0
         assert "Pausa de 6 horas" in capsys.readouterr().out
         assert cli.main(["buscar"]) == 0
-        assert "LinkedIn: búsqueda en pausa hasta" in capsys.readouterr().out
+        assert capsys.readouterr().out.count("LinkedIn: búsqueda en pausa hasta") == 1
 
     def _config(self, tmp_path: Path, minimum: int) -> None:
         conf = tmp_path / "config.toml"
@@ -356,3 +356,18 @@ def test_session_detection_reads_only_cookie_names(tmp_path):
     with sqlite3.connect(tmp_path / "Default" / "Cookies") as db:
         db.execute("insert into cookies values ('.www.linkedin.com', 'li_at', x'00')")
     assert browser.has_session(tmp_path) is True
+    assert browser.has_session(tmp_path, portal="computrabajo") is False  # su cookie de sesión aún no se conoce
+    with sqlite3.connect(tmp_path / "Default" / "Cookies") as db:
+        db.execute("insert into cookies values ('.computrabajo.com', 'sesion', x'00')")
+    assert browser._cookie_names("computrabajo.com", tmp_path) == {"sesion"}
+
+
+def test_login_refuses_while_the_bot_browser_is_open(tmp_path, monkeypatch, capsys):
+    from runner import browser
+
+    monkeypatch.setattr(browser, "PROFILE_DIR", tmp_path)
+    monkeypatch.setattr(browser.shutil, "which", lambda _: "/usr/bin/google-chrome")
+    monkeypatch.setattr(browser.subprocess, "Popen", lambda *a, **k: pytest.fail("no debía abrir otro Chrome"))
+    (tmp_path / "SingletonLock").symlink_to("otro-equipo-12345")
+    assert browser.login("computrabajo") == 1
+    assert "ya está abierto" in capsys.readouterr().out

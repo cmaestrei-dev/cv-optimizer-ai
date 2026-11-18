@@ -47,7 +47,12 @@ Las búsquedas con `portal = "computrabajo"` usan la búsqueda pública de Compu
 mínima en la tabla `[computrabajo]` (al final del archivo): debajo del mínimo, la vacante queda **descartada** en la
 app, con el motivo, y no se le hace CV. Si Computrabajo frena las peticiones, solo su búsqueda espera 6 horas.
 
-Por ahora el bot prepara las vacantes de Computrabajo; postular allí llega en la siguiente entrega.
+Por ahora el bot prepara las vacantes de Computrabajo; postular allí llega en la siguiente entrega. Para eso, inicia
+sesión una vez en el navegador del bot (con el bot detenido):
+
+```bash
+python -m runner entrar computrabajo   # entra con tu correo y contraseña; cierra la ventana al terminar
+```
 
 ## Cómo responde el formulario
 
