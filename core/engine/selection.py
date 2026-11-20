@@ -180,8 +180,12 @@ _COURSE = re.compile(r"\b(certificad[oa]|certificaci[oó]n|certificate|curso|cou
                      r"seminario|career path|ruta de aprendizaje)\b", re.I)
 
 
+def is_degree_title(title: str) -> bool:
+    return bool(_DEGREE.search(title)) and not _COURSE.search(title)
+
+
 def is_degree(education: EducationSnap) -> bool:
-    return bool(_DEGREE.search(education.title)) and not _COURSE.search(education.title)
+    return is_degree_title(education.title)
 
 
 def _select_education(profile: ProfileSnapshot, match: MatchResult, budget: Budget) -> list[EducationSnap]:
