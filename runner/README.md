@@ -24,6 +24,7 @@ Antes, carga tu perfil en la app (Perfil → Importar CV): sin tu experiencia el
 ```bash
 python -m runner buscar          # busca, analiza y prepara el CV de cada vacante (--sin-cv: solo analizar)
 python -m runner postular        # postula a las preparadas (--prueba: hasta la revisión, sin enviar; --max N)
+                                 # --portal linkedin|computrabajo: solo ese portal (también en buscar)
 ```
 
 Las capturas de cada revisión quedan en `~/.local/share/cv-optimizer-bot/capturas/`.

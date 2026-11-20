@@ -98,6 +98,8 @@ def cmd_buscar(args) -> int:
 
     try:
         for search in conf.searches:
+            if args.portal and search.portal != args.portal:
+                continue
             portal, name = search.portal, cfg.PORTALS[search.portal]
             paused = _key("busqueda", portal)
             if (until := state.pause_until(paused)) and until > datetime.now(UTC):
@@ -286,6 +288,8 @@ def cmd_postular(args) -> int:
     print("Modo AUTOMÁTICO: se envían." if submit else "Modo PRUEBA: no se envía nada.")
     todo = []
     for portal, name in cfg.PORTALS.items():
+        if args.portal and portal != args.portal:
+            continue
         pending = _pending(state, portal)
         if not pending:
             continue
@@ -343,12 +347,12 @@ def cmd_diario(_args) -> int:
             return 0
         print(f"\n===== Vuelta del {datetime.now():%Y-%m-%d %H:%M} =====")
         try:
-            cmd_buscar(argparse.Namespace(sin_cv=False, max=0))
+            cmd_buscar(argparse.Namespace(sin_cv=False, max=0, portal=None))
         except (cfg.ConfigError, ApiError):
             raise
         except Exception:  # noqa: BLE001 — si la búsqueda falla, igual se postula a lo ya preparado
             traceback.print_exc()
-        code = cmd_postular(argparse.Namespace(prueba=False, max=0))
+        code = cmd_postular(argparse.Namespace(prueba=False, max=0, portal=None))
         state = State(cfg.DATA_DIR / "estado.json")
         notice = f"Hoy: {state.today('enviadas')} enviadas y {state.today('preparadas')} preparadas."
         ct_sent, ct_ready = state.today(_key("enviadas", "computrabajo")), state.today(_key("preparadas", "computrabajo"))
@@ -402,10 +406,12 @@ def main(argv: list[str] | None = None) -> int:
     buscar = sub.add_parser("buscar")
     buscar.add_argument("--sin-cv", action="store_true", help="solo analizar, sin generar el CV")
     buscar.add_argument("--max", type=int, default=0, help="preparar como mucho N vacantes en esta vuelta")
+    buscar.add_argument("--portal", choices=list(cfg.PORTALS), help="solo este portal")
     buscar.set_defaults(fn=cmd_buscar)
     postular = sub.add_parser("postular")
     postular.add_argument("--prueba", action="store_true", help="llegar a la revisión y descartar, aunque el modo sea auto")
     postular.add_argument("--max", type=int, default=0, help="como mucho N vacantes en esta vuelta")
+    postular.add_argument("--portal", choices=list(cfg.PORTALS), help="solo este portal")
     postular.set_defaults(fn=cmd_postular)
     sub.add_parser("diario").set_defaults(fn=cmd_diario)
     programar = sub.add_parser("programar")
