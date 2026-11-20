@@ -187,6 +187,11 @@ class TestVerification:
     def test_known_tools_and_practices_count_even_in_lowercase(self, text, problem):
         assert any(problem in p for p in unsupported(text, self.SRC))
 
+    def test_same_word_joined_or_split_is_not_new(self):
+        # Caso real: el perfil dice «Fullstack» y la respuesta «Full Stack»; no es un dato nuevo.
+        assert unsupported("Tengo experiencia como Desarrollador Full Stack", "Desarrollador Fullstack en Karta") == []
+        assert any("kotlin" in p.lower() for p in unsupported("Desarrollador Full Stack con Kotlin", "Desarrollador Fullstack"))
+
     def test_lowercase_tools_in_the_source_are_fine(self):
         source = "Desplegué la API en Docker con integración continua y trabajo ágil en Scrum."
         assert unsupported("Desplegué la API en docker y trabajé con scrum", source) == []

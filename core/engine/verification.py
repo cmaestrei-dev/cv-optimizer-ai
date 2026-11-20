@@ -65,15 +65,21 @@ def unsupported(rewritten: str, source: str, *, strict: bool = True, extra_numbe
         if f" {term} " in rewritten_key and f" {term} " not in source_key:
             seen.add(term)
             problems.append(f"término sin respaldo: {term}")
-    for match in _TOKEN.finditer(rewritten):
-        token = match.group(0).rstrip(".-/")
+    source_words = set(source_key.split())
+    tokens = [(m.group(0).rstrip(".-/"), m.start()) for m in _TOKEN.finditer(rewritten)]
+    for idx, (token, start) in enumerate(tokens):
         if not token or _NUMBER.fullmatch(token):
             continue
-        at_start = bool(_SENTENCE_START.search(rewritten[: match.start()]))
+        at_start = bool(_SENTENCE_START.search(rewritten[:start]))
         if not _is_term(token, at_start, strict):
             continue
         key = _normalize(token)
-        if key and f" {key} " not in source_key and key not in seen:
-            seen.add(key)
-            problems.append(f"término sin respaldo: {token}")
+        if not key or f" {key} " in source_key or key in seen:
+            continue
+        # La misma palabra escrita junta o separada («Full Stack» / «Fullstack») no es un dato nuevo.
+        joined = [_normalize(tokens[j][0] + tokens[j + 1][0]) for j in (idx - 1, idx) if 0 <= j < len(tokens) - 1]
+        if any(word in source_words for word in joined):
+            continue
+        seen.add(key)
+        problems.append(f"término sin respaldo: {token}")
     return problems

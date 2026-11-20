@@ -60,3 +60,12 @@ def pick_option(answer: str, options: list[str]) -> str | None:
         if a in o or o in a:
             return original
     return None
+
+
+_EXPERIENCE = re.compile(r"\b(experiencia|conocimientos?|manejas?|manejo|has (trabajado|usado)|ha (trabajado|usado)|dominas?|"
+                         r"sabes|experience|knowledge)\b")
+
+
+def asks_experience(question: str) -> bool:
+    """¿La pregunta es sobre experiencia o conocimiento de algo? (entonces «no la tengo» es una respuesta honesta)."""
+    return bool(_EXPERIENCE.search(normalize(question)))
