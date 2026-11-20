@@ -52,7 +52,8 @@ empresas = []
 # si nadie lo sabe, la vacante se salta: nunca se responde al azar.
 [respuestas]
 "aspiracion salarial|salario|expectativa salarial|salary" = "3000000"
-"disponibilidad|cuando puedes empezar|fecha de inicio|start date" = "Inmediata"
+"cuando puedes empezar|cuando podrias empezar|fecha de inicio|disponibilidad de inicio|start date" = "Inmediata"
+"trabajar presencial|modalidad presencial|disponibilidad de horario|disponibilidad horaria" = "Sí"
 """
 
 

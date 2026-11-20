@@ -2,8 +2,9 @@
 
 Lo verificado con la cuenta del dueño, sin postular (2026-11-18):
 - «Aplicar» (`a[data-href-offer-apply]`) lleva a `/match/?oi=<código>` y postula de inmediato: no hay revisión.
-  Si la oferta tiene preguntas de filtro, antes pasa por `/candidate/apply-kq`; si ya se había postulado,
-  `/candidate/apply-exists`.
+  Si la oferta tiene preguntas de selección, antes pasa por `/candidate/kq` (verificado el 2026-11-20: cada pregunta
+  lleva su texto en `KillerQuestions[i].Title`; las abiertas van en `OpenQuestion`, máx. 500 caracteres; las de
+  sí/no en `ClosedQuestion`; se envía con «Enviar mi HdV»). Si ya se había postulado, `/candidate/apply-exists`.
 - La empresa ve la hoja de vida en línea (siempre la última versión) y el PDF marcado «por defecto» en
   `/candidate/cv/uploadcv`, que admite como máximo 10.
 - Por eso el bot sube el CV de la vacante, lo marca por defecto, postula y deja otra vez por defecto el CV
@@ -22,7 +23,7 @@ from pathlib import Path
 from playwright.sync_api import Error as PlaywrightError
 
 from runner.answers import pick_option
-from runner.linkedin import _FIELDS_JS, ApplyResult, Question
+from runner.linkedin import ApplyResult, Question
 
 CANDIDATE = "https://candidato.co.computrabajo.com"
 DOCS = CANDIDATE + "/candidate/cv/uploadcv"
@@ -156,31 +157,46 @@ def _applied(page) -> bool:
     return bool(button.count() and button.first.is_visible())
 
 
+# Preguntas de selección de Computrabajo: el texto de cada una está en un campo oculto, no en una etiqueta asociada.
+_KQ_JS = """(form) => { const out = [];
+  for (let i = 0; ; i++) {
+    const title = form.querySelector(`[name="KillerQuestions[${i}].Title"]`);
+    if (!title) break;
+    const open = form.querySelector(`[name="KillerQuestions[${i}].OpenQuestion"]`);
+    const radios = [...form.querySelectorAll(`[name="KillerQuestions[${i}].ClosedQuestion"]`)];
+    out.push({i, label: title.value.trim(), kind: open ? 'text' : (radios.length ? 'radio' : 'other'),
+              options: radios.map(r => (r.closest('label')?.querySelector('.label_box')?.innerText || r.value).trim()),
+              value: open ? open.value.trim() : (radios.some(r => r.checked) ? 'elegida' : '')});
+  }
+  return out; }"""
+OPEN_MAX = 500
+
+
 def _kq_form(page):
-    """El formulario de las preguntas de filtro (no el buscador del encabezado, que también es un formulario)."""
-    marked = page.locator("[form-apply-kq]")
-    return marked.first if marked.count() else page.locator("#MainContainer form, main form").first
+    return page.locator("form").filter(has=page.locator("[name^='KillerQuestions']")).first
+
+
+def _on_questions(page) -> bool:
+    return "/candidate/kq" in page.url or "/apply-kq" in page.url or page.locator("[name$='].Title'][name^='KillerQuestions']").count() > 0
 
 
 def _answer_questions(page, answerer: Answerer) -> list[str]:
-    """Responde las preguntas de filtro. Devuelve las que quedaron sin respuesta (entonces no se envía)."""
+    """Responde las preguntas de selección. Devuelve las que quedaron sin respuesta (entonces no se envía)."""
     form = _kq_form(page)
-    questions = [Question(q["kind"], q["label"], True, q["value"], q["options"], q["ids"], q.get("numeric", False))
-                 for q in form.evaluate(_FIELDS_JS) if q["kind"] != "checkbox" and q["label"]]
+    found = form.evaluate(_KQ_JS)
+    questions = [Question(q["kind"], q["label"], True, q["value"], q["options"], [str(q["i"])]) for q in found]
     empty = [q for q in questions if not q.value]
     answers = answerer(empty) if empty else {}
     missing = []
     for q in empty:
-        answer = answers.get(q.label, "")
-        target = form.locator(f"[data-cvo='{q.ids[0]}']")
-        if not answer:
+        answer = (answers.get(q.label) or "").strip()
+        i = q.ids[0]
+        if not answer or q.kind == "other":
             missing.append(q.label)
-        elif q.kind in ("text", "textarea"):
-            target.fill(answer)
-        elif q.kind == "select" and (option := pick_option(answer, q.options)):
-            target.select_option(label=option)
-        elif q.kind == "radio" and (option := pick_option(answer, q.options)):
-            form.locator(f"[data-cvo='{q.ids[q.options.index(option)]}']").check(force=True)
+        elif q.kind == "text":
+            form.locator(f"[name='KillerQuestions[{i}].OpenQuestion']").fill(answer[:OPEN_MAX])
+        elif option := pick_option(answer, q.options):
+            form.locator(f"[name='KillerQuestions[{i}].ClosedQuestion']").nth(q.options.index(option)).check(force=True)
         else:
             missing.append(q.label)
     return missing
@@ -214,7 +230,7 @@ def apply(page, offer_url: str, cv_pdf: Path, answerer: Answerer, *, submit: boo
                 return ApplyResult("sin_sesion", "Computrabajo pidió iniciar sesión")
             if "/apply-exists" in page.url:
                 return ApplyResult("ya_postulada")
-            if "/apply-kq" not in page.url:
+            if not _on_questions(page):
                 break
             if missing := _answer_questions(page, answerer):
                 return ApplyResult("saltada", "Preguntas de filtro sin respuesta en tu perfil ni en tu banco",
