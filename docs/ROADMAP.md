@@ -288,7 +288,8 @@ Entregas:
   - [x] Instalado (2026-11-19) desde la copia estable `~/.local/share/cv-optimizer-bot/codigo`, a las 9:17 y 15:47, tras el primer envío real verificado (Computrabajo). La copia solo se actualiza a mano (`git pull`).
   - [ ] El primer envío real de LinkedIn aún no ocurre: la búsqueda pública devuelve 429 a la primera petición desde la IP de casa (tres días seguidos).
   - [x] **Vacantes desde la bandeja de la app** (2026-11-20): `buscar` toma primero las vacantes de LinkedIn y Computrabajo que esperan en la bandeja, que llegan ya analizadas por las alertas por correo de la fase 5e. Les aplica las mismas exclusiones, mínimo y topes; lo excluido o descartado queda «descartado» en la app con el motivo. Decisión del dueño: LinkedIn se alimenta de sus alertas, no de la búsqueda pública ni de buscar con su sesión.
-  - [ ] **(dueño)** Crear alertas diarias en LinkedIn, activar «Alertas por correo» en la app y reenviar desde Gmail los correos de `jobalerts-noreply@linkedin.com`.
+  - [x] Alertas diarias en LinkedIn (2026-11-20, con el navegador del bot): 8 búsquedas solo con «Solicitud sencilla»: desarrollador (Colombia, Cartagena, Medellín, remoto), desarrollador python, desarrollador full stack, practicante desarrollo de software y ciberseguridad. «Alertas por correo» activadas en la app.
+  - [ ] **(dueño)** Gmail pidió verificar la identidad para añadir la dirección de reenvío de la app. Después: confirmar el código (lo muestra `GET /alerts`) y crear el filtro `from:jobalerts-noreply@linkedin.com` → reenviar. Nunca el reenvío de todo el correo.
   - [ ] Mostrar en la web lo que hizo el bot cada día.
 - [ ] Después: postulaciones externas (Greenhouse, Lever…) y los otros portales.
 
@@ -328,6 +329,11 @@ Entregas:
   - 13 ofertas tenían preguntas de selección en `/candidate/kq`, no en `apply-kq` como decía la analítica del sitio. El texto de cada pregunta va en un campo oculto `KillerQuestions[i].Title`. Ahora el bot las lee y responde (banco y perfil verificado), o salta la vacante si una queda sin respuesta.
   - La vuelta al encender el computador arrancó antes que la sesión gráfica (`Missing X server`): ahora espera hasta 10 min a que systemd conozca la pantalla.
   - El banco ya no responde «Inmediata» a «¿disponibilidad para trabajar presencial…?»: «disponibilidad» sola era demasiado amplia.
+- [x] **Menos vacantes saltadas (#42, 2026-11-20):**
+  - Preguntas de experiencia sin respaldo en el perfil («¿Tienes experiencia con Azure?», «¿Cuántos años con X?»): con `sin_evidencia = "cero"` responde «No», «0» o «Aún no tengo experiencia con eso.». Nunca inventa un «Sí».
+  - Si la verificación rechaza una respuesta de la IA, la pide una vez más antes de saltar la vacante.
+  - La verificación acepta palabras juntas o separadas («Full Stack» = «Fullstack»).
+  - Las vacantes con error o saltadas siguen «preparadas» y se reintentan en la vuelta siguiente.
 - [x] **Primer envío real (2026-11-19):** Soporte Tester QA, ikatech Solutions. En la app quedó «postulada» en Computrabajo; allá aparece «Postulado» y el CV general volvió por defecto. El primer intento falló sin enviar: elegir el PDF por defecto recarga la página y `check()` de Playwright esperaba en vano. Corregido en #38.
 - [x] Hoja de vida en línea igual a LinkedIn (regla del dueño: «solo lo que está en LinkedIn tal cual»):
   - titular, resumen, áreas, departamentos y situación «buscando activamente»;
@@ -368,6 +374,8 @@ Cambios:
 | Fecha | Decisión | Por qué |
 |---|---|---|
 | 2026-11-18 | En Computrabajo, CV por vacante marcado «por defecto» al postular, más un CV general fijo | La empresa recibe el PDF por defecto; un CV general en uno de los 10 espacios garantiza que nunca quede sin PDF si Computrabajo solo guardara una referencia y el bot rotara el de la vacante (decisión del dueño) |
+| 2026-11-20 | Ante una pregunta de experiencia sin respaldo, el bot responde que no la tiene en vez de saltar la vacante | Saltarla perdía vacantes buenas por una sola herramienta; decir «No» o «0» es verdad y deja que la empresa decida. La regla de no inventar sigue: un «Sí» siempre necesita evidencia del perfil |
+| 2026-11-20 | Gmail reenvía a la app solo las alertas de LinkedIn, con un filtro | El reenvío de todo el correo mandaría a la app correos personales; el servidor igual los rechazaría, pero no deben salir del buzón |
 | 2026-11-20 | Las vacantes de LinkedIn llegan por sus alertas por correo a la bandeja, no por su búsqueda pública | La búsqueda pública devolvió 429 a la primera petición tres días seguidos desde la IP de casa. Buscar con la sesión es lo que LinkedIn vigila en las cuentas, y una restricción tumbaría también la «Solicitud sencilla». Las alertas son un uso normal y ya se analizan en el servidor |
 | 2026-11-19 | La verificación anti-invención también cuenta herramientas y metodologías en minúscula | Un CV para una vacante de QA decía «metodologías agile» (de la vacante, no del perfil): solo se revisaban cifras, siglas y palabras con mayúscula. Ahora el vocabulario técnico del motor y las metodologías («agile», «scrum», «itil», «devops»…) deben estar en la fuente |
 | 2026-11-19 | Al ajustar a una página, se recortan cursos y certificados antes de dejar una experiencia con 1 logro | El CV general del dueño mostraba su trabajo actual con 1 viñeta para conservar dos certificados cortos; para quien selecciona pesa más un logro del trabajo |
@@ -445,7 +453,7 @@ Cambios:
 
 ## Próximo paso
 
-1. El bot corre solo (9:17 y 15:47): revisar `registro.log` y Postulaciones los primeros días. LinkedIn: resolver el 429 de la búsqueda pública y ver el primer envío real. Luego, la vista web de lo que hizo el bot.
+1. El bot corre solo (9:17 y 15:47): revisar `registro.log` y Postulaciones los primeros días. LinkedIn: que el dueño verifique su identidad en Gmail para terminar el reenvío de las alertas; luego, ver la primera alerta en la bandeja y el primer envío real. Después, la vista web de lo que hizo el bot.
    Pendiente de producto: el resumen del CV empieza con el cargo de la vacante («Soporte Tester QA con 1 año…»), lo que puede leerse como un cargo que no se tuvo. Cambiarlo a un objetivo honesto con evals (requiere clave de IA local).
    Después: Computrabajo, elempleo y Magneto (postular suele ser un clic), Get on Board y búsquedas de prácticas.
 2. Después, el resto de portales (Computrabajo, Magneto, elempleo) con el mismo esquema.
