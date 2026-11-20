@@ -232,8 +232,24 @@ def cmd_buscar(args) -> int:
 
 
 def _answerer(api: Api, conf: cfg.Config, application_id: int):
-    """Respuestas: primero el banco de la persona; lo demás, el motor de la app con su perfil (verificado)."""
+    """Respuestas: primero el banco de la persona; lo demás, el motor de la app con su perfil (verificado).
+
+    - Si la verificación marca una respuesta (p. ej. una sigla que el perfil no usa), se pide una vez más.
+    - Con `sin_evidencia = "cero"`, a «¿qué experiencia tienes con X?» sin respaldo en el perfil se responde con la
+      verdad («No» / «Aún no tengo experiencia con eso») en vez de saltar la vacante. Nunca se afirma lo que no hay.
+    """
     from runner import answers
+
+    def screening(questions: list) -> dict[str, dict]:
+        try:
+            replies = api.post(f"/applications/{application_id}/screening", {"questions": [q.label for q in questions]})
+        except ApiError as e:
+            print(f"        No se pudieron preparar respuestas: {e.detail}")
+            return {}
+        return {r["question"]: r for r in replies} if isinstance(replies, list) else {}
+
+    def flagged(reply: dict) -> bool:  # la IA respondió, pero la verificación no lo respaldó
+        return bool(reply.get("needs_you") and (reply.get("answer") or "").strip())
 
     def answer(questions) -> dict[str, str]:
         out, ask = {}, []
@@ -243,20 +259,21 @@ def _answerer(api: Api, conf: cfg.Config, application_id: int):
                 out[q.label] = value
             else:
                 ask.append(q)
-        if ask:
-            try:
-                replies = api.post(f"/applications/{application_id}/screening", {"questions": [q.label for q in ask]})
-            except ApiError as e:
-                print(f"        No se pudieron preparar respuestas: {e.detail}")
-                replies = []
-            by_question = {r["question"]: r for r in replies} if isinstance(replies, list) else {}
-            for q in ask:
-                reply = by_question.get(q.label, {})
-                text = "" if reply.get("needs_you") else (reply.get("answer") or "")
-                if q.numeric or answers.is_years(q.label):
-                    text = answers.to_integer(text) or ("0" if answers.is_years(q.label) and conf.no_evidence == "cero" else "")
-                if text:
-                    out[q.label] = text
+        if not ask:
+            return out
+        by_question = screening(ask)
+        if retry := [q for q in ask if flagged(by_question.get(q.label, {}))]:
+            again = screening(retry)
+            by_question.update({k: v for k, v in again.items() if not v.get("needs_you")})
+        for q in ask:
+            reply = by_question.get(q.label, {})
+            text = "" if reply.get("needs_you") else (reply.get("answer") or "")
+            if q.numeric or answers.is_years(q.label):
+                text = answers.to_integer(text) or ("0" if answers.is_years(q.label) and conf.no_evidence == "cero" else "")
+            elif not text and not flagged(reply) and conf.no_evidence == "cero" and answers.asks_experience(q.label):
+                text = "No" if q.kind in ("radio", "select") else "Aún no tengo experiencia con eso."
+            if text:
+                out[q.label] = text
         return out
 
     return answer

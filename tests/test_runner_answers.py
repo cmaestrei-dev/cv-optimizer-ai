@@ -30,3 +30,10 @@ def test_pick_option():
     assert answers.pick_option("Inmediata", ["En 15 días", "Inmediata"]) == "Inmediata"
     assert answers.pick_option("Sí", ["Selecciona una opción", "Tal vez"]) is None
     assert answers.pick_option("", ["Sí"]) is None
+
+
+def test_asks_experience():
+    assert answers.asks_experience("¿Qué experiencia tienes con Microsoft Azure y herramientas DevOps?")
+    assert answers.asks_experience("¿Tiene algún conocimiento en contenedores Docker?")
+    assert not answers.asks_experience("¿Cuál es tu nivel de formación académica?")
+    assert not answers.asks_experience("¿Cuál es tu dirección y localidad?")
