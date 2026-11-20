@@ -19,6 +19,8 @@ from collections.abc import Callable
 from dataclasses import dataclass
 from pathlib import Path
 
+from playwright.sync_api import Error as PlaywrightError
+
 from runner.answers import pick_option
 from runner.linkedin import _FIELDS_JS, ApplyResult, Question
 
@@ -90,8 +92,10 @@ def set_default(page, doc_id: str) -> None:
     if not radio.count():
         raise ComputrabajoError("No encontré ese PDF en Computrabajo")
     if not radio.is_checked():
+        # Un clic simple: la página se recarga al elegir, y check() de Playwright esperaría en vano que el botón
+        # viejo quedara marcado (pasó en el Computrabajo real). Lo que cuenta se verifica abajo.
         with page.expect_navigation(wait_until="domcontentloaded"):
-            radio.check(force=True)
+            radio.click(force=True)
         time.sleep(2)
     if not any(d.id == doc_id and d.default for d in documents(page)):
         raise ComputrabajoError("Computrabajo no dejó ese PDF por defecto")
@@ -228,6 +232,8 @@ def apply(page, offer_url: str, cv_pdf: Path, answerer: Answerer, *, submit: boo
         return ApplyResult("error", f"No se confirmó la postulación (terminó en {page.url[:80]}): revísala en Computrabajo")
     except ComputrabajoError as e:
         return ApplyResult(e.status, str(e))
+    except PlaywrightError as e:  # algo de la página cambió: esa vacante queda en error y la vuelta sigue
+        return ApplyResult("error", f"La página de Computrabajo no respondió como se esperaba: {str(e).splitlines()[0][:150]}")
     finally:
         try:  # el CV general vuelve a quedar por defecto (para lo que postules tú a mano)
             ensure_default(page, general, uploaded, general.name)
