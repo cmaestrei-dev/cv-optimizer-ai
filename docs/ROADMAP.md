@@ -285,7 +285,8 @@ Entregas:
 - [ ] **E4, que corra solo:**
   - [x] `python -m runner diario`: una vuelta (buscar y luego postular) con candado para que nunca corran dos a la vez. Si la búsqueda falla, igual postula lo preparado. Al terminar avisa en el escritorio (enviadas, verificación pendiente, sesión perdida).
   - [x] `python -m runner programar [--horas …] [--quitar]`: temporizador de systemd del usuario, sin root. Por defecto a las 9:17 y 15:47; si el computador estaba apagado, corre al encender. El registro va a `registro.log`. Rechaza rutas temporales o que systemd leería mal.
-  - [ ] Instalarlo en el computador del dueño, desde una copia estable, tras los primeros envíos reales.
+  - [x] Instalado (2026-11-19) desde la copia estable `~/.local/share/cv-optimizer-bot/codigo`, a las 9:17 y 15:47, tras el primer envío real verificado (Computrabajo). La copia solo se actualiza a mano (`git pull`).
+  - [ ] El primer envío real de LinkedIn aún no ocurre: la búsqueda pública devuelve 429 a la primera petición desde la IP de casa (dos días seguidos). Evaluar otra fuente de vacantes de LinkedIn (alertas por correo de la fase 5e, o menos búsquedas y más espaciadas).
   - [ ] Mostrar en la web lo que hizo el bot cada día.
 - [ ] Después: postulaciones externas (Greenhouse, Lever…) y los otros portales.
 
@@ -320,8 +321,13 @@ Entregas:
   - Para hacer espacio borra el PDF más viejo que subió el bot; nunca el general ni uno ajeno (`sin_espacio`).
   - 7 pruebas contra un Computrabajo falso con Playwright. Las redirecciones van con JavaScript, porque las HTTP de una respuesta simulada no pasan por la intercepción y saldrían a la red.
 - [x] **(dueño)** Decidió: CV por vacante más uno general fijo; borrar sus 10 PDF viejos; el primer envío, mirándolo.
-- [ ] Borrar los 10 PDF viejos, subir el CV general (tras desplegar el arreglo del título) y hacer el primer envío real mirándolo.
-- [ ] Hoja de vida en línea de Computrabajo consecuente con LinkedIn (cargos de El Arte de Nicolás y Equimat, falta Karta), en el navegador de Claude con la sesión del dueño.
+- [x] Borrar los 10 PDF viejos, subir el CV general y dejarlo por defecto (con el bot, 2026-11-19). Corrección: el PDF por defecto anterior era «Tecnólogo en Sistemas», no «No adjuntar» (se leyó mal el HTML).
+- [x] **Primer envío real (2026-11-19):** Soporte Tester QA, ikatech Solutions. En la app quedó «postulada» en Computrabajo; allá aparece «Postulado» y el CV general volvió por defecto. El primer intento falló sin enviar: elegir el PDF por defecto recarga la página y `check()` de Playwright esperaba en vano. Corregido en #38.
+- [x] Hoja de vida en línea igual a LinkedIn (regla del dueño: «solo lo que está en LinkedIn tal cual»):
+  - titular, resumen, áreas, departamentos y situación «buscando activamente»;
+  - «Información adicional» con el CV de LinkedIn; tenía un «[INSERTAR PORCENTAJE]%» olvidado;
+  - las 3 experiencias de LinkedIn; se borraron dos que no estaban;
+  - estudios corregidos, inglés básico, 17 conocimientos nuevos y 27 de infraestructura quitados.
 - [ ] **(dueño)** Cargar su perfil (CV o PDF de LinkedIn), crear el token en la web e iniciar sesión en el navegador del bot.
 
 ### CV v2: legible para personas y ATS (2026-11-18, pedido del dueño)
@@ -432,7 +438,7 @@ Cambios:
 
 ## Próximo paso
 
-1. Fase 7 LinkedIn: primeros envíos reales en `modo = "auto"`, mirándolos → E4 (programarlo y ver en la web lo que hizo el bot).
-   Fase 8 Computrabajo: desplegar el arreglo del título → CV general → limpiar los 10 PDF viejos → primer envío real mirándolo; hoja de vida en línea igual a LinkedIn.
+1. El bot corre solo (9:17 y 15:47): revisar `registro.log` y Postulaciones los primeros días. LinkedIn: resolver el 429 de la búsqueda pública y ver el primer envío real. Luego, la vista web de lo que hizo el bot.
+   Pendiente de producto: el resumen del CV empieza con el cargo de la vacante («Soporte Tester QA con 1 año…»), lo que puede leerse como un cargo que no se tuvo. Cambiarlo a un objetivo honesto con evals (requiere clave de IA local).
    Después: Computrabajo, elempleo y Magneto (postular suele ser un clic), Get on Board y búsquedas de prácticas.
 2. Después, el resto de portales (Computrabajo, Magneto, elempleo) con el mismo esquema.
