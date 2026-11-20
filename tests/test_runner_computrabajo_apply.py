@@ -36,8 +36,9 @@ class FakeComputrabajo:
           <ul><li><input type="radio" name="rbPrincipal" value="0" {"checked" if self.default == "0" else ""}></li></ul>{rows}
           <div id="frmDelete" style="display:none"><button id="btDelete">Eliminar</button></div></div>
           <script>
-            document.querySelectorAll('input[name=rbPrincipal]').forEach(r => r.onchange = () =>
-              location.href = '/candidate/cv/uploadcv?dcf=' + r.value);
+            document.querySelectorAll('input[name=rbPrincipal]').forEach(r => r.onclick = (e) => {{
+              e.preventDefault();  // como el real: no cambia aquí, recarga y la página nueva trae el nuevo por defecto
+              location.href = '/candidate/cv/uploadcv?dcf=' + r.value; }});
             document.querySelectorAll('#it-delete').forEach(x => x.onclick = () => {{
               const b = document.getElementById('btDelete'); b.dataset.id = x.dataset.filecandidateid;
               document.getElementById('frmDelete').style.display = 'block'; }});
