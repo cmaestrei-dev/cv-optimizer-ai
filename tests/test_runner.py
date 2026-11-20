@@ -444,7 +444,7 @@ class TestAnswerer:
         ("text", "¿Cuál es tu aspiración salarial?", [], True),
     ]
 
-    def _answer(self, mode: str, replies: dict[str, str]):
+    def _answer(self, mode: str, replies: dict[str, str], *, units: bool = False):
         from runner.linkedin import Question
 
         api = SimpleNamespace(post=lambda path, body: [
@@ -452,7 +452,7 @@ class TestAnswerer:
         conf = cfg.Config(api="https://x", token="t", no_evidence=mode, default_years=2,
                           answers={"aspiracion salarial": "3000000"})
         questions = [Question(kind, label, True, "", options, [], numeric) for kind, label, options, numeric in self.QUESTIONS]
-        return cli._answerer(api, conf, 1)(questions)
+        return cli._answerer(api, conf, 1, units=units)(questions)
 
     def test_si_says_yes_and_a_junior_number_of_years(self):
         out = self._answer("si", {"¿Cuántos años de experiencia tienes con Python?": "3 años",
@@ -464,6 +464,12 @@ class TestAnswerer:
         assert out["¿Cuántos meses de experiencia tienes en soporte?"] == "24"
         assert "¿Requieres patrocinio de visa?" not in out  # no es de experiencia: sin respuesta, se salta
         assert out["¿Cuál es tu aspiración salarial?"] == "3000000"
+
+    def test_open_years_questions_carry_the_unit_on_computrabajo(self):
+        out = self._answer("si", {}, units=True)
+        assert out["¿Cuántos meses de experiencia tienes en soporte?"] == "24"  # campo numérico: solo el número
+        self.QUESTIONS = [("text", "¿Cuánto tiempo de experiencia tienes en desarrollo Backend?", [], False)]
+        assert self._answer("si", {}, units=True) == {"¿Cuánto tiempo de experiencia tienes en desarrollo Backend?": "2 años"}
 
     def test_cero_and_saltar(self):
         out = self._answer("cero", {})

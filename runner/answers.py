@@ -8,7 +8,8 @@ import math
 import re
 import unicodedata
 
-YEARS = re.compile(r"\b(cu[aá]nt[oa]s?|how many)\b.*\b(a[nñ]os|years?|meses|months?)\b", re.I)
+YEARS = re.compile(r"\b(cu[aá]nt[oa]s?|how many)\b.*\b(a[nñ]os|years?|meses|months?)\b"
+                   r"|\b(cu[aá]nto tiempo|how long)\b.*\b(experiencia|experience|trabaj|llevas)", re.I)
 _NUMBER = re.compile(r"\d+(?:[.,]\d+)?")
 _YES = {"si", "sí", "yes", "true", "1"}
 _NO = {"no", "false", "0"}

@@ -13,7 +13,9 @@ def test_bank_matches_patterns_without_accents():
 def test_years_questions():
     assert answers.is_years("¿Cuántos años de experiencia tienes con Python?*")
     assert answers.is_years("How many years of work experience do you have with React?")
+    assert answers.is_years("¿Cuánto tiempo de experiencia tienes en desarrollo Backend o Full Stack?")
     assert not answers.is_years("¿Tienes experiencia con Python?")
+    assert not answers.is_years("¿Cuánto tiempo te toma llegar a la oficina?")
 
 
 def test_integers_round_down():

@@ -231,10 +231,12 @@ def cmd_buscar(args) -> int:
     return 0
 
 
-def _answerer(api: Api, conf: cfg.Config, application_id: int):
+def _answerer(api: Api, conf: cfg.Config, application_id: int, *, units: bool = False):
     """Respuestas: primero el banco de la persona; lo demás, el motor de la app con su perfil (verificado).
 
     - Si la verificación marca una respuesta (p. ej. una sigla que el perfil no usa), se pide una vez más.
+    - `units`: en las preguntas abiertas de años se escribe «2 años» (Computrabajo); si no, solo el número, que es
+      lo que validan los campos de LinkedIn.
     - Preguntas de experiencia que el perfil no respalda, según `sin_evidencia`: "saltar" la vacante; "cero"
       («No», «0», «Aún no tengo experiencia con eso»); o "si" (decisión del dueño: «Sí» y, en años, lo que muestre
       el perfil o al menos `experiencia_por_defecto`). Solo las de experiencia: el resto sigue igual.
@@ -277,6 +279,8 @@ def _answerer(api: Api, conf: cfg.Config, application_id: int):
                     text = str(max(int(text or 0), least))
                 elif not text and conf.no_evidence == "cero":
                     text = "0"
+                if text and units and not choice and not q.numeric:
+                    text += " meses" if answers.asks_months(q.label) else (" año" if text == "1" else " años")
             elif q.numeric:
                 text = answers.to_integer(text) or ""
             elif conf.no_evidence == "si" and answers.asks_experience(q.label):
@@ -313,7 +317,7 @@ def _apply_portal(page, portal: str, pending, *, conf: cfg.Config, api: Api, sta
             print("Tope diario de envíos alcanzado.")
             break
         print(f"\n· {v.get('url')}  (compatibilidad {v.get('puntaje')})")
-        answerer = _answerer(api, conf, v["app"])
+        answerer = _answerer(api, conf, v["app"], units=portal == "computrabajo")
         if portal == "linkedin":
             result = linkedin.apply(page, v["url"], Path(v["cv"]), answerer, submit=submit, shots=cfg.DATA_DIR / "capturas")
         else:
