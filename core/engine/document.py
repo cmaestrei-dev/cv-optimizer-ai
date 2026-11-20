@@ -11,7 +11,7 @@ from weasyprint import HTML
 
 from config import PDF_PAGE_SIZE
 from core.engine import skill_groups as tech
-from core.engine.selection import Selection
+from core.engine.selection import Selection, is_degree_title
 from core.engine.writing import WrittenCV
 from models import UserProfile
 from services.docx_generator import generate_docx
@@ -178,12 +178,22 @@ def render_html(doc: CVDocument, contact: UserProfile) -> str:
 
 
 def _trim_once(doc: CVDocument) -> str | None:
-    """Quita lo menos relevante. Devuelve qué se quitó, o None si ya no hay nada razonable que quitar."""
-    candidates = [(b, exp) for exp in doc.visible_experiences() if len(exp.included) > 1 for b in exp.included]
-    if candidates:
-        bullet, exp = min(candidates, key=lambda pair: pair[0].score)
-        bullet.included = False
-        return f"Viñeta de {exp.role}: {bullet.text[:60]}…"
+    """Quita lo menos relevante. Devuelve qué se quitó, o None si ya no hay nada razonable que quitar.
+
+    Orden: logros que sobran (cada experiencia conserva 2), luego cursos y certificados (un logro del trabajo
+    vale más para quien selecciona), luego logros hasta dejar 1 por experiencia. Los títulos van al final.
+    """
+    for keep in (2, None, 1):
+        if keep is None:
+            courses = [i for i, line in enumerate(doc.education) if not is_degree_title(line.split(" - ")[0])]
+            if courses:
+                return f"Educación: {doc.education.pop(courses[-1])}"
+            continue
+        candidates = [(b, exp) for exp in doc.visible_experiences() if len(exp.included) > keep for b in exp.included]
+        if candidates:
+            bullet, exp = min(candidates, key=lambda pair: pair[0].score)
+            bullet.included = False
+            return f"Viñeta de {exp.role}: {bullet.text[:60]}…"
     if len(doc.education) > 2:
         return f"Educación: {doc.education.pop()}"
     total_skills = sum(len(items) for _, items in doc.skill_groups)

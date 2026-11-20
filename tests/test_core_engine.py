@@ -248,6 +248,23 @@ class TestDocument:
         assert min(kept) > 0 and 39 in kept  # se quitan primero los de menor puntaje
         assert result.pdf.startswith(b"%PDF") and result.docx[:2] == b"PK"
 
+    def test_trim_order_bullets_then_courses_then_last_bullets(self):
+        # Caso real: el trabajo actual quedaba con 1 viñeta para conservar dos certificados cortos.
+        from core.engine.document import _trim_once
+
+        def bullets(base):
+            return [CVBullet(base + i, f"Logro {base + i}", "x", score=base + i) for i in range(4)]
+        doc = CVDocument("es", "Resumen", [CVExperience("Actual", "Empresa", "2026", "", bullets(0)),
+                                           CVExperience("Anterior", "Otra", "2025", "", bullets(100))],
+                         ["Ingeniería de Sistemas - Universidad | 2022 - 2027", "Técnico Profesional en Software - Universidad | 2021",
+                          "Cybersecurity Threat Vectors - Microsoft | 2024", "Certificado en Analítica de Datos - Universidad | 2024"], [])
+        steps = [_trim_once(doc) for _ in range(8)]
+        assert all(s.startswith("Viñeta") for s in steps[:4])  # cada experiencia baja a 2
+        assert steps[4:6] == ["Educación: Certificado en Analítica de Datos - Universidad | 2024",
+                              "Educación: Cybersecurity Threat Vectors - Microsoft | 2024"]
+        assert all(s.startswith("Viñeta") for s in steps[6:8])  # recién ahora a 1 por experiencia
+        assert [len(exp.included) for exp in doc.experiences] == [1, 1] and len(doc.education) == 2
+
     def test_english_titles_and_labels(self):
         vacancy, m = _match()
         sel = select_content(_profile(), m, vacancy)
