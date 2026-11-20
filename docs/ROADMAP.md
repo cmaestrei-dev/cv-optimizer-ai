@@ -286,7 +286,9 @@ Entregas:
   - [x] `python -m runner diario`: una vuelta (buscar y luego postular) con candado para que nunca corran dos a la vez. Si la búsqueda falla, igual postula lo preparado. Al terminar avisa en el escritorio (enviadas, verificación pendiente, sesión perdida).
   - [x] `python -m runner programar [--horas …] [--quitar]`: temporizador de systemd del usuario, sin root. Por defecto a las 9:17 y 15:47; si el computador estaba apagado, corre al encender. El registro va a `registro.log`. Rechaza rutas temporales o que systemd leería mal.
   - [x] Instalado (2026-11-19) desde la copia estable `~/.local/share/cv-optimizer-bot/codigo`, a las 9:17 y 15:47, tras el primer envío real verificado (Computrabajo). La copia solo se actualiza a mano (`git pull`).
-  - [ ] El primer envío real de LinkedIn aún no ocurre: la búsqueda pública devuelve 429 a la primera petición desde la IP de casa (dos días seguidos). Evaluar otra fuente de vacantes de LinkedIn (alertas por correo de la fase 5e, o menos búsquedas y más espaciadas).
+  - [ ] El primer envío real de LinkedIn aún no ocurre: la búsqueda pública devuelve 429 a la primera petición desde la IP de casa (tres días seguidos).
+  - [x] **Vacantes desde la bandeja de la app** (2026-11-20): `buscar` toma primero las vacantes de LinkedIn y Computrabajo que esperan en la bandeja, que llegan ya analizadas por las alertas por correo de la fase 5e. Les aplica las mismas exclusiones, mínimo y topes; lo excluido o descartado queda «descartado» en la app con el motivo. Decisión del dueño: LinkedIn se alimenta de sus alertas, no de la búsqueda pública ni de buscar con su sesión.
+  - [ ] **(dueño)** Crear alertas diarias en LinkedIn, activar «Alertas por correo» en la app y reenviar desde Gmail los correos de `jobalerts-noreply@linkedin.com`.
   - [ ] Mostrar en la web lo que hizo el bot cada día.
 - [ ] Después: postulaciones externas (Greenhouse, Lever…) y los otros portales.
 
@@ -362,6 +364,7 @@ Cambios:
 | Fecha | Decisión | Por qué |
 |---|---|---|
 | 2026-11-18 | En Computrabajo, CV por vacante marcado «por defecto» al postular, más un CV general fijo | La empresa recibe el PDF por defecto; un CV general en uno de los 10 espacios garantiza que nunca quede sin PDF si Computrabajo solo guardara una referencia y el bot rotara el de la vacante (decisión del dueño) |
+| 2026-11-20 | Las vacantes de LinkedIn llegan por sus alertas por correo a la bandeja, no por su búsqueda pública | La búsqueda pública devolvió 429 a la primera petición tres días seguidos desde la IP de casa. Buscar con la sesión es lo que LinkedIn vigila en las cuentas, y una restricción tumbaría también la «Solicitud sencilla». Las alertas son un uso normal y ya se analizan en el servidor |
 | 2026-11-19 | La verificación anti-invención también cuenta herramientas y metodologías en minúscula | Un CV para una vacante de QA decía «metodologías agile» (de la vacante, no del perfil): solo se revisaban cifras, siglas y palabras con mayúscula. Ahora el vocabulario técnico del motor y las metodologías («agile», «scrum», «itil», «devops»…) deben estar en la fuente |
 | 2026-11-19 | Al ajustar a una página, se recortan cursos y certificados antes de dejar una experiencia con 1 logro | El CV general del dueño mostraba su trabajo actual con 1 viñeta para conservar dos certificados cortos; para quien selecciona pesa más un logro del trabajo |
 | 2026-11-18 | En el CV, el título de educación formal siempre entra y va primero | La educación se ordenaba por «citada» y fecha: un título sin fechas quedaba fuera tras cuatro certificados recientes (pasó con el del dueño). Para cualquier profesión, el título pesa más que un curso |

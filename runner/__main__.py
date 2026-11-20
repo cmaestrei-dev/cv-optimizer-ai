@@ -15,9 +15,10 @@ import getpass
 import re
 import sys
 from datetime import UTC, date, datetime
+from types import SimpleNamespace
 
+from runner import computrabajo, discover
 from runner import config as cfg
-from runner import discover
 from runner.api import Api, ApiError
 from runner.state import State
 
@@ -77,9 +78,52 @@ def _key(kind: str, portal: str) -> str:
 
 
 def _portal(name: str):
-    from runner import computrabajo
-
     return {"linkedin": discover, "computrabajo": computrabajo}[name]
+
+
+PLATFORM_PORTAL = {"LinkedIn": "linkedin", "Computrabajo": "computrabajo"}
+
+
+def _job_id(portal: str, url: str) -> str:
+    """El identificador de la vacante en el estado del bot, a partir de su enlace canónico."""
+    if portal == "linkedin":
+        match = re.search(r"/jobs/view/(\d+)", url)
+        return match.group(1) if match else ""
+    match = re.search(r"-([0-9A-Fa-f]{16,})/?$", url.split("#")[0].split("?")[0])
+    return computrabajo.PREFIX + match.group(1).upper() if match else ""
+
+
+def _discard(api: Api, app_id: int, note: str) -> None:
+    try:
+        api.post(f"/applications/{app_id}/status", {"status": "descartada", "note": note})
+    except ApiError as e:
+        print(f"        No se pudo descartar en la app: {e.detail}")
+
+
+def _prepare(api: Api, conf: cfg.Config, state: State, args, *, portal: str, job_id: str, app_id: int,
+             score: int | None, url: str) -> bool:
+    """Descarta por compatibilidad o hace el CV y deja la vacante lista para postular. True si quedó preparada."""
+    minimum = conf.min_score(portal)
+    if minimum and (score is None or score < minimum):
+        _discard(api, app_id, f"El bot la descartó: compatibilidad {score if score is not None else '—'} (mínimo {minimum}).")
+        state.mark(job_id, "baja_compatibilidad", portal=portal, app=app_id, puntaje=score)
+        print(f"        Menos de {minimum}: descartada, sin CV.")
+        state.save()
+        return False
+    cv_path, cv_id = "", None
+    if conf.make_cv and not args.sin_cv:
+        try:
+            cv = api.make_cv(app_id)
+            # con su nombre real: es el que ve el reclutador en el portal
+            cv_path = str(api.download_cv(cv["id"], cfg.DATA_DIR / "cvs" / str(app_id) / cv["filename"]))
+            cv_id = cv["id"]
+            print(f"        CV: {cv['filename']}")
+        except ApiError as e:
+            print(f"        CV no generado: {e.detail}")
+    state.mark(job_id, "preparada", portal=portal, app=app_id, puntaje=score, cv=cv_path, cv_id=cv_id, url=url)
+    state.count(_key("preparadas", portal))
+    state.save()
+    return True
 
 
 def cmd_buscar(args) -> int:
@@ -97,6 +141,30 @@ def cmd_buscar(args) -> int:
         return state.today(_key("preparadas", portal)) >= conf.cap(portal) or bool(args.max and prepared_now >= args.max)
 
     try:
+        # Primero la bandeja de la app (p. ej. las alertas de LinkedIn por correo): ya vienen analizadas.
+        inbox = [x for x in api.get("/applications?view=bandeja") if x.get("platform") in PLATFORM_PORTAL]
+        if inbox:
+            print(f"\nBandeja de la app: {len(inbox)} vacantes de LinkedIn o Computrabajo por revisar")
+        for item in inbox:
+            portal = PLATFORM_PORTAL[item["platform"]]
+            job_id = _job_id(portal, item.get("url") or "")
+            if (args.portal and portal != args.portal) or not job_id or state.seen(job_id) or full(portal):
+                continue
+            if item.get("closes_on") and date.fromisoformat(item["closes_on"]) < date.today():
+                state.mark(job_id, "cerrada", portal=portal, app=item["id"])
+                continue
+            role, company = item.get("role") or "", item.get("company") or ""
+            if reason := _excluded(SimpleNamespace(title=role, company=company), conf):
+                _discard(api, item["id"], f"El bot la omitió: {reason}.")
+                state.mark(job_id, "excluida", portal=portal, app=item["id"], motivo=reason)
+                print(f"  · {role} — {company}: omitida ({reason})")
+                continue
+            score = item.get("match_score")
+            print(f"  ✓ {score if score is not None else '—':>3}  {role}" + (f" — {company}" if company else "") + "  (bandeja)")
+            if _prepare(api, conf, state, args, portal=portal, job_id=job_id, app_id=item["id"], score=score,
+                        url=item["url"]):
+                prepared_now += 1
+        state.save()
         for search in conf.searches:
             if args.portal and search.portal != args.portal:
                 continue
@@ -149,32 +217,9 @@ def cmd_buscar(args) -> int:
                     if vacancy.missing:
                         line += f"  (falta: {'; '.join(vacancy.missing[:2])})"
                     print(line)
-                    minimum = conf.min_score(portal)
-                    if minimum and (vacancy.score is None or vacancy.score < minimum):
-                        note = f"El bot la descartó: compatibilidad {vacancy.score if vacancy.score is not None else '—'} (mínimo {minimum})."
-                        try:
-                            api.post(f"/applications/{vacancy.id}/status", {"status": "descartada", "note": note})
-                        except ApiError as e:
-                            print(f"        No se pudo descartar en la app: {e.detail}")
-                        state.mark(card.job_id, "baja_compatibilidad", portal=portal, app=vacancy.id, puntaje=vacancy.score)
-                        print(f"        Menos de {minimum}: descartada, sin CV.")
-                        state.save()
-                        continue
-                    cv_path, cv_id = "", None
-                    if conf.make_cv and not args.sin_cv:
-                        try:
-                            cv = api.make_cv(vacancy.id)
-                            # con su nombre real: es el que ve el reclutador en el portal
-                            cv_path = str(api.download_cv(cv["id"], cfg.DATA_DIR / "cvs" / str(vacancy.id) / cv["filename"]))
-                            cv_id = cv["id"]
-                            print(f"        CV: {cv['filename']}")
-                        except ApiError as e:
-                            print(f"        CV no generado: {e.detail}")
-                    state.mark(card.job_id, "preparada", portal=portal, app=vacancy.id, puntaje=vacancy.score, cv=cv_path,
-                               cv_id=cv_id, url=card.url)
-                    state.count(_key("preparadas", portal))
-                    prepared_now += 1
-                    state.save()
+                    if _prepare(api, conf, state, args, portal=portal, job_id=card.job_id, app_id=vacancy.id,
+                                score=vacancy.score, url=card.url):
+                        prepared_now += 1
             except discover.BlockedError as e:
                 state.pause(6, str(e), kind=paused)
                 print(f"\nParo la búsqueda en {name}: {e} Pausa de 6 horas (tu cuenta no se toca).")

@@ -41,6 +41,20 @@ python -m runner programar --quitar             # dejar de correrlo solo
 - La ventana del bot se abre en tu sesión: el computador debe estar encendido y con tu sesión iniciada. Si estaba apagado a la hora, la vuelta corre al encenderlo.
 - Lo que hace cada vuelta queda en `~/.local/share/cv-optimizer-bot/registro.log`. Al terminar te avisa en el escritorio: cuántas se enviaron, o si LinkedIn pidió una verificación o el bot perdió la sesión.
 
+## Vacantes desde la bandeja de la app (alertas de LinkedIn por correo)
+
+Antes de buscar en los portales, `buscar` revisa tu bandeja de la app y toma las vacantes de LinkedIn y Computrabajo
+que todavía no vio. Llegan ya analizadas, por ejemplo desde las alertas de empleo por correo. Les aplica las mismas
+exclusiones, compatibilidad mínima y topes. Lo que excluye o descarta queda «descartado» en la app con el motivo.
+
+Es la forma recomendada de recibir vacantes de LinkedIn: su búsqueda pública frena las peticiones (429) desde una
+IP de casa, y las alertas son un uso normal que no arriesga la cuenta. Para activarlo:
+
+1. En LinkedIn, crea alertas de empleo diarias para tus búsquedas.
+2. En la app, Bandeja → «Alertas por correo» → activar: te da una dirección de reenvío.
+3. En tu Gmail, crea un filtro que reenvíe a esa dirección los correos de `jobalerts-noreply@linkedin.com` (el código
+   de confirmación de Gmail aparece en la app).
+
 ## Computrabajo
 
 Las búsquedas con `portal = "computrabajo"` usan la búsqueda pública de Computrabajo Colombia (sin sesión):

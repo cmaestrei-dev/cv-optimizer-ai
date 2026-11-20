@@ -63,6 +63,13 @@ CT_POSTING_HTML = """
 """
 
 
+def test_job_ids_from_canonical_urls():
+    assert cli._job_id("linkedin", "https://www.linkedin.com/jobs/view/4012345678") == "4012345678"
+    assert cli._job_id("computrabajo", "https://co.computrabajo.com/ofertas-de-trabajo/oferta-de-trabajo-de-qa-en-cali-"
+                                       "3b20bf04c1af1c7061373e686dcf3405") == "ct:3B20BF04C1AF1C7061373E686DCF3405"
+    assert cli._job_id("linkedin", "https://www.linkedin.com/feed/") == ""
+
+
 class TestComputrabajoPages:
     def test_search_url_by_city_remote_and_date(self):
         url = computrabajo.search_url(cfg.Search("desarrollador de software", "Cartagena", days=7, portal="computrabajo"), 2)
@@ -286,6 +293,25 @@ class TestRun:
         assert not detail["cvs"] and any("mínimo 100" in str(e) for e in detail["events"])
         ct = State(tmp_path / "estado.json").data["vistas"]["ct:2B8F7CDED6FA648661373E686DCF3405"]
         assert ct["estado"] == "baja_compatibilidad"
+
+    def test_inbox_vacancies_go_first_with_the_same_rules(self, bot, capsys):
+        # Las alertas por correo llenan la bandeja de la app (analizadas en el servidor); el bot las toma de ahí.
+        client, h, tmp_path = bot
+        self._config(tmp_path, 0)
+        text = "Auxiliar Administrativo\nLogística Andina\n\nBuscamos auxiliar administrativo. Excel avanzado. Facturación."
+        ok = client.post("/vacancies", json={"text": text, "url": "https://www.linkedin.com/jobs/view/4555555555"}, headers=h).json()
+        senior = client.post("/vacancies", json={"text": text, "url": "https://www.linkedin.com/jobs/view/4555555556"},
+                             headers=h).json()
+        client.patch(f"/applications/{senior['id']}", json={"role": "Analista Senior de Datos"}, headers=h)
+        assert cli.main(["buscar", "--portal", "linkedin"]) == 0
+        vistas = State(tmp_path / "estado.json").data["vistas"]
+        assert vistas["4555555555"]["estado"] == "preparada" and vistas["4555555555"]["app"] == ok["id"]
+        assert Path(vistas["4555555555"]["cv"]).is_file()
+        assert vistas["4555555556"]["estado"] == "excluida"
+        assert client.get(f"/applications/{senior['id']}", headers=h).json()["status"] == "descartada"
+        assert "(bandeja)" in capsys.readouterr().out
+        assert cli.main(["buscar", "--portal", "linkedin"]) == 0  # una segunda vuelta no la repite
+        assert State(tmp_path / "estado.json").today("preparadas") == 2  # la de la bandeja + la de la búsqueda
 
     def test_portal_flag_searches_only_that_portal(self, bot, monkeypatch):
         client, h, tmp_path = bot
