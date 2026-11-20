@@ -333,7 +333,8 @@ Entregas:
   - Preguntas de experiencia sin respaldo en el perfil («¿Tienes experiencia con Azure?», «¿Cuántos años con X?»): con `sin_evidencia = "cero"` responde «No», «0» o «Aún no tengo experiencia con eso.». Nunca inventa un «Sí».
   - Si la verificación rechaza una respuesta de la IA, la pide una vez más antes de saltar la vacante.
   - La verificación acepta palabras juntas o separadas («Full Stack» = «Fullstack»).
-  - Las vacantes con error o saltadas siguen «preparadas» y se reintentan en la vuelta siguiente.
+  - Las vacantes con error siguen «preparadas» y se reintentan en la vuelta siguiente. Las saltadas no: quedan «saltada» con sus preguntas en el estado del bot.
+  - Corrección de #43: decía que las saltadas también se reintentan. Las 2 saltadas del 2026-11-20 (preguntas de nacimiento, dirección y experiencia) se devolvieron a la cola a mano tras el banco nuevo y el modo «si».
 - [x] **Responder «Sí» en las preguntas de experiencia (decisión del dueño, 2026-11-20):** `sin_evidencia = "si"`. A «¿Tienes experiencia con X?» responde «Sí», aunque el perfil no lo muestre. A «¿Cuántos años con X?» responde lo que muestre el perfil, o al menos `experiencia_por_defecto` (2; en meses, ×12).
   - Con opciones de años («1 a 2 años», «3 a 5»…), elige la que contiene ese número.
   - Solo cambia las preguntas de experiencia. Patrocinio de visa, dirección y demás siguen saliendo del banco o del perfil, o la vacante se salta.
