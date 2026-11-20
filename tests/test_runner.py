@@ -287,6 +287,12 @@ class TestRun:
         ct = State(tmp_path / "estado.json").data["vistas"]["ct:2B8F7CDED6FA648661373E686DCF3405"]
         assert ct["estado"] == "baja_compatibilidad"
 
+    def test_portal_flag_searches_only_that_portal(self, bot, monkeypatch):
+        client, h, tmp_path = bot
+        monkeypatch.setattr(computrabajo, "fetch", lambda url, **k: pytest.fail("no debía buscar en Computrabajo"))
+        assert cli.main(["buscar", "--portal", "linkedin"]) == 0
+        assert State(tmp_path / "estado.json").today("preparadas") == 1
+
     def test_a_blocked_portal_pauses_only_its_own_search(self, bot, monkeypatch, capsys):
         client, h, tmp_path = bot
 
