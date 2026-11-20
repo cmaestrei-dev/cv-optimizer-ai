@@ -57,8 +57,35 @@ def _prepare_profile() -> None:
     os.chmod(PROFILE_DIR, 0o700)
 
 
+class NoDisplayError(RuntimeError):
+    """No hay sesión gráfica donde abrir la ventana del bot."""
+
+
+def ensure_display(wait_seconds: int = 600) -> None:
+    """Una vuelta programada puede arrancar al encender el computador, antes que la sesión gráfica: se espera a que
+    systemd del usuario conozca la pantalla y se toman de ahí DISPLAY, WAYLAND_DISPLAY y XAUTHORITY."""
+    deadline = time.monotonic() + wait_seconds
+    while not (os.environ.get("DISPLAY") or os.environ.get("WAYLAND_DISPLAY")):
+        try:
+            env = subprocess.run(["systemctl", "--user", "show-environment"], capture_output=True, text=True,
+                                 timeout=10, check=False).stdout
+        except (OSError, subprocess.SubprocessError):
+            env = ""
+        for line in env.splitlines():
+            key, _, value = line.partition("=")
+            if key in ("DISPLAY", "WAYLAND_DISPLAY", "XAUTHORITY") and value:
+                os.environ[key] = value
+        if os.environ.get("DISPLAY") or os.environ.get("WAYLAND_DISPLAY"):
+            return
+        if time.monotonic() > deadline:
+            raise NoDisplayError("No hay sesión gráfica para abrir el navegador del bot: la próxima vuelta lo intenta.")
+        time.sleep(15)
+
+
 def open_context(playwright, *, headless: bool = False):
     _prepare_profile()
+    if not headless:
+        ensure_display()
     return playwright.chromium.launch_persistent_context(
         str(PROFILE_DIR), channel="chrome", headless=headless, chromium_sandbox=True,
         ignore_default_args=["--password-store=basic"], viewport={"width": 1280, "height": 860}, locale="es-CO",

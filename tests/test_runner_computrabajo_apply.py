@@ -54,13 +54,18 @@ class FakeComputrabajo:
           </script></body></html>"""
 
     def _kq_page(self) -> str:
+        # Igual al real (2026-11-20): el texto de cada pregunta va en un campo oculto, no en una etiqueta asociada.
         return """<html><body><form action="https://www.google.com/search"><input name="q" aria-label="Cargo o categoría"></form>
-          <div id="MainContainer"><form form-apply-kq method="post" action="/candidate/apply-kq">
-            <label for="q1">¿Cuál es tu aspiración salarial?</label><input id="q1" name="q1">
-            <fieldset><legend>¿Puedes hacer práctica empresarial?</legend>
-              <input type="radio" name="q2" id="q2s" value="si"><label for="q2s">Sí</label>
-              <input type="radio" name="q2" id="q2n" value="no"><label for="q2n">No</label></fieldset>
-            <button type="submit">Enviar</button></form></div></body></html>"""
+          <div id="MainContainer"><form action="/candidate/kq" method="post">
+            <input type="hidden" name="KillerQuestions[0].Title" value="¿Cuál es tu aspiración salarial?">
+            <div class="field_textarea"><label class="fs16">¿Cuál es tu aspiración salarial?</label>
+              <textarea name="KillerQuestions[0].OpenQuestion" maxlength="500"></textarea></div>
+            <input type="hidden" name="KillerQuestions[1].Title" value="¿Puedes hacer práctica empresarial?">
+            <label class="radio"><input type="radio" name="KillerQuestions[1].ClosedQuestion" value="0">
+              <span class="input"></span><span class="label_box">SI</span></label>
+            <label class="radio"><input type="radio" name="KillerQuestions[1].ClosedQuestion" value="1">
+              <span class="input"></span><span class="label_box">NO</span></label>
+            <button type="submit">Enviar mi HdV</button></form></div></body></html>"""
 
     @staticmethod
     def _redirect(route, to: str):
@@ -92,11 +97,11 @@ class FakeComputrabajo:
             html = html or self._docs_page()
         elif url.path.startswith("/match/"):
             if self.questions and not self.answers:
-                return self._redirect(route, f"/candidate/apply-kq?oi={OI}")
+                return self._redirect(route, f"/candidate/kq?oi={OI}")
             self.applied = True
             self.attached = next((d["name"] for d in self.docs if d["id"] == self.default), None)
             html = "<html><body><h2>¡Te has postulado a la oferta!</h2></body></html>"
-        elif url.path.startswith("/candidate/apply-kq"):
+        elif url.path.startswith("/candidate/kq"):
             if request.method == "POST":
                 self.answers = parse_qs(request.post_data or "")
                 return self._redirect(route, f"/match/?oi={OI}")
@@ -184,7 +189,8 @@ def test_answers_the_filter_questions_with_the_bank(browser, pdfs):
     fake = FakeComputrabajo([general.name], questions=True)
     result = ct.apply(_page(browser, fake), OFFER, cv, answerer, submit=True, general=general, uploaded=[])
     assert result.status == "enviada", result
-    assert fake.answers["q1"] == ["3000000"] and fake.answers["q2"] == ["si"] and fake.attached == cv.name
+    assert fake.answers["KillerQuestions[0].OpenQuestion"] == ["3000000"]
+    assert fake.answers["KillerQuestions[1].ClosedQuestion"] == ["0"] and fake.attached == cv.name  # «SI»
     assert fake.outside == []  # ni el buscador del encabezado ni nada fuera del Computrabajo falso
 
 

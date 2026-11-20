@@ -353,7 +353,11 @@ def cmd_postular(args) -> int:
         todo.append((portal, pending))
     if todo:
         with sync_playwright() as p:
-            context = browser.open_context(p)
+            try:
+                context = browser.open_context(p)
+            except browser.NoDisplayError as e:
+                print(e)
+                return 0
             page = context.pages[0] if context.pages else context.new_page()
             page.set_default_timeout(90_000)
             page.set_default_navigation_timeout(120_000)

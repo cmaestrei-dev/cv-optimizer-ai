@@ -324,6 +324,10 @@ Entregas:
   - 7 pruebas contra un Computrabajo falso con Playwright. Las redirecciones van con JavaScript, porque las HTTP de una respuesta simulada no pasan por la intercepción y saldrían a la red.
 - [x] **(dueño)** Decidió: CV por vacante más uno general fijo; borrar sus 10 PDF viejos; el primer envío, mirándolo.
 - [x] Borrar los 10 PDF viejos, subir el CV general y dejarlo por defecto (con el bot, 2026-11-19). Corrección: el PDF por defecto anterior era «Tecnólogo en Sistemas», no «No adjuntar» (se leyó mal el HTML).
+- [x] **Primera vuelta automática (2026-11-20): 9 enviadas** (una ya «HdV Vista» a los 44 minutos). Dos fallas, corregidas:
+  - 13 ofertas tenían preguntas de selección en `/candidate/kq`, no en `apply-kq` como decía la analítica del sitio. El texto de cada pregunta va en un campo oculto `KillerQuestions[i].Title`. Ahora el bot las lee y responde (banco y perfil verificado), o salta la vacante si una queda sin respuesta.
+  - La vuelta al encender el computador arrancó antes que la sesión gráfica (`Missing X server`): ahora espera hasta 10 min a que systemd conozca la pantalla.
+  - El banco ya no responde «Inmediata» a «¿disponibilidad para trabajar presencial…?»: «disponibilidad» sola era demasiado amplia.
 - [x] **Primer envío real (2026-11-19):** Soporte Tester QA, ikatech Solutions. En la app quedó «postulada» en Computrabajo; allá aparece «Postulado» y el CV general volvió por defecto. El primer intento falló sin enviar: elegir el PDF por defecto recarga la página y `check()` de Playwright esperaba en vano. Corregido en #38.
 - [x] Hoja de vida en línea igual a LinkedIn (regla del dueño: «solo lo que está en LinkedIn tal cual»):
   - titular, resumen, áreas, departamentos y situación «buscando activamente»;

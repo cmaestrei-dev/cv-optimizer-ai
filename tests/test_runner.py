@@ -3,6 +3,7 @@
 import json
 from datetime import date
 from pathlib import Path
+from types import SimpleNamespace
 
 import pytest
 
@@ -403,3 +404,26 @@ def test_login_refuses_while_the_bot_browser_is_open(tmp_path, monkeypatch, caps
     (tmp_path / "SingletonLock").symlink_to("otro-equipo-12345")
     assert browser.login("computrabajo") == 1
     assert "ya está abierto" in capsys.readouterr().out
+
+
+def test_waits_for_the_graphical_session_from_systemd(monkeypatch):
+    # Una vuelta al encender el computador puede empezar antes que la sesión gráfica (pasó el 2026-11-20).
+    from runner import browser
+
+    monkeypatch.delenv("DISPLAY", raising=False)
+    monkeypatch.delenv("WAYLAND_DISPLAY", raising=False)
+    calls = []
+
+    def run(cmd, **kwargs):
+        calls.append(cmd)
+        out = "HOME=/home/x\n" if len(calls) == 1 else "DISPLAY=:0\nXAUTHORITY=/run/user/1000/gdm/Xauthority\n"
+        return SimpleNamespace(stdout=out)
+
+    monkeypatch.setattr(browser.subprocess, "run", run)
+    monkeypatch.setattr(browser.time, "sleep", lambda s: None)
+    browser.ensure_display()
+    assert browser.os.environ["DISPLAY"] == ":0" and len(calls) == 2
+    monkeypatch.setattr(browser.subprocess, "run", lambda cmd, **k: SimpleNamespace(stdout=""))
+    monkeypatch.delenv("DISPLAY")
+    with pytest.raises(browser.NoDisplayError):
+        browser.ensure_display(wait_seconds=0)
