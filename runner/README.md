@@ -87,8 +87,16 @@ python -m runner entrar computrabajo   # entra con tu correo y contraseña; cier
 2. Lo obligatorio que falte se busca primero en tu banco `[respuestas]` de la configuración (salario,
    disponibilidad, inglés…): la clave son partes de la pregunta separadas por `|`, sin tildes.
 3. Lo demás lo responde la app con tu perfil, verificado contra él. «¿Cuántos años con X?» usa las fechas de tus
-   empleos y se redondea hacia abajo; si tu perfil no muestra X, `sin_evidencia` decide: `"saltar"` la vacante o
-   responder `"cero"`.
+   empleos y se redondea hacia abajo. Si tu perfil no muestra X, en las preguntas de experiencia decide
+   `sin_evidencia`:
+   - `"saltar"`: salta la vacante;
+   - `"cero"`: «No», «0» o «Aún no tengo experiencia con eso»;
+   - `"si"`: «Sí» y, en años, lo que muestre tu perfil o al menos `experiencia_por_defecto` (2 por defecto; en
+     meses, ×12). Con opciones («1 a 2 años», «3 a 5 años»…) elige la que contiene ese número. Lo afirmas tú: úsalo
+     solo si de verdad puedes responder por eso en una entrevista.
+
+   Las demás preguntas (patrocinio de visa, dirección…) no cambian con esto: o las responde tu banco o tu perfil, o
+   se salta la vacante.
 4. Si una pregunta obligatoria queda sin respuesta, la vacante se salta y el bot te dice cuál era. Nunca responde al azar.
 
 El CV: LinkedIn deja elegido el último que subiste. El bot sube el de la vacante, lo elige y, antes de enviar,

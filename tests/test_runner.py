@@ -163,7 +163,7 @@ class TestConfig:
         conf = cfg.load(self._write(tmp_path, cfg.TEMPLATE.replace("https://TU-SERVICIO.run.app/api", "https://app.example.com/api/")))
         assert conf.api == "https://app.example.com/api" and conf.mode == "prueba" and conf.daily_cap == 20
         assert conf.searches[0].geo_id == "100876405" and conf.exclude_words == ["senior", "lead"]
-        assert conf.no_evidence == "saltar" and conf.pause_seconds == (120, 240)
+        assert conf.no_evidence == "saltar" and conf.default_years == 2 and conf.pause_seconds == (120, 240)
         assert conf.answers["aspiracion salarial|salario|expectativa salarial|salary"] == "3000000"
 
     def test_general_options_written_under_a_table_still_apply(self, tmp_path, monkeypatch):
@@ -178,6 +178,8 @@ class TestConfig:
         (('lugar = "Colombia"', 'lugar = ""'), "lugar"),
         (("tope_diario = 20", "tope_diario = 500"), "tope_diario"),
         (('api = "https://app.example.com/api"', 'api = "ftp://x"'), "https"),
+        (('sin_evidencia = "saltar"', 'sin_evidencia = "inventar"'), "sin_evidencia"),
+        (("experiencia_por_defecto = 2", "experiencia_por_defecto = 40"), "experiencia_por_defecto"),
     ])
     def test_invalid_values(self, tmp_path, monkeypatch, change, message):
         monkeypatch.setenv("CVO_BOT_TOKEN", "cvb_x")
@@ -427,3 +429,52 @@ def test_waits_for_the_graphical_session_from_systemd(monkeypatch):
     monkeypatch.delenv("DISPLAY")
     with pytest.raises(browser.NoDisplayError):
         browser.ensure_display(wait_seconds=0)
+
+
+class TestAnswerer:
+    """Las preguntas de experiencia sin respaldo en el perfil, según `sin_evidencia` (el resto no cambia)."""
+
+    QUESTIONS = [
+        ("radio", "¿Tienes experiencia con Microsoft Azure?", ["SI", "NO"], False),
+        ("text", "¿Cuántos años de experiencia tienes con Kubernetes?", [], True),
+        ("select", "¿Cuántos años de experiencia tienes con Python?", ["Menos de 1 año", "1 a 2 años", "3 a 5 años"], False),
+        ("textarea", "¿Qué experiencia tienes con Terraform?", [], False),
+        ("text", "¿Cuántos meses de experiencia tienes en soporte?", [], True),
+        ("radio", "¿Requieres patrocinio de visa?", ["Sí", "No"], False),
+        ("text", "¿Cuál es tu aspiración salarial?", [], True),
+    ]
+
+    def _answer(self, mode: str, replies: dict[str, str], *, units: bool = False):
+        from runner.linkedin import Question
+
+        api = SimpleNamespace(post=lambda path, body: [
+            {"question": q, "answer": replies.get(q, ""), "needs_you": q not in replies} for q in body["questions"]])
+        conf = cfg.Config(api="https://x", token="t", no_evidence=mode, default_years=2,
+                          answers={"aspiracion salarial": "3000000"})
+        questions = [Question(kind, label, True, "", options, [], numeric) for kind, label, options, numeric in self.QUESTIONS]
+        return cli._answerer(api, conf, 1, units=units)(questions)
+
+    def test_si_says_yes_and_a_junior_number_of_years(self):
+        out = self._answer("si", {"¿Cuántos años de experiencia tienes con Python?": "3 años",
+                                  "¿Tienes experiencia con Microsoft Azure?": "No"})
+        assert out["¿Tienes experiencia con Microsoft Azure?"] == "Sí"  # aunque el perfil no lo muestre
+        assert out["¿Cuántos años de experiencia tienes con Kubernetes?"] == "2"
+        assert out["¿Cuántos años de experiencia tienes con Python?"] == "3"  # el perfil muestra más: se usa eso
+        assert out["¿Qué experiencia tienes con Terraform?"].startswith("Sí, tengo experiencia")
+        assert out["¿Cuántos meses de experiencia tienes en soporte?"] == "24"
+        assert "¿Requieres patrocinio de visa?" not in out  # no es de experiencia: sin respuesta, se salta
+        assert out["¿Cuál es tu aspiración salarial?"] == "3000000"
+
+    def test_open_years_questions_carry_the_unit_on_computrabajo(self):
+        out = self._answer("si", {}, units=True)
+        assert out["¿Cuántos meses de experiencia tienes en soporte?"] == "24"  # campo numérico: solo el número
+        self.QUESTIONS = [("text", "¿Cuánto tiempo de experiencia tienes en desarrollo Backend?", [], False)]
+        assert self._answer("si", {}, units=True) == {"¿Cuánto tiempo de experiencia tienes en desarrollo Backend?": "2 años"}
+
+    def test_cero_and_saltar(self):
+        out = self._answer("cero", {})
+        assert out["¿Tienes experiencia con Microsoft Azure?"] == "No"
+        assert out["¿Cuántos años de experiencia tienes con Kubernetes?"] == "0"
+        assert out["¿Qué experiencia tienes con Terraform?"] == "Aún no tengo experiencia con eso."
+        out = self._answer("saltar", {})
+        assert set(out) == {"¿Cuál es tu aspiración salarial?"}

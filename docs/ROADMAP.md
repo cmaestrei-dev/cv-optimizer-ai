@@ -334,6 +334,10 @@ Entregas:
   - Si la verificación rechaza una respuesta de la IA, la pide una vez más antes de saltar la vacante.
   - La verificación acepta palabras juntas o separadas («Full Stack» = «Fullstack»).
   - Las vacantes con error o saltadas siguen «preparadas» y se reintentan en la vuelta siguiente.
+- [x] **Responder «Sí» en las preguntas de experiencia (decisión del dueño, 2026-11-20):** `sin_evidencia = "si"`. A «¿Tienes experiencia con X?» responde «Sí», aunque el perfil no lo muestre. A «¿Cuántos años con X?» responde lo que muestre el perfil, o al menos `experiencia_por_defecto` (2; en meses, ×12).
+  - Con opciones de años («1 a 2 años», «3 a 5»…), elige la que contiene ese número.
+  - Solo cambia las preguntas de experiencia. Patrocinio de visa, dirección y demás siguen saliendo del banco o del perfil, o la vacante se salta.
+  - El CV no cambia: todo lo que escribe la IA sigue pasando por la verificación anti-invención.
 - [x] **Primer envío real (2026-11-19):** Soporte Tester QA, ikatech Solutions. En la app quedó «postulada» en Computrabajo; allá aparece «Postulado» y el CV general volvió por defecto. El primer intento falló sin enviar: elegir el PDF por defecto recarga la página y `check()` de Playwright esperaba en vano. Corregido en #38.
 - [x] Hoja de vida en línea igual a LinkedIn (regla del dueño: «solo lo que está en LinkedIn tal cual»):
   - titular, resumen, áreas, departamentos y situación «buscando activamente»;
@@ -374,6 +378,7 @@ Cambios:
 | Fecha | Decisión | Por qué |
 |---|---|---|
 | 2026-11-18 | En Computrabajo, CV por vacante marcado «por defecto» al postular, más un CV general fijo | La empresa recibe el PDF por defecto; un CV general en uno de los 10 espacios garantiza que nunca quede sin PDF si Computrabajo solo guardara una referencia y el bot rotara el de la vacante (decisión del dueño) |
+| 2026-11-20 | Preguntas de experiencia del bot: «Sí» y años de junior (2), aunque el perfil no lo muestre; reemplaza al «No» de la fila siguiente | Decisión del dueño: son preguntas de filtro, dice que ya ha hecho lo que preguntan y que en la entrevista responde por ello. Un «No» lo descarta antes de que una persona lea el CV. Se limita a las preguntas de experiencia (un «Sí» a «¿requieres patrocinio?» lo perjudicaría) y no toca el CV, que sigue verificado |
 | 2026-11-20 | Ante una pregunta de experiencia sin respaldo, el bot responde que no la tiene en vez de saltar la vacante | Saltarla perdía vacantes buenas por una sola herramienta; decir «No» o «0» es verdad y deja que la empresa decida. La regla de no inventar sigue: un «Sí» siempre necesita evidencia del perfil |
 | 2026-11-20 | Gmail reenvía a la app solo las alertas de LinkedIn, con un filtro | El reenvío de todo el correo mandaría a la app correos personales; el servidor igual los rechazaría, pero no deben salir del buzón |
 | 2026-11-20 | Las vacantes de LinkedIn llegan por sus alertas por correo a la bandeja, no por su búsqueda pública | La búsqueda pública devolvió 429 a la primera petición tres días seguidos desde la IP de casa. Buscar con la sesión es lo que LinkedIn vigila en las cuentas, y una restricción tumbaría también la «Solicitud sencilla». Las alertas son un uso normal y ya se analizan en el servidor |

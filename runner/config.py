@@ -23,7 +23,8 @@ api = "https://TU-SERVICIO.run.app/api"   # la dirección de tu app, terminada e
 modo = "prueba"        # prueba: llega a la revisión y descarta, NO envía. auto: postula y lo registra
 tope_diario = 20       # vacantes por día como máximo
 generar_cv = true      # hacer el CV a la medida de cada vacante (usa cupo de IA)
-sin_evidencia = "saltar"   # «¿cuántos años con X?» si tu perfil no muestra X: "saltar" la vacante o responder "cero"
+sin_evidencia = "saltar"   # «¿tienes experiencia con X?» si tu perfil no muestra X: "saltar" la vacante, "cero" (No / 0) o "si"
+experiencia_por_defecto = 2   # con sin_evidencia = "si": años que se responden si tu perfil no muestra más
 pausa_entre_envios_seg = [120, 240]   # espera al azar entre dos envíos
 
 [[busqueda]]
@@ -57,8 +58,8 @@ empresas = []
 """
 
 
-GENERAL_KEYS = {"api", "modo", "tope_diario", "generar_cv", "sin_evidencia", "pausa_entre_envios_seg",
-                "compatibilidad_minima"}
+GENERAL_KEYS = {"api", "modo", "tope_diario", "generar_cv", "sin_evidencia", "experiencia_por_defecto",
+                "pausa_entre_envios_seg", "compatibilidad_minima"}
 
 
 class ConfigError(ValueError):
@@ -90,7 +91,8 @@ class Config:
     exclude_words: list[str] = field(default_factory=list)
     exclude_companies: list[str] = field(default_factory=list)
     answers: dict[str, str] = field(default_factory=dict)  # banco: «patrón|patrón» → respuesta
-    no_evidence: str = "saltar"  # años con una tecnología que el perfil no muestra: "saltar" la vacante o "cero"
+    no_evidence: str = "saltar"  # experiencia que el perfil no muestra: "saltar" la vacante, "cero" o "si"
+    default_years: int = 2  # con "si": años que se responden si el perfil no muestra más
     pause_seconds: tuple[int, int] = (120, 240)  # entre envíos
     portal_caps: dict[str, int] = field(default_factory=dict)  # tope diario de cada portal (LinkedIn: daily_cap)
     min_scores: dict[str, int] = field(default_factory=dict)  # compatibilidad mínima de cada portal (0 = sin mínimo)
@@ -184,8 +186,11 @@ def load(path: Path = CONFIG_FILE) -> Config:
         raise ConfigError("«compatibilidad_minima» debe estar entre 0 y 100.")
     exclude = raw.get("excluir", {})
     no_evidence = str(raw.get("sin_evidencia", "saltar")).strip().lower()
-    if no_evidence not in ("saltar", "cero"):
-        raise ConfigError("«sin_evidencia» debe ser \"saltar\" o \"cero\".")
+    if no_evidence not in ("saltar", "cero", "si", "sí"):
+        raise ConfigError("«sin_evidencia» debe ser \"saltar\", \"cero\" o \"si\".")
+    default_years = int(raw.get("experiencia_por_defecto", 2))
+    if not 0 <= default_years <= 10:
+        raise ConfigError("«experiencia_por_defecto» debe estar entre 0 y 10 años.")
     pause = raw.get("pausa_entre_envios_seg", [120, 240])
     if not (isinstance(pause, list) and len(pause) == 2 and 30 <= int(pause[0]) <= int(pause[1])):
         raise ConfigError("«pausa_entre_envios_seg» debe ser [mínimo, máximo] en segundos, desde 30.")
@@ -194,6 +199,6 @@ def load(path: Path = CONFIG_FILE) -> Config:
         exclude_words=[str(w).lower() for w in exclude.get("palabras", [])],
         exclude_companies=[str(c).lower() for c in exclude.get("empresas", [])],
         answers={str(k): str(v) for k, v in raw.get("respuestas", {}).items()},
-        no_evidence=no_evidence, pause_seconds=(int(pause[0]), int(pause[1])),
+        no_evidence=no_evidence.replace("sí", "si"), default_years=default_years, pause_seconds=(int(pause[0]), int(pause[1])),
         portal_caps=portal_caps, min_scores=min_scores, general_cvs=general_cvs,
     )
