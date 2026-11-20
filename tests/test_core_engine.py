@@ -179,6 +179,19 @@ class TestVerification:
         assert unsupported(text, self.SRC) == []
 
     @pytest.mark.parametrize(("text", "problem"), [
+        # Caso real: «metodologías agile» venía de la vacante, no del perfil, y en minúscula pasaba.
+        ("Ejecuté pruebas automatizadas bajo metodologías agile", "agile"),
+        ("Coordiné la facturación con scrum y kanban", "scrum"),
+        ("Automaticé la facturación en docker", "docker"),
+    ])
+    def test_known_tools_and_practices_count_even_in_lowercase(self, text, problem):
+        assert any(problem in p for p in unsupported(text, self.SRC))
+
+    def test_lowercase_tools_in_the_source_are_fine(self):
+        source = "Desplegué la API en Docker con integración continua y trabajo ágil en Scrum."
+        assert unsupported("Desplegué la API en docker y trabajé con scrum", source) == []
+
+    @pytest.mark.parametrize(("text", "problem"), [
         ("Gestioné la facturación de 120 clientes en SAP", "SAP"),
         ("Gestioné la facturación de 150 clientes", "150"),
         ("Reduje errores de facturación un 30%", "30"),

@@ -33,6 +33,11 @@ _TECH: dict[str, set[str]] = {
            "excel avanzado", "web scraping", "analisis exploratorio de datos (eda)", "etl"},
 }
 _LOOKUP = {skill_key(name): group for group, names in _TECH.items() for name in names}
+
+
+def vocabulary() -> set[str]:
+    """Todos los nombres técnicos conocidos (para verificar que el CV no afirme uno que la persona no tiene)."""
+    return {name for names in _TECH.values() for name in names}
 ORDER = [LANGUAGES, FRAMEWORKS, DATABASES, DEVOPS, SECURITY, DATA]
 LABELS_EN = {LANGUAGES: "Programming languages", FRAMEWORKS: "Frameworks & libraries", DATABASES: "Databases",
              DEVOPS: "Cloud & DevOps", SECURITY: "Cybersecurity", DATA: "Data & analytics"}
