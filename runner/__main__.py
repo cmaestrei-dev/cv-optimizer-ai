@@ -235,8 +235,9 @@ def _answerer(api: Api, conf: cfg.Config, application_id: int):
     """Respuestas: primero el banco de la persona; lo demás, el motor de la app con su perfil (verificado).
 
     - Si la verificación marca una respuesta (p. ej. una sigla que el perfil no usa), se pide una vez más.
-    - Con `sin_evidencia = "cero"`, a «¿qué experiencia tienes con X?» sin respaldo en el perfil se responde con la
-      verdad («No» / «Aún no tengo experiencia con eso») en vez de saltar la vacante. Nunca se afirma lo que no hay.
+    - Preguntas de experiencia que el perfil no respalda, según `sin_evidencia`: "saltar" la vacante; "cero"
+      («No», «0», «Aún no tengo experiencia con eso»); o "si" (decisión del dueño: «Sí» y, en años, lo que muestre
+      el perfil o al menos `experiencia_por_defecto`). Solo las de experiencia: el resto sigue igual.
     """
     from runner import answers
 
@@ -268,10 +269,21 @@ def _answerer(api: Api, conf: cfg.Config, application_id: int):
         for q in ask:
             reply = by_question.get(q.label, {})
             text = "" if reply.get("needs_you") else (reply.get("answer") or "")
-            if q.numeric or answers.is_years(q.label):
-                text = answers.to_integer(text) or ("0" if answers.is_years(q.label) and conf.no_evidence == "cero" else "")
+            choice = q.kind in ("radio", "select")
+            if answers.is_years(q.label):
+                text = answers.to_integer(text) or ""
+                if conf.no_evidence == "si":
+                    least = conf.default_years * (12 if answers.asks_months(q.label) else 1)
+                    text = str(max(int(text or 0), least))
+                elif not text and conf.no_evidence == "cero":
+                    text = "0"
+            elif q.numeric:
+                text = answers.to_integer(text) or ""
+            elif conf.no_evidence == "si" and answers.asks_experience(q.label):
+                if choice or not text or answers.normalize(text).startswith(("no ", "aun no", "todavia no")):
+                    text = "Sí" if choice else "Sí, tengo experiencia con eso. Con gusto amplío los detalles en una entrevista."
             elif not text and not flagged(reply) and conf.no_evidence == "cero" and answers.asks_experience(q.label):
-                text = "No" if q.kind in ("radio", "select") else "Aún no tengo experiencia con eso."
+                text = "No" if choice else "Aún no tengo experiencia con eso."
             if text:
                 out[q.label] = text
         return out

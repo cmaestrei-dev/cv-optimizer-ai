@@ -37,3 +37,18 @@ def test_asks_experience():
     assert answers.asks_experience("¿Tiene algún conocimiento en contenedores Docker?")
     assert not answers.asks_experience("¿Cuál es tu nivel de formación académica?")
     assert not answers.asks_experience("¿Cuál es tu dirección y localidad?")
+
+
+def test_years_options_pick_the_range_that_contains_them():
+    options = ["Selecciona una opción", "Menos de 1 año", "1 a 2 años", "3 a 5 años", "Más de 5 años"]
+    assert answers.pick_option("2", options) == "1 a 2 años"
+    assert answers.pick_option("0", options) == "Menos de 1 año"
+    assert answers.pick_option("7", options) == "Más de 5 años"
+    assert answers.pick_years(2, ["0-1", "1-3", "3-5", "5+"]) == "1-3"
+    assert answers.pick_years(2, ["Ninguna", "6 meses", "1 año", "3 años"]) == "1 año"  # ninguna la contiene: la más cercana (empate: la menor)
+    assert answers.pick_option("1", ["Sí", "No"]) == "Sí"  # sin números en las opciones, sigue siendo sí/no
+
+
+def test_months_questions():
+    assert answers.asks_months("¿Cuántos meses de experiencia tienes en ventas?")
+    assert not answers.asks_months("¿Cuántos años de experiencia tienes con Python?")
