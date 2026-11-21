@@ -114,3 +114,15 @@ def test_listener_unit_runs_from_a_stable_copy(tmp_path):
     assert "ExecStart=/usr/bin/python3 -m runner telegram escuchar" in unit and "Restart=always" in unit
     with pytest.raises(schedule.ScheduleError):
         schedule.listener_unit("/usr/bin/python3", tmp_path / ".claude/worktrees/x", tmp_path / "t.log")
+
+
+def test_experience_questions_count_as_answered_in_si_mode(files, tmp_path):
+    state = State(tmp_path / "estado.json")
+    state.mark("mg:1", "saltada", portal="magneto", app=1, url="u", cv="/x.pdf", cv_id=3,
+               preguntas=["¿Tiene experiencia en administración de servicios web?", "Vive en Bogotá"])
+    conf = cfg.Config(api="https://x", token="t", no_evidence="si", answers={"vive en": "No, vivo en Cartagena."})
+    assert cli._retry_answered(state, conf) == 1
+    conf.no_evidence = "saltar"
+    state.mark("mg:1", "saltada", portal="magneto", app=1, url="u", cv="/x.pdf", cv_id=3,
+               preguntas=["¿Tiene experiencia en administración de servicios web?"])
+    assert cli._retry_answered(state, conf) == 0

@@ -63,12 +63,14 @@ class FakeSession:
         self.job = {"id": 1143279, "isApplied": False, "canApply": True, "status": "published",
                     "hasPrefilterQuestionnaire": questionnaire is not None, **(job or {})}
         self.previous, self.answered, self.questionnaire = list(previous), answered, questionnaire
-        self.logged, self.accept, self.posts = logged, accept, []
+        self.logged, self.accept, self.posts, self.processes = logged, accept, [], []
 
     def renew(self):
         return self.logged
 
     def get(self, path):
+        if path == magneto_apply.PROCESSES:
+            return 200, {"rows": [{"id": i} for i in self.processes]}
         if path.startswith("/jobs/slug/"):
             return 200, self.job
         if path.startswith("/jobs/verify-applications-by-dni/"):
@@ -83,7 +85,7 @@ class FakeSession:
         self.posts.append((path, body))
         if not self.accept:
             return 400, {"message": "Invalid body"}
-        self.job["isApplied"] = True
+        self.processes.append(self.job["id"])  # como Magneto: la oferta no pasa a isApplied, pero sí a «Mis procesos»
         return 201, {"applicationId": 99}
 
 
@@ -133,6 +135,10 @@ def test_stops_where_the_page_would_ask_the_person():
     assert by_id.posts == []  # nunca se cambia de cuenta ni se postula por encima
     assert magneto_apply.apply(None, URL, None, answerer, submit=True,
                                session=FakeSession(questionnaire=QUESTIONNAIRE, answered=True)).status == "ya_postulada"
+    mine = FakeSession()
+    mine.processes = [1143279]
+    assert magneto_apply.apply(None, URL, None, answerer, submit=True, session=mine).status == "ya_postulada"
+    assert mine.posts == []  # nunca dos veces
     rejected = magneto_apply.apply(None, URL, None, answerer, submit=True, session=FakeSession(accept=False))
     assert rejected.status == "error" and "Invalid body" in rejected.detail
 

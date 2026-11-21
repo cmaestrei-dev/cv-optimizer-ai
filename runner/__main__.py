@@ -331,11 +331,16 @@ def _retry_answered(state: State, conf: cfg.Config) -> int:
     """Las vacantes saltadas por preguntas que ahora sí tienen respuesta en el banco vuelven a «preparada»."""
     from runner import answers
 
+    def answerable(q: str) -> bool:
+        if answers.bank_answer(q, conf.answers) is not None:
+            return True
+        return conf.no_evidence == "si" and (answers.asks_experience(q) or answers.is_years(q))
+
     retried = 0
     for job_id, v in list(state.data["vistas"].items()):
         questions = v.get("preguntas") or []
         if v.get("estado") == "saltada" and questions and v.get("cv") and v.get("cv_id") \
-                and all(answers.bank_answer(q, conf.answers) is not None for q in questions):
+                and all(answerable(q) for q in questions):
             state.mark(job_id, "preparada", **{k: v[k] for k in ("portal", "app", "cv", "cv_id", "url", "puntaje") if k in v})
             retried += 1
     return retried
