@@ -382,6 +382,11 @@ Entregas:
 - Ecopetrol: 0 prácticas publicadas.
 - Pragma (práctica 2027-1) y Bold (IT Support, Frontend): sus formularios tienen captcha o piden la cédula, así que postula el dueño; la app le preparó el CV de cada una.
 - [x] `runner/watch.py` y `[[vigilar]]`: en cada vuelta el bot revisa la búsqueda pública de portales SuccessFactors y avisa de las ofertas nuevas cuyo cargo encaja (registro y Telegram). No postula: piden una cuenta por empresa.
+- [x] Bancolombia, como los demás portales (pedido del dueño, 2026-11-21):
+  - Cada oferta vigilada que encaja pasa por la app: análisis, compatibilidad y, si llega a 60, su CV.
+  - Le llega al dueño por Telegram con el PDF, lista para postular (máximo 5 por vuelta).
+  - Postular solo no es posible: el inicio de sesión de Bancolombia pide correo, contraseña y captcha, y el portal muestra un aviso de mantenimiento («Por el momento no podrás adjuntar tu hoja de vida»).
+  - `python -m runner entrar bancolombia` deja la cuenta en el navegador del bot. Si la sesión resulta durar días, se puede postular solo; eso se mide después de que el dueño entre.
 
 **elempleo (Fase 8, 2026-11-21).** Pedido del dueño («ya entré a elempleo, continúa y probablemente también debas modificar el perfil»).
 - [x] Hoja de vida del dueño igual a LinkedIn: descripción, experiencias (El Arte de Nicolás, Equimat, Karta; se quitó una freelance que no estaba), estudios formales (UdeC y UNAB), 12 cursos complementarios, 18 habilidades técnicas, el CV general como adjunto (en lugar de uno viejo de «Auxiliar de recursos educativos») y GitHub.

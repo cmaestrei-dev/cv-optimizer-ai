@@ -30,8 +30,11 @@ LOGINS = {
     "computrabajo": ("computrabajo.com", None, "https://candidato.co.computrabajo.com/acceso/"),
     "magneto": ("magneto365.com", None, "https://web.magneto365.com/sign-in"),
     "elempleo": ("elempleo.com", None, "https://www.elempleo.com/co/iniciar-sesion"),
+    # SuccessFactors: «Iniciar sesión | Ir a mi perfil» arriba a la derecha (o «Únete a la comunidad de talentos»)
+    "bancolombia": ("grupobancolombia.com", None, "https://empleo.grupobancolombia.com/bancolombia/"),
 }
-NAMES = {"linkedin": "LinkedIn", "computrabajo": "Computrabajo", "magneto": "Magneto", "elempleo": "elempleo"}
+NAMES = {"linkedin": "LinkedIn", "computrabajo": "Computrabajo", "magneto": "Magneto", "elempleo": "elempleo",
+         "bancolombia": "Bancolombia"}
 
 
 def _cookie_names(domain: str, profile: Path = PROFILE_DIR) -> set[str]:
