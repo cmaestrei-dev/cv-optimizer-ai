@@ -131,8 +131,11 @@ Si al empezar una vuelta el navegador del bot está abierto (otra vuelta, o una 
 ## Vigilar portales de empresas
 
 Algunas empresas publican solo en su propio portal: Bancolombia y Ecopetrol usan SAP SuccessFactors, que pide
-una cuenta por empresa. El bot no postula ahí, pero vigila su búsqueda pública en cada vuelta y te avisa
-(registro y Telegram) de las vacantes nuevas cuyo cargo encaja. Por defecto encajan los cargos con una palabra de
+una cuenta por empresa, y el inicio de sesión de Bancolombia tiene captcha. Por eso el bot no postula ahí, pero
+vigila su búsqueda pública en cada vuelta y te avisa (registro y Telegram) de las vacantes nuevas cuyo cargo
+encaja. Además, la app analiza cada una (hasta 5 por vuelta): si llega a la compatibilidad mínima (60 por
+defecto, `compatibilidad_minima` en cada `[[vigilar]]`), le hace el CV y te la manda por Telegram con el PDF, lista
+para postular (`/manuales`). Si no llega, queda descartada en la app con el motivo. Por defecto encajan los cargos con una palabra de
 tecnología (software, sistemas, tecnología, desarrollo, ciberseguridad, soporte, QA, datos…), así que «Practicante
 en Tecnología» sí y «Practicante de Ciencias Económicas» no. Se descartan senior, líder, arquitecto, gerente y
 niveles III o IV.
@@ -146,7 +149,8 @@ buscar = ["practicante", "software", "junior", "tecnología"]
 # excluir = [...]   # palabras del cargo que no (opcional)
 ```
 
-`python -m runner vigilar` lo revisa ya.
+`python -m runner vigilar` lo revisa ya. Para tener la cuenta de Bancolombia en el navegador del bot:
+`python -m runner entrar bancolombia`.
 
 ## Telegram (avisos y control desde el celular)
 

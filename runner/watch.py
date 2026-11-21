@@ -1,7 +1,9 @@
 """Vigilar los portales de empleo propios de algunas empresas y avisar de las vacantes nuevas que encajen.
 
-No postula: esos portales (SAP SuccessFactors, como Bancolombia o Ecopetrol) piden una cuenta por empresa, y la
-crea la persona. El bot solo mira la búsqueda pública y avisa (en el registro y por Telegram).
+No postula: esos portales (SAP SuccessFactors, como Bancolombia o Ecopetrol) piden una cuenta por empresa, que crea
+la persona, y su inicio de sesión tiene captcha (Bancolombia, verificado el 2026-11-21). El bot mira la búsqueda
+pública, y a las ofertas que encajan la app las analiza y les hace el CV: le llegan a la persona por Telegram,
+listas para postular (`posting` lee la oferta pública).
 
 Verificado (2026-11-21): `<sitio>/search/?q=<texto>&locale=es_ES` devuelve hasta 25 ofertas en HTML, cada una como
 `<a class="jobTitle-link" href="/<marca>/job/<slug>/<id>/">Cargo</a>`.
@@ -16,7 +18,7 @@ import urllib.parse
 import urllib.request
 from collections.abc import Callable
 from dataclasses import dataclass, field
-from datetime import UTC, datetime
+from datetime import UTC, date, datetime
 from pathlib import Path
 
 from runner import config as cfg
@@ -36,6 +38,7 @@ class Site:
     terms: list[str]
     include: list[str] = field(default_factory=lambda: list(DEFAULT_INCLUDE))
     exclude: list[str] = field(default_factory=lambda: list(DEFAULT_EXCLUDE))
+    min_score: int = 60  # compatibilidad mínima para hacerle el CV y mandarla a la persona
 
 
 def _norm(text: str) -> str:
@@ -58,7 +61,8 @@ def load_sites(path: Path | None = None) -> list[Site]:
             raise cfg.ConfigError("Cada [[vigilar]] necesita «sitio» (https://…) y al menos una palabra en «buscar».")
         sites.append(Site(name=str(item.get("nombre") or base), base=base, terms=terms,
                           include=[str(w).lower() for w in item.get("incluir", DEFAULT_INCLUDE)],
-                          exclude=[str(w).lower() for w in item.get("excluir", DEFAULT_EXCLUDE)]))
+                          exclude=[str(w).lower() for w in item.get("excluir", DEFAULT_EXCLUDE)],
+                          min_score=int(item.get("compatibilidad_minima", 60))))
     return sites
 
 
@@ -88,6 +92,43 @@ def _has(word: str, text: str) -> bool:
 def matches(site: Site, title: str) -> bool:
     t = _norm(title)
     return any(_has(w, t) for w in site.include) and not any(_has(w, t) for w in site.exclude)
+
+
+def _meta(page: str, prop: str) -> str:
+    match = re.search(r'<meta itemprop="' + prop + r'" content="([^"]*)"', page)
+    return html.unescape(match.group(1)).strip() if match else ""
+
+
+def _day(value: str) -> date | None:
+    try:  # «Wed Nov 18 00:00:00 UTC 2026»
+        return datetime.strptime(value, "%a %b %d %H:%M:%S %Z %Y").date()
+    except ValueError:
+        return None
+
+
+def _element(page: str, start: int, tag: str = "span") -> str:
+    """El contenido del elemento que abre en `start`, contando las etiquetas anidadas del mismo tipo."""
+    depth, i = 0, start
+    for match in re.finditer(rf"<(/?){tag}\b[^>]*>", page[start:]):
+        depth += -1 if match.group(1) else 1
+        if depth == 0:
+            i = start + match.end()
+            break
+    return page[start:i]
+
+
+def posting(page: str) -> dict:
+    """Cargo, lugar, texto, fecha de publicación y de cierre de una oferta pública de SuccessFactors."""
+    title = re.search(r'itemprop="title"[^>]*>([^<]+)<', page)
+    start = page.find('<span itemprop="description"')
+    body = _element(page, start) if start >= 0 else ""
+    body = re.sub(r"<\s*(br|/p|/li|/h\d|/div)\s*/?>", "\n", body, flags=re.I)
+    body = re.sub(r"<\s*li[^>]*>", "- ", body, flags=re.I)
+    lines = [re.sub(r"[ \t\xa0]+", " ", line).strip() for line in html.unescape(re.sub(r"<[^>]+>", " ", body)).split("\n")]
+    return {"title": html.unescape(title.group(1)).strip() if title else "",
+            "place": ", ".join(p for p in (_meta(page, "addressLocality"), _meta(page, "addressCountry")) if p),
+            "text": "\n".join(line for line in lines if line), "posted": _day(_meta(page, "datePosted")),
+            "closes": _day(_meta(page, "validThrough"))}
 
 
 def fetch(url: str, *, timeout: float = 25) -> str:
@@ -122,5 +163,5 @@ def check(sites: list[Site], data: dict, *, get: Callable[[str], str] = fetch) -
 def notice(new: list[dict]) -> str:
     rows = [f"· {n['sitio']}: {n['cargo']}\n  {n['url']}" for n in new[:15]]
     more = f"\n… y {len(new) - 15} más" if len(new) > 15 else ""
-    return ("Vacantes nuevas en portales de empresas (postúlate tú: piden cuenta en su sitio):\n"
+    return ("Vacantes nuevas en portales de empresas (las que encajan con tu perfil te llegan aparte, con su CV):\n"
             + "\n".join(rows) + more)

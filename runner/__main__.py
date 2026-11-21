@@ -2,7 +2,7 @@
 
     python -m runner configurar      crea la configuración para editar
     python -m runner token           guarda el token del bot (se crea en la app: Perfil → Bot de LinkedIn)
-    python -m runner entrar [portal] abre el navegador del bot para que inicies sesión (linkedin, computrabajo, magneto, elempleo)
+    python -m runner entrar [portal] abre el navegador del bot para que inicies sesión (linkedin, computrabajo, magneto, elempleo, bancolombia)
     python -m runner importar CV.pdf carga tu CV o el PDF de tu LinkedIn en tu perfil de la app (solo lo nuevo)
     python -m runner buscar          busca vacantes, las analiza con tu perfil y prepara el CV de cada una
     python -m runner postular        postula a las preparadas con «Solicitud sencilla» (--prueba: sin enviar)
@@ -554,8 +554,14 @@ def cmd_diario(_args) -> int:
         return code
 
 
-def _watch_sites() -> list[dict]:
-    """Revisa los portales de empresas de `[[vigilar]]` y devuelve las vacantes nuevas que encajan (no postula)."""
+WATCH_PER_ROUND = 5  # ofertas de portales de empresas que la app analiza por vuelta (usan cupo de IA)
+
+
+def _watch_sites(*, prepare: bool = True) -> list[dict]:
+    """Revisa los portales de empresas de `[[vigilar]]` y devuelve las vacantes nuevas que encajan (no postula).
+
+    Con `prepare`, las que encajan pasan a la app, que las analiza; las que llegan a la compatibilidad mínima reciben
+    su CV y le llegan a la persona por Telegram, listas para postular."""
     from runner import watch
 
     sites = watch.load_sites()
@@ -566,7 +572,73 @@ def _watch_sites() -> list[dict]:
     state.save()
     if new:
         print("\n" + watch.notice(new))
+    if prepare:
+        conf = cfg.load()
+        try:
+            _prepare_watched(Api(conf.api, conf.token), state, sites)
+        finally:
+            state.save()
     return new
+
+
+def _prepare_watched(api: Api, state: State, sites, *, limit: int = WATCH_PER_ROUND) -> int:
+    """Las vigiladas que encajan y aún no pasan por la app: análisis, CV y Telegram. Devuelve cuántas se enviaron."""
+    import urllib.error
+    from hashlib import sha256
+
+    from runner import telegram, watch
+
+    by_name, handled, sent = {s.name: s for s in sites}, 0, 0
+    for key, rec in state.data.get("vigiladas", {}).items():
+        site = by_name.get(key.split(":", 1)[0])
+        if not site or not rec.get("encaja") or "app" in rec or rec.get("listo"):
+            continue
+        if not watch.matches(site, rec.get("cargo", "")):  # anotada con reglas viejas
+            rec["listo"] = "no_encaja"
+            continue
+        if handled >= limit:
+            break
+        handled += 1
+        try:
+            info = watch.posting(watch.fetch(rec["url"]))
+        except (urllib.error.URLError, TimeoutError, OSError) as e:
+            print(f"  {site.name}: no se pudo abrir «{rec.get('cargo', '')}» ({str(e)[:80]})")
+            continue
+        if not info["text"] or (info["closes"] and info["closes"] < date.today()):
+            rec["listo"] = "cerrada" if info["text"] else "sin_texto"
+            continue
+        header = f"{info['title'] or rec.get('cargo', '')}\n{site.name}\n{info['place']}\n\n"
+        try:
+            vacancy = api.add_vacancy(text=header + info["text"], url=rec["url"], posted=info["posted"])
+        except ApiError as e:
+            print(f"  {site.name}: la app no pudo analizar «{rec.get('cargo', '')}»: {e.detail}")
+            if e.status == 429 or e.status >= 500:  # sin cupo de IA o servidor ocupado: se reintenta luego
+                break
+            rec["listo"] = "error"
+            continue
+        rec["app"], rec["puntaje"] = vacancy.id, vacancy.score
+        if not vacancy.created and not vacancy.unfinished:
+            continue  # ya estaba en la app
+        if vacancy.score is None or vacancy.score < site.min_score:
+            _discard(api, vacancy.id, f"El bot la descartó: compatibilidad {vacancy.score if vacancy.score is not None else '—'} "
+                                      f"(mínimo {site.min_score}).")
+            print(f"  · {site.name}: {vacancy.role} — compatibilidad {vacancy.score}: descartada")
+            continue
+        cv_path = ""
+        try:
+            cv = api.make_cv(vacancy.id)
+            cv_path = str(api.download_cv(cv["id"], cfg.DATA_DIR / "cvs" / str(vacancy.id) / cv["filename"]))
+        except ApiError as e:
+            print(f"        CV no generado: {e.detail}")
+        note = f"Postúlate en el portal de {site.name}: pide iniciar sesión (con captcha), así que el bot no puede."
+        if info["closes"]:
+            note += f" Cierra el {info['closes']:%d/%m/%Y}."
+        item = {"id": sha256(rec["url"].encode()).hexdigest()[:12], "url": rec["url"], "titulo": vacancy.role or rec.get("cargo", ""),
+                "empresa": site.name, "cv": cv_path, "nota": note, "motivo": "", "respuestas": "", "puntaje": vacancy.score}
+        telegram.add_manual(item)
+        sent += 1
+        print(f"  ✓ {vacancy.score:>3}  {item['titulo']} — {site.name}: CV listo, enviado a Telegram")
+    return sent
 
 
 def cmd_vigilar(_args) -> int:
@@ -689,7 +761,7 @@ def main(argv: list[str] | None = None) -> int:
     sub.add_parser("token").set_defaults(fn=cmd_token)
     entrar = sub.add_parser("entrar")
     entrar.add_argument("portal", nargs="?", default="linkedin", choices=list(LOGINS),
-                        help="linkedin (si no se dice), computrabajo, magneto o elempleo")
+                        help="linkedin (si no se dice), computrabajo, magneto, elempleo o bancolombia")
     entrar.set_defaults(fn=cmd_entrar)
     importar = sub.add_parser("importar")
     importar.add_argument("pdf", help="ruta del PDF (tu CV o «Guardar en PDF» de tu perfil de LinkedIn)")

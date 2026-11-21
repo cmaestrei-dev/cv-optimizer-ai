@@ -1,5 +1,7 @@
 """Vigilar portales de empresas (SuccessFactors): leer resultados, filtrar por cargo y avisar solo lo nuevo."""
 
+import pytest
+
 from runner import watch
 
 PAGE = """
@@ -28,7 +30,7 @@ def test_only_new_fitting_offers_are_reported():
     assert [n["cargo"] for n in first] == ["Ingeniero/a Software Backend (Junior)", "Practicante en Tecnología"]
     assert "q=software" in calls[0] and len(data["vigiladas"]) == 5
     assert watch.check([SITE], data, get=get) == []  # ya vistas: no se repite el aviso
-    assert "postúlate tú" in watch.notice(first)
+    assert "te llegan aparte, con su CV" in watch.notice(first)
 
 
 def test_sites_come_from_the_config(tmp_path):
@@ -37,9 +39,99 @@ def test_sites_come_from_the_config(tmp_path):
                     encoding="utf-8")
     (site,) = watch.load_sites(path)
     assert site.base == "https://jobs.ecopetrol.com.co" and site.terms == ["practicante"] and "software" in site.include
+    assert site.min_score == 60
 
 
 def test_short_words_match_whole_words_only():
     assert not watch.matches(SITE, "Practicante de Ciencias Económicas")  # «ti» dentro de «practicante»
     assert watch.matches(SITE, "Analista de Soporte TI")
     assert not watch.matches(SITE, "Analista III de Datos") and watch.matches(SITE, "Analista de Datos")
+
+
+JOB = """<div class="jobDisplayShell" itemscope="itemscope" itemtype="http://schema.org/JobPosting">
+<span itemprop="jobLocation"><span itemprop="address"><meta itemprop="addressLocality" content="Medellín">
+<meta itemprop="addressCountry" content="CO"></span></span>
+<meta itemprop="datePosted" content="Wed Nov 18 00:00:00 UTC 2026"><meta itemprop="validThrough" content="Tue Nov 24 05:00:00 UTC 2026">
+<h1 id="job-title" itemprop="title">Ingeniero/a Software Backend (Junior)</h1>
+<span itemprop="description" class="jobdescription"><p><span style="color:dimgray"><strong>Ubicación:</strong> Medellín.</span></p>
+<ul><li>Java y Spring Boot</li><li>APIs REST</li></ul></span>
+<p>Fuera de la descripción</p></div>"""
+
+
+def test_posting_reads_the_public_offer():
+    info = watch.posting(JOB)
+    assert info["title"] == "Ingeniero/a Software Backend (Junior)" and info["place"] == "Medellín, CO"
+    assert info["text"] == "Ubicación: Medellín.\n- Java y Spring Boot\n- APIs REST"  # sin lo que sigue a la descripción
+    assert str(info["posted"]) == "2026-11-18" and str(info["closes"]) == "2026-11-24"
+
+
+class FakeApi:
+    def __init__(self, score=75, fail=None):
+        self.score, self.fail, self.discarded, self.added = score, fail, [], []
+
+    def add_vacancy(self, *, text, url, posted):
+        from runner.api import ApiError, Vacancy
+
+        if self.fail:
+            raise ApiError(self.fail, "Llegaste al límite diario de uso de la IA.")
+        self.added.append((text, url, posted))
+        return Vacancy(id=len(self.added), created=True, role="Ingeniero/a Software Backend (Junior)", company="Bancolombia",
+                       score=self.score, missing=[])
+
+    def post(self, path, body):
+        self.discarded.append((path, body))
+
+    def make_cv(self, app_id):
+        return {"id": 9, "filename": "Camilo_Maestre_Ingeniero_Software.pdf"}
+
+    def download_cv(self, cv_id, dest):
+        dest.parent.mkdir(parents=True, exist_ok=True)
+        dest.write_bytes(b"%PDF-1.4")
+        return dest
+
+
+def watched_state(tmp_path, monkeypatch):
+    from runner import __main__ as cli
+    from runner import config as cfg
+    from runner.state import State
+
+    monkeypatch.setattr(cfg, "DATA_DIR", tmp_path)
+    monkeypatch.setattr(watch, "fetch", lambda url: JOB)
+    state = State(tmp_path / "estado.json")
+    state.data["vigiladas"] = {
+        "Bancolombia:1451777800": {"cargo": "Ingeniero/a Software Backend (Junior)", "url": "https://e/job/1451777800/", "encaja": True},
+        "Bancolombia:1400000004": {"cargo": "Practicante Universitario/a de Ciencias Económicas", "url": "https://e/job/4/", "encaja": True},
+        "Bancolombia:1400000003": {"cargo": "Asesor/a Comercial", "url": "https://e/job/3/", "encaja": False},
+    }
+    return cli, state
+
+
+def test_fitting_offers_get_their_cv_and_go_to_telegram(tmp_path, monkeypatch):
+    from runner import telegram
+
+    cli, state = watched_state(tmp_path, monkeypatch)
+    sent = []
+    monkeypatch.setattr(telegram, "add_manual", lambda item: sent.append(item) or True)
+    api = FakeApi(score=75)
+    assert cli._prepare_watched(api, state, [SITE]) == 1
+    (item,) = sent
+    assert item["empresa"] == "Bancolombia" and item["puntaje"] == 75 and item["cv"].endswith(".pdf")
+    assert "captcha" in item["nota"] and "24/11/2026" in item["nota"]
+    assert api.added[0][0].startswith("Ingeniero/a Software Backend (Junior)\nBancolombia\nMedellín, CO")
+    vistas = state.data["vigiladas"]
+    assert vistas["Bancolombia:1451777800"]["app"] == 1
+    assert vistas["Bancolombia:1400000004"]["listo"] == "no_encaja"  # anotada con reglas viejas: no gasta IA
+    assert cli._prepare_watched(api, state, [SITE]) == 0 and len(api.added) == 1  # nunca dos veces
+
+
+def test_low_scores_are_discarded_and_no_quota_retries_later(tmp_path, monkeypatch):
+    from runner import telegram
+
+    cli, state = watched_state(tmp_path, monkeypatch)
+    monkeypatch.setattr(telegram, "add_manual", lambda item: pytest.fail("no debía enviarse"))
+    assert cli._prepare_watched(FakeApi(fail=429), state, [SITE]) == 0
+    assert "app" not in state.data["vigiladas"]["Bancolombia:1451777800"]  # sin cupo de IA: queda para otra vuelta
+    low = FakeApi(score=40)
+    assert cli._prepare_watched(low, state, [SITE]) == 0
+    assert low.discarded and "compatibilidad 40 (mínimo 60)" in low.discarded[0][1]["note"]
+
