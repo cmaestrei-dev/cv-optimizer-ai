@@ -361,7 +361,10 @@ Entregas:
   - Teléfono corregido: tenía el 57 repetido.
   - Su formulario no guarda las fechas ni deja borrar una experiencia incompleta, así que esas partes se hicieron con la misma petición que envía su página.
 - [x] `runner/magneto.py` (búsqueda) y `runner/magneto_apply.py` (postular con la petición de la página, después de sus mismas consultas). Probados con una sesión falsa, sin red.
-- [ ] Primer envío real, mirándolo.
+- [x] **Primer envío real (2026-11-21):** Desarrollador/a Cells Junior, Indra (compatibilidad 75). Quedó en «Mis procesos» de Magneto y sus postulaciones pasaron de 8 a 9.
+  - La oferta no pasa a `isApplied` después de postular, así que el bot lo marcó como error.
+  - Ahora confirma con «Mis procesos» (`/jobs/v2/my-processes`), que también revisa antes de enviar para nunca postular dos veces.
+  - Una respuesta 2xx sin confirmación cuenta como enviada, para no repetir.
 
 **Telegram (pedido del dueño, 2026-11-21).** Un bot propio para que le lleguen al celular las cosas que solo él puede hacer y para manejar el sistema desde ahí.
 - [x] `runner/telegram.py`: long polling desde su computador, sin puertos ni webhooks.

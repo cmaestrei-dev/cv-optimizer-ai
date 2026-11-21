@@ -10,6 +10,8 @@ Lo verificado leyendo su página y consultándola sin postular (2026-11-21):
   `questionnaires: [{id, questions: [{id, type, answer: [ids]} | {id, type, openAnswer}]}]`.
   Los tipos son 0 = una opción, 1 = varias opciones, 2 = abierta corta (140 caracteres) y 3 = abierta larga.
 - «Aplicar» es `POST /jobs/v1/jobs/apply`, sin pantalla de revisión. Por eso el modo prueba no envía nada.
+- La oferta NO pasa a `isApplied` después de postular (comprobado con el primer envío real, 2026-11-21); lo fiable
+  es «Mis procesos» (`/jobs/v2/my-processes`). El bot lo mira antes (para no postular dos veces) y después.
 - Magneto envía a la empresa el perfil de Magneto, no un PDF por vacante: el CV de la app queda como referencia.
 - Ante una verificación o un captcha, el bot se detiene; nunca la resuelve.
 """
@@ -22,6 +24,7 @@ from runner.answers import pick_option
 from runner.linkedin import ApplyResult, Question
 
 API = "https://api.magneto365.com/jobs/v1"
+PROCESSES = "https://api.magneto365.com/jobs/v2/my-processes?page=1&pageSize=100"
 LOGIN = "https://login.magneto365.com/candidates"
 WEB = "https://www.magneto365.com"
 UNIQUE, MULTIPLE, OPEN_SHORT, OPEN_LONG = 0, 1, 2, 3
@@ -55,7 +58,8 @@ class Session:
             return response.status, None
 
     def get(self, path: str) -> tuple[int, object]:
-        return self._answer(self.page.context.request.get(API + path, headers=self._headers(), timeout=30_000))
+        url = path if path.startswith("https://") else API + path
+        return self._answer(self.page.context.request.get(url, headers=self._headers(), timeout=30_000))
 
     def post(self, path: str, body: dict) -> tuple[int, object]:
         return self._answer(self.page.context.request.post(API + path, data=body, headers=self._headers(), timeout=60_000))
@@ -104,6 +108,14 @@ def _fill(data: dict, answerer: Answerer) -> tuple[list[dict], list[str]]:
     return [{"id": k, "questions": v} for k, v in by_questionnaire.items()], missing
 
 
+def _in_my_processes(session, job_id: int) -> bool | None:
+    """¿La oferta está en «Mis procesos»? None si Magneto no respondió."""
+    status, data = session.get(PROCESSES)
+    if status != 200 or not isinstance(data, dict):
+        return None
+    return any(row.get("id") == job_id for row in data.get("rows") or [])
+
+
 def apply(page, offer_url: str, cv_pdf: Path, answerer: Answerer, *, submit: bool, session=None) -> ApplyResult:
     """Postula a una oferta de Magneto. `cv_pdf` no se envía (Magneto usa tu perfil); queda en la app."""
     session = session or Session(page)
@@ -117,7 +129,7 @@ def apply(page, offer_url: str, cv_pdf: Path, answerer: Answerer, *, submit: boo
     if status != 200:
         return ApplyResult("error", f"Magneto respondió {status} al abrir la oferta")
     job_id = job["id"]
-    if job.get("isApplied"):
+    if job.get("isApplied") or _in_my_processes(session, job_id):
         return ApplyResult("ya_postulada")
     if job.get("canApply") is False or job.get("status", "published") != "published":
         return ApplyResult("saltada", "Magneto no permite postular a esta oferta (¿cerrada?)")
@@ -149,7 +161,7 @@ def apply(page, offer_url: str, cv_pdf: Path, answerer: Answerer, *, submit: boo
         message = answer.get("message", "") if isinstance(answer, dict) else ""
         return ApplyResult("error", f"Magneto no aceptó la postulación (HTTP {status}{': ' + str(message)[:120] if message else ''})")
     time.sleep(2)
-    status, job = session.get(f"/jobs/slug/{slug(offer_url)}")
-    if status == 200 and isinstance(job, dict) and job.get("isApplied"):
-        return ApplyResult("enviada", "Confirmada en Magneto")
-    return ApplyResult("error", "Magneto aceptó el envío pero la oferta no aparece como postulada: revísala tú")
+    if _in_my_processes(session, job_id):
+        return ApplyResult("enviada", "Confirmada en «Mis procesos» de Magneto")
+    # Magneto la aceptó (2xx): se cuenta como enviada para no postular dos veces; que la revise la persona.
+    return ApplyResult("enviada", "Magneto aceptó el envío, pero aún no aparece en «Mis procesos»: revísala tú")
