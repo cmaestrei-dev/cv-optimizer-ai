@@ -209,6 +209,15 @@ def manual_message(item: dict) -> str:
     return "\n".join(line for line in lines if line)
 
 
+def add_manual(item: dict) -> bool:
+    """Guarda una postulación que debe enviar la persona (reemplaza la de igual id) y se la manda por Telegram."""
+    items = [i for i in _read_json(MANUAL_FILE, []) if isinstance(i, dict) and i.get("id") != item["id"]]
+    items.append(item)
+    MANUAL_FILE.parent.mkdir(parents=True, exist_ok=True)
+    MANUAL_FILE.write_text(json.dumps(items, ensure_ascii=False, indent=1), encoding="utf-8")
+    return send_manual(item)
+
+
 def send_manual(item: dict) -> bool:
     """Envía por Telegram una postulación manual con su CV. Nunca falla la vuelta."""
     tok, chat = token(), chat_id()

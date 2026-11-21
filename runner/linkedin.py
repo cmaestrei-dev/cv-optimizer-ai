@@ -73,10 +73,11 @@ class Question:
 
 @dataclass
 class ApplyResult:
-    status: str  # enviada | revisada | saltada | ya_postulada | externa | verificacion | tope | error
+    status: str  # enviada | revisada | saltada | ya_postulada | externa | verificacion | tope | perfil | error
     detail: str = ""
     unanswered: list[str] = field(default_factory=list)
     screenshot: str = ""
+    follow_up: str = ""  # algo que solo la persona puede hacer después (p. ej. seguir en el sitio de la empresa)
 
 
 Answerer = Callable[[list[Question]], dict[str, str]]

@@ -80,7 +80,7 @@ Inicia sesión una vez en el navegador del bot (con el bot detenido):
 ```bash
 python -m runner entrar computrabajo   # entra con tu correo y contraseña; cierra la ventana al terminar
 python -m runner entrar magneto        # igual, para Magneto
-python -m runner entrar elempleo       # igual, para elempleo (por ahora, para estudiar cómo se postula)
+python -m runner entrar elempleo       # igual, para elempleo
 ```
 
 ## Magneto
@@ -101,6 +101,31 @@ Para postular usa tu sesión de Magneto en el navegador del bot:
 
 Magneto le muestra a la empresa **tu perfil de Magneto**, no un PDF por vacante: mantenlo al día (igual a tu
 LinkedIn). El CV de la vacante queda en la app como referencia. En modo prueba responde todo y no envía.
+
+## elempleo
+
+Las búsquedas con `portal = "elempleo"` usan la búsqueda pública de elempleo, sin sesión, filtrada por fecha:
+`dias` es 1 (hoy y ayer), 7, 15 o 30. `lugar` acepta Colombia, Remoto o una ciudad. elempleo no tiene búsqueda por
+ciudad para todos los cargos, así que se busca en todo el país y se dejan las de esa ciudad y las remotas (casi
+todas sus ofertas de tecnología son de Bogotá y Medellín). Tope y compatibilidad mínima van en la tabla `[elempleo]`.
+
+Para postular usa tu sesión de elempleo en el navegador del bot (`python -m runner entrar elempleo`). Esa sesión
+dura lo que dura el navegador: el bot deja su perfil de Chrome configurado para reabrir la sesión anterior, y así
+no hay que entrar cada vez.
+
+1. Abre la oferta y comprueba que tengas sesión y que no te hayas postulado ya.
+2. Envía la misma petición que el botón «Postularme a oferta» (elempleo no hace preguntas de filtro) y comprueba
+   que la oferta quede postulada.
+3. Si la empresa pide seguir en su sitio, o un videocuestionario, no lo abre: te lo manda por Telegram (`/manuales`).
+4. Si elempleo dice que tu hoja de vida está incompleta, se detiene.
+
+elempleo le muestra a la empresa **tu hoja de vida de elempleo** (con el CV que tengas adjunto allá), no un PDF por
+vacante: mantenla al día. Las ofertas de «postulación rápida» (con adjuntos) te las pasa por Telegram.
+
+## El navegador del bot ocupado
+
+Si al empezar una vuelta el navegador del bot está abierto (otra vuelta, o una ventana que abriste con
+`entrar`), el bot espera hasta 30 minutos a que se cierre en vez de fallar.
 
 ## Vigilar portales de empresas
 
