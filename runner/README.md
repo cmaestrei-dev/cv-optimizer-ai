@@ -79,8 +79,27 @@ Inicia sesión una vez en el navegador del bot (con el bot detenido):
 
 ```bash
 python -m runner entrar computrabajo   # entra con tu correo y contraseña; cierra la ventana al terminar
-python -m runner entrar magneto        # igual, para Magneto (por ahora solo para estudiar cómo se postula)
+python -m runner entrar magneto        # igual, para Magneto
 ```
+
+## Magneto
+
+Las búsquedas con `portal = "magneto"` usan la búsqueda pública de Magneto, sin sesión. Trae 20 por página con la
+oferta completa, así que no se abre cada una. `lugar` acepta Colombia, Remoto o una ciudad: en una ciudad sirven las
+vacantes de esa ciudad y las remotas. Tope y compatibilidad mínima van en la tabla `[magneto]`.
+
+Para postular usa tu sesión de Magneto en el navegador del bot:
+
+1. Renueva la sesión abriendo el inicio de sesión de Magneto (vence en más o menos una hora). Si entraste con
+   Google, se renueva sola; si no, el bot te pide `python -m runner entrar magneto`.
+2. Hace las mismas consultas que la página antes de postular. Si Magneto dice que tu cédula ya se postuló a esa
+   oferta (p. ej. con otra cuenta), se detiene: nunca cambia de cuenta.
+3. Si la oferta tiene cuestionario de filtro, lo responde con el banco y tu perfil. Si una pregunta queda sin
+   respuesta, no envía.
+4. Envía la misma petición que el botón «Aplicar» y comprueba que la oferta quede postulada.
+
+Magneto le muestra a la empresa **tu perfil de Magneto**, no un PDF por vacante: mantenlo al día (igual a tu
+LinkedIn). El CV de la vacante queda en la app como referencia. En modo prueba responde todo y no envía.
 
 ## Cómo responde el formulario
 

@@ -517,3 +517,16 @@ def test_can_log_in_to_magneto(tmp_path, monkeypatch, capsys):
     assert cli.main(["entrar", "magneto"]) == 0
     assert opened[0][-1] == "https://web.magneto365.com/sign-in"
     assert "entra a Magneto" in capsys.readouterr().out
+
+
+def test_months_question_with_options_picks_the_right_range():
+    # Magneto: «¿Cuántos meses de experiencia tienes?» con opciones en meses (pasó el 2026-11-21 al estudiarlo)
+    from runner import answers
+    from runner.linkedin import Question
+
+    options = ["Sin experiencia", "1 a 6 meses", "6 a 12 meses", "12 a 24 meses", "Más de 24 meses"]
+    api = SimpleNamespace(post=lambda path, body: [{"question": q, "answer": "", "needs_you": True} for q in body["questions"]])
+    conf = cfg.Config(api="https://x", token="t", no_evidence="si", default_years=2)
+    q = Question("radio", "¿Cuántos meses de experiencia tienes?", True, "", options, [])
+    text = cli._answerer(api, conf, 1, units=True)([q])[q.label]
+    assert answers.pick_option(text, options) == "12 a 24 meses"

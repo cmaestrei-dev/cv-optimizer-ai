@@ -15,8 +15,8 @@ TOKEN_FILE = CONFIG_DIR / "token"
 # o como geoId numérico.
 GEO_IDS = {"colombia": "100876405", "bogota": "102361989", "bogotá": "102361989", "cartagena": "106336022"}
 MODES = ("prueba", "auto")
-PORTALS = {"linkedin": "LinkedIn", "computrabajo": "Computrabajo"}
-DAYS = {"linkedin": (1, 7, 30), "computrabajo": (1, 3, 7, 15, 30)}
+PORTALS = {"linkedin": "LinkedIn", "computrabajo": "Computrabajo", "magneto": "Magneto"}
+DAYS = {"linkedin": (1, 7, 30), "computrabajo": (1, 3, 7, 15, 30), "magneto": (1, 3, 7, 15, 30)}
 
 TEMPLATE = """# Bot de postulación de CV Optimizer. Edita y guarda; luego: python -m runner buscar
 api = "https://TU-SERVICIO.run.app/api"   # la dirección de tu app, terminada en /api
@@ -34,7 +34,7 @@ dias = 1               # 1 = últimas 24 horas, 7 = última semana
 solicitud_sencilla = true
 
 [[busqueda]]
-portal = "computrabajo"   # linkedin (si no se dice) o computrabajo
+portal = "computrabajo"   # linkedin (si no se dice), computrabajo o magneto
 palabras = "analista de operaciones"
 lugar = "Colombia"        # Colombia, Remoto, Cartagena, Medellín, Bogotá…
 dias = 1                  # 1, 3, 7, 15 o 30
@@ -43,6 +43,10 @@ dias = 1                  # 1, 3, 7, 15 o 30
 tope_diario = 20             # aparte del de LinkedIn
 compatibilidad_minima = 60   # debajo de esto la vacante se descarta en la app (con el motivo) y no se hace CV
 cv_general = ""              # PDF que queda por defecto entre postulaciones (sin él, el bot no postula en Computrabajo)
+
+[magneto]
+tope_diario = 20             # aparte de los otros portales (Magneto envía tu perfil de Magneto, no un PDF)
+compatibilidad_minima = 60
 
 [excluir]
 palabras = ["senior", "lead"]   # palabras completas del cargo que no te interesan

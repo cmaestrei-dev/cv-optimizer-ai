@@ -349,6 +349,20 @@ Entregas:
   - estudios corregidos, inglés básico, 17 conocimientos nuevos y 27 de infraestructura quitados.
 - [ ] **(dueño)** Cargar su perfil (CV o PDF de LinkedIn), crear el token en la web e iniciar sesión en el navegador del bot.
 
+**Magneto (Fase 8, 2026-11-21).** El dueño quiere todas las plataformas posibles. Magneto va primero porque una sola cuenta cubre Davivienda, Claro, Banco de Bogotá, ARUS e Indra.
+- [x] Estudio con la sesión del dueño, sin postular:
+  - La búsqueda pública (`/jobs/v1/public/jobs/search`, orden `_score`) entrega la oferta completa y no pide sesión.
+  - La sesión (`access_token`) vence en más o menos una hora y se renueva sola al abrir `login.magneto365.com/candidates`, porque el dueño entró con Google. Él aprobó que el bot la renueve.
+  - «Aplicar» es un `POST /jobs/v1/jobs/apply` sin revisión. Antes, la página consulta `verify-applications-by-dni` y, si hay cuestionario, `questionnaire/already-answered` y `questionnaire/{id}`.
+  - Tipos de pregunta: 0 = una opción, 1 = varias, 2 = abierta corta (140 caracteres), 3 = abierta larga.
+- [x] Perfil del dueño igual a LinkedIn. Estaba «incompleto» y Magneto no lo mostraba a las empresas.
+  - Experiencias con fechas y textos de LinkedIn; se borró una freelance que no estaba y se agregó Karta.
+  - Descripción de LinkedIn, 15 habilidades, idiomas, estudios, 9 certificaciones y CV adjunto.
+  - Teléfono corregido: tenía el 57 repetido.
+  - Su formulario no guarda las fechas ni deja borrar una experiencia incompleta, así que esas partes se hicieron con la misma petición que envía su página.
+- [x] `runner/magneto.py` (búsqueda) y `runner/magneto_apply.py` (postular con la petición de la página, después de sus mismas consultas). Probados con una sesión falsa, sin red.
+- [ ] Primer envío real, mirándolo.
+
 ### CV v2: legible para personas y ATS (2026-11-18, pedido del dueño)
 
 La auditoría del PDF anterior encontró:
@@ -381,6 +395,7 @@ Cambios:
 | Fecha | Decisión | Por qué |
 |---|---|---|
 | 2026-11-18 | En Computrabajo, CV por vacante marcado «por defecto» al postular, más un CV general fijo | La empresa recibe el PDF por defecto; un CV general en uno de los 10 espacios garantiza que nunca quede sin PDF si Computrabajo solo guardara una referencia y el bot rotara el de la vacante (decisión del dueño) |
+| 2026-11-21 | Magneto se postula con la misma petición que envía su página (no haciendo clic) | Su cuestionario es un chat de una pregunta a la vez y sus formularios tienen fallas (fechas, borrar). El bot hace antes las mismas consultas que la página y se detiene donde ella le preguntaría algo a la persona (otra cuenta con la misma cédula, cuestionario ya respondido). La empresa recibe el perfil de Magneto, no un PDF, así que el perfil tiene que estar igual a LinkedIn |
 | 2026-11-20 | Preguntas de experiencia del bot: «Sí» y años de junior (2), aunque el perfil no lo muestre; reemplaza al «No» de la fila siguiente | Decisión del dueño: son preguntas de filtro, dice que ya ha hecho lo que preguntan y que en la entrevista responde por ello. Un «No» lo descarta antes de que una persona lea el CV. Se limita a las preguntas de experiencia (un «Sí» a «¿requieres patrocinio?» lo perjudicaría) y no toca el CV, que sigue verificado |
 | 2026-11-20 | Ante una pregunta de experiencia sin respaldo, el bot responde que no la tiene en vez de saltar la vacante | Saltarla perdía vacantes buenas por una sola herramienta; decir «No» o «0» es verdad y deja que la empresa decida. La regla de no inventar sigue: un «Sí» siempre necesita evidencia del perfil |
 | 2026-11-20 | Gmail reenvía a la app solo las alertas de LinkedIn, con un filtro | El reenvío de todo el correo mandaría a la app correos personales; el servidor igual los rechazaría, pero no deben salir del buzón |

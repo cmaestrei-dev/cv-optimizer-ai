@@ -17,7 +17,7 @@ import sys
 from datetime import UTC, date, datetime
 from types import SimpleNamespace
 
-from runner import computrabajo, discover
+from runner import computrabajo, discover, magneto
 from runner import config as cfg
 from runner.api import Api, ApiError
 from runner.browser import LOGINS  # sin Playwright: solo direcciones y nombres de cookies
@@ -79,10 +79,10 @@ def _key(kind: str, portal: str) -> str:
 
 
 def _portal(name: str):
-    return {"linkedin": discover, "computrabajo": computrabajo}[name]
+    return {"linkedin": discover, "computrabajo": computrabajo, "magneto": magneto}[name]
 
 
-PLATFORM_PORTAL = {"LinkedIn": "linkedin", "Computrabajo": "computrabajo"}
+PLATFORM_PORTAL = {"LinkedIn": "linkedin", "Computrabajo": "computrabajo", "Magneto": "magneto"}
 
 
 def _job_id(portal: str, url: str) -> str:
@@ -90,6 +90,9 @@ def _job_id(portal: str, url: str) -> str:
     if portal == "linkedin":
         match = re.search(r"/jobs/view/(\d+)", url)
         return match.group(1) if match else ""
+    if portal == "magneto":
+        match = re.search(r"-(\d+)/?$", url.split("#")[0].split("?")[0])
+        return magneto.PREFIX + match.group(1) if match else ""
     match = re.search(r"-([0-9A-Fa-f]{16,})/?$", url.split("#")[0].split("?")[0])
     return computrabajo.PREFIX + match.group(1).upper() if match else ""
 
@@ -303,7 +306,9 @@ def _answerer(api: Api, conf: cfg.Config, application_id: int, *, units: bool = 
                     text = str(max(int(text or 0), least))
                 elif not text and conf.no_evidence == "cero":
                     text = "0"
-                if text and units and not choice and not q.numeric:
+                if text and choice and answers.asks_months(q.label):
+                    text = str(int(text) // 12)  # las opciones («12 a 24 meses») se comparan en años
+                elif text and units and not q.numeric:
                     text += " meses" if answers.asks_months(q.label) else (" año" if text == "1" else " años")
             elif q.numeric:
                 text = answers.to_integer(text) or ""
@@ -333,7 +338,7 @@ def _apply_portal(page, portal: str, pending, *, conf: cfg.Config, api: Api, sta
     import time as _time
     from pathlib import Path
 
-    from runner import computrabajo_apply, linkedin
+    from runner import computrabajo_apply, linkedin, magneto_apply
 
     name, sent_key = cfg.PORTALS[portal], _key("enviadas", portal)
     for n, (job_id, v) in enumerate(pending[: limit or len(pending)]):
@@ -341,9 +346,11 @@ def _apply_portal(page, portal: str, pending, *, conf: cfg.Config, api: Api, sta
             print("Tope diario de envíos alcanzado.")
             break
         print(f"\n· {v.get('url')}  (compatibilidad {v.get('puntaje')})")
-        answerer = _answerer(api, conf, v["app"], units=portal == "computrabajo")
+        answerer = _answerer(api, conf, v["app"], units=portal != "linkedin")
         if portal == "linkedin":
             result = linkedin.apply(page, v["url"], Path(v["cv"]), answerer, submit=submit, shots=cfg.DATA_DIR / "capturas")
+        elif portal == "magneto":
+            result = magneto_apply.apply(page, v["url"], Path(v["cv"]), answerer, submit=submit)
         else:
             result = computrabajo_apply.apply(page, v["url"], Path(v["cv"]), answerer, submit=submit,
                                               general=Path(conf.general_cvs[portal]),
@@ -403,7 +410,7 @@ def cmd_postular(args) -> int:
             print("El navegador del bot no tiene sesión de LinkedIn: python -m runner entrar")
             state.data["sesion_perdida"].append(portal)
             continue
-        if portal != "linkedin" and not conf.general_cvs.get(portal):
+        if portal == "computrabajo" and not conf.general_cvs.get(portal):
             print(f"{name}: falta «cv_general» en [{portal}] (el PDF que queda por defecto): no se postula.")
             continue
         print(f"{name}: {len(pending)} preparadas; hoy van {state.today(_key('enviadas', portal))} de {conf.cap(portal)} enviadas.")
@@ -461,9 +468,12 @@ def cmd_diario(_args) -> int:
         code = cmd_postular(argparse.Namespace(prueba=False, max=0, portal=None))
         state = State(cfg.DATA_DIR / "estado.json")
         notice = f"Hoy: {state.today('enviadas')} enviadas y {state.today('preparadas')} preparadas."
-        ct_sent, ct_ready = state.today(_key("enviadas", "computrabajo")), state.today(_key("preparadas", "computrabajo"))
-        if ct_sent or ct_ready:
-            notice += f" Computrabajo: {ct_sent} enviadas y {ct_ready} preparadas."
+        for portal, name in cfg.PORTALS.items():
+            if portal == "linkedin":
+                continue
+            sent, ready = state.today(_key("enviadas", portal)), state.today(_key("preparadas", portal))
+            if sent or ready:
+                notice += f" {name}: {sent} enviadas y {ready} preparadas."
         for portal, name in cfg.PORTALS.items():
             paused = _key("cuenta", portal)
             if (until := state.pause_until(paused)) and until > datetime.now(UTC):
