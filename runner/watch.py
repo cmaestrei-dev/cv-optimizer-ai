@@ -22,8 +22,9 @@ from pathlib import Path
 from runner import config as cfg
 from runner.discover import UA
 
-DEFAULT_INCLUDE = ["practic", "aprendiz", "junior", "software", "desarroll", "sistemas", "tecnolog", "ciberseg",
-                   "seguridad informatica", "soporte", "qa", "pruebas", "datos"]
+# Palabras de tecnología en el cargo («Practicante en Tecnología» sí; «Practicante de Ciencias Económicas» no)
+DEFAULT_INCLUDE = ["software", "desarroll", "sistemas", "tecnolog", "informatic", "ciberseg", "seguridad informatica",
+                   "soporte", " ti ", " it ", "qa", "pruebas", "datos", "programa", "devops", "cloud", "web"]
 DEFAULT_EXCLUDE = ["senior", "lider", "arquitect", "gerente", "director", "jefe", " iii", " iv"]
 _LINK = re.compile(r'<a[^>]+class="jobTitle-link"[^>]+href="([^"]+)"[^>]*>([^<]+)</a>')
 

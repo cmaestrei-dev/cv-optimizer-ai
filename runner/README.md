@@ -105,8 +105,9 @@ LinkedIn). El CV de la vacante queda en la app como referencia. En modo prueba r
 
 Algunas empresas publican solo en su propio portal: Bancolombia y Ecopetrol usan SAP SuccessFactors, que pide
 una cuenta por empresa. El bot no postula ahí, pero vigila su búsqueda pública en cada vuelta y te avisa
-(registro y Telegram) de las vacantes nuevas cuyo cargo encaja. Por defecto encajan prácticas, junior, software,
-sistemas, tecnología, ciberseguridad, soporte, QA y datos, y se descartan senior, líder, arquitecto, gerente y
+(registro y Telegram) de las vacantes nuevas cuyo cargo encaja. Por defecto encajan los cargos con una palabra de
+tecnología (software, sistemas, tecnología, desarrollo, ciberseguridad, soporte, QA, datos…), así que «Practicante
+en Tecnología» sí y «Practicante de Ciencias Económicas» no. Se descartan senior, líder, arquitecto, gerente y
 niveles III o IV.
 
 ```toml
