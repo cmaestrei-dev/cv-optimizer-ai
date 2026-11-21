@@ -26,7 +26,9 @@ SESSION_COOKIE = "li_at"
 LOGINS = {
     "linkedin": ("linkedin.com", SESSION_COOKIE, "https://www.linkedin.com/login"),
     "computrabajo": ("computrabajo.com", None, "https://candidato.co.computrabajo.com/acceso/"),
+    "magneto": ("magneto365.com", None, "https://web.magneto365.com/sign-in"),
 }
+NAMES = {"linkedin": "LinkedIn", "computrabajo": "Computrabajo", "magneto": "Magneto"}
 
 
 def _cookie_names(domain: str, profile: Path = PROFILE_DIR) -> set[str]:
@@ -104,13 +106,13 @@ def login(portal: str = "linkedin", *, timeout_minutes: int = 25) -> int:
         print("El navegador del bot ya está abierto (¿hay una vuelta corriendo?). Ciérralo o espera a que termine.")
         return 1
     if has_session(portal=portal):
-        print(f"Ya hay una sesión de {portal.capitalize()} guardada en el navegador del bot.")
+        print(f"Ya hay una sesión de {NAMES[portal]} guardada en el navegador del bot.")
         return 0
     process = subprocess.Popen([chrome, f"--user-data-dir={PROFILE_DIR}", "--no-first-run", page],
                                stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
     if cookie is None:  # aún no se sabe qué cookie marca la sesión: la persona cierra la ventana al terminar
         before = _cookie_names(domain)
-        print("1. En la ventana que se abrió, entra a Computrabajo con tu correo y tu contraseña.")
+        print(f"1. En la ventana que se abrió, entra a {NAMES[portal]} con tu correo y tu contraseña.")
         print("   Si quieres, actualiza ahí mismo tu hoja de vida.")
         print("2. Cuando hayas entrado, cierra la ventana.\n")
         try:
@@ -120,7 +122,7 @@ def login(portal: str = "linkedin", *, timeout_minutes: int = 25) -> int:
             print(f"Pasaron {timeout_minutes} minutos: cerré la ventana.")
         time.sleep(2)
         new = len(_cookie_names(domain) - before)
-        print(f"Ventana cerrada. Quedaron {new} cookies nuevas de Computrabajo en el navegador del bot.")
+        print(f"Ventana cerrada. Quedaron {new} cookies nuevas de {NAMES[portal]} en el navegador del bot.")
         return 0
     print("1. En la ventana que se abrió, entra con tu correo y tu contraseña de LinkedIn («Email or phone»).")
     print("   Si tu LinkedIn no está ligado a esa cuenta de Google, el botón «Continuar con Google» crea una cuenta nueva.")

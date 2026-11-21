@@ -79,6 +79,7 @@ Inicia sesión una vez en el navegador del bot (con el bot detenido):
 
 ```bash
 python -m runner entrar computrabajo   # entra con tu correo y contraseña; cierra la ventana al terminar
+python -m runner entrar magneto        # igual, para Magneto (por ahora solo para estudiar cómo se postula)
 ```
 
 ## Cómo responde el formulario
