@@ -27,8 +27,9 @@ LOGINS = {
     "linkedin": ("linkedin.com", SESSION_COOKIE, "https://www.linkedin.com/login"),
     "computrabajo": ("computrabajo.com", None, "https://candidato.co.computrabajo.com/acceso/"),
     "magneto": ("magneto365.com", None, "https://web.magneto365.com/sign-in"),
+    "elempleo": ("elempleo.com", None, "https://www.elempleo.com/co/iniciar-sesion"),
 }
-NAMES = {"linkedin": "LinkedIn", "computrabajo": "Computrabajo", "magneto": "Magneto"}
+NAMES = {"linkedin": "LinkedIn", "computrabajo": "Computrabajo", "magneto": "Magneto", "elempleo": "elempleo"}
 
 
 def _cookie_names(domain: str, profile: Path = PROFILE_DIR) -> set[str]:
