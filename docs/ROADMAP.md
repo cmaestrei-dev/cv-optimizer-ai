@@ -363,6 +363,16 @@ Entregas:
 - [x] `runner/magneto.py` (búsqueda) y `runner/magneto_apply.py` (postular con la petición de la página, después de sus mismas consultas). Probados con una sesión falsa, sin red.
 - [ ] Primer envío real, mirándolo.
 
+**Telegram (pedido del dueño, 2026-11-21).** Un bot propio para que le lleguen al celular las cosas que solo él puede hacer y para manejar el sistema desde ahí.
+- [x] `runner/telegram.py`: long polling desde su computador, sin puertos ni webhooks.
+  - Se empareja con un código de un solo uso y solo atiende ese chat.
+  - El token se pide oculto y queda en un archivo 0600.
+  - Comandos `/estado`, `/hoy`, `/vuelta`, `/pausar`, `/reanudar`, `/preguntas` y `/responder`.
+  - Al final de cada vuelta envía el resumen y las preguntas pendientes.
+  - No escribe `estado.json`: la pausa va en `control.json` y las respuestas en `respuestas_extra.json`, que `config.load` une al banco.
+- [x] Las vacantes saltadas guardan su CV. Si después sus preguntas tienen respuesta, `postular` las devuelve a la cola (`_retry_answered`).
+- [ ] **(dueño)** Crear el bot con @BotFather; luego `python -m runner telegram configurar` e `instalar`.
+
 ### CV v2: legible para personas y ATS (2026-11-18, pedido del dueño)
 
 La auditoría del PDF anterior encontró:

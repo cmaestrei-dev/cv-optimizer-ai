@@ -10,6 +10,7 @@ CONFIG_DIR = Path(os.environ.get("CVO_BOT_CONFIG_DIR", Path.home() / ".config" /
 DATA_DIR = Path(os.environ.get("CVO_BOT_DATA_DIR", Path.home() / ".local" / "share" / "cv-optimizer-bot"))
 CONFIG_FILE = CONFIG_DIR / "config.toml"
 TOKEN_FILE = CONFIG_DIR / "token"
+EXTRA_ANSWERS_FILE = CONFIG_DIR / "respuestas_extra.json"  # las que das por Telegram (las escribe ese bot)
 
 # geoId de LinkedIn verificados (2026-11-16). Cualquier otro lugar va por nombre («Medellín, Antioquia, Colombia»)
 # o como geoId numérico.
@@ -136,6 +137,16 @@ def _token() -> str:
     raise ConfigError("Falta el token del bot: python -m runner token (créalo en la app: Perfil → Bot de LinkedIn).")
 
 
+def _extra_answers() -> dict[str, str]:
+    import json
+
+    try:
+        data = json.loads(EXTRA_ANSWERS_FILE.read_text(encoding="utf-8"))
+    except (FileNotFoundError, ValueError):
+        return {}
+    return {str(k): str(v) for k, v in data.items()} if isinstance(data, dict) else {}
+
+
 def load(path: Path = CONFIG_FILE) -> Config:
     if not path.exists():
         raise ConfigError(f"No hay configuración: python -m runner configurar (crea {path}).")
@@ -202,7 +213,7 @@ def load(path: Path = CONFIG_FILE) -> Config:
         api=api, token=_token(), mode=mode, daily_cap=cap, make_cv=bool(raw.get("generar_cv", True)), searches=searches,
         exclude_words=[str(w).lower() for w in exclude.get("palabras", [])],
         exclude_companies=[str(c).lower() for c in exclude.get("empresas", [])],
-        answers={str(k): str(v) for k, v in raw.get("respuestas", {}).items()},
+        answers={**{str(k): str(v) for k, v in raw.get("respuestas", {}).items()}, **_extra_answers()},
         no_evidence=no_evidence.replace("sí", "si"), default_years=default_years, pause_seconds=(int(pause[0]), int(pause[1])),
         portal_caps=portal_caps, min_scores=min_scores, general_cvs=general_cvs,
     )
