@@ -101,6 +101,25 @@ Para postular usa tu sesión de Magneto en el navegador del bot:
 Magneto le muestra a la empresa **tu perfil de Magneto**, no un PDF por vacante: mantenlo al día (igual a tu
 LinkedIn). El CV de la vacante queda en la app como referencia. En modo prueba responde todo y no envía.
 
+## Vigilar portales de empresas
+
+Algunas empresas publican solo en su propio portal: Bancolombia y Ecopetrol usan SAP SuccessFactors, que pide
+una cuenta por empresa. El bot no postula ahí, pero vigila su búsqueda pública en cada vuelta y te avisa
+(registro y Telegram) de las vacantes nuevas cuyo cargo encaja. Por defecto encajan prácticas, junior, software,
+sistemas, tecnología, ciberseguridad, soporte, QA y datos, y se descartan senior, líder, arquitecto, gerente y
+niveles III o IV.
+
+```toml
+[[vigilar]]
+nombre = "Bancolombia"
+sitio = "https://empleo.grupobancolombia.com"
+buscar = ["practicante", "software", "junior", "tecnología"]
+# incluir = [...]   # palabras del cargo que sí (opcional)
+# excluir = [...]   # palabras del cargo que no (opcional)
+```
+
+`python -m runner vigilar` lo revisa ya.
+
 ## Telegram (avisos y control desde el celular)
 
 Un bot de Telegram tuyo, que corre en tu computador (sin abrir puertos) y solo atiende tu chat:

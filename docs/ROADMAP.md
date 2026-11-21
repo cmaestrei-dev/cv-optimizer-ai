@@ -376,6 +376,12 @@ Entregas:
 - [x] Las vacantes saltadas guardan su CV. Si después sus preguntas tienen respuesta, `postular` las devuelve a la cola (`_retry_answered`).
 - [ ] **(dueño)** Crear el bot con @BotFather; luego `python -m runner telegram configurar` e `instalar`.
 
+**Empresas objetivo (2026-11-21).** Revisión en vivo de la lista de empresas:
+- Bancolombia: no tiene prácticas de tecnología publicadas, y sus vacantes junior de software piden título profesional.
+- Ecopetrol: 0 prácticas publicadas.
+- Pragma (práctica 2027-1) y Bold (IT Support, Frontend): sus formularios tienen captcha o piden la cédula, así que postula el dueño; la app le preparó el CV de cada una.
+- [x] `runner/watch.py` y `[[vigilar]]`: en cada vuelta el bot revisa la búsqueda pública de portales SuccessFactors y avisa de las ofertas nuevas cuyo cargo encaja (registro y Telegram). No postula: piden una cuenta por empresa.
+
 ### CV v2: legible para personas y ATS (2026-11-18, pedido del dueño)
 
 La auditoría del PDF anterior encontró:
