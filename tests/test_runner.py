@@ -530,3 +530,14 @@ def test_months_question_with_options_picks_the_right_range():
     q = Question("radio", "¿Cuántos meses de experiencia tienes?", True, "", options, [])
     text = cli._answerer(api, conf, 1, units=True)([q])[q.label]
     assert answers.pick_option(text, options) == "12 a 24 meses"
+
+
+def test_open_time_questions_keep_the_profiles_fuller_answer():
+    from runner.linkedin import Question
+
+    label = "¿Cuánto tiempo tienes de experiencia en estas áreas y para qué empresas?"
+    full = "Casi dos años: Karta (producto propio), Equimat Solutions y El Arte de Nicolás."
+    api = SimpleNamespace(post=lambda path, body: [{"question": label, "answer": full, "needs_you": False}])
+    conf = cfg.Config(api="https://x", token="t", no_evidence="si", default_years=2)
+    out = cli._answerer(api, conf, 1, units=True)([Question("textarea", label, True, "", [], [])])
+    assert out[label] == full

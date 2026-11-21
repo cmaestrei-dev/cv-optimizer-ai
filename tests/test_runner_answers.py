@@ -54,3 +54,13 @@ def test_years_options_pick_the_range_that_contains_them():
 def test_months_questions():
     assert answers.asks_months("¿Cuántos meses de experiencia tienes en ventas?")
     assert not answers.asks_months("¿Cuántos años de experiencia tienes con Python?")
+
+
+def test_yes_no_options_with_more_words():
+    # Magneto (2026-11-21): «Sí, tengo experiencia en…» / «No tengo experiencia…»
+    options = ["Sí, tengo experiencia en administración de servicios web.", "No tengo experiencia, pero estoy interesado.",
+               "He trabajado en soporte técnico."]
+    assert answers.pick_option("Sí", options) == options[0]
+    assert answers.pick_option("No", options) == options[1]
+    assert answers.pick_option("No, vivo en Cartagena de Indias y puedo trasladarme.", ["Si", "No"]) == "No"
+    assert answers.pick_option("Sí, vivo en Cartagena.", ["Si", "No"]) == "Si"
