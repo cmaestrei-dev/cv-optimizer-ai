@@ -381,11 +381,10 @@ def _hand_over(api: Api, v: dict, name: str, note: str) -> None:
 
 def _apply_portal(page, portal: str, pending, *, conf: cfg.Config, api: Api, state: State, submit: bool, limit: int) -> None:
     """Postula a las preparadas de un portal. Se detiene ante una verificación, el tope o una sesión perdida."""
+    import importlib
     import random
     import time as _time
     from pathlib import Path
-
-    from runner import computrabajo_apply, elempleo_apply, linkedin, magneto_apply
 
     name, sent_key = cfg.PORTALS[portal], _key("enviadas", portal)
     quota: dict = {}  # cupo diario de IA de la cuenta (para las preguntas de filtro)
@@ -395,16 +394,14 @@ def _apply_portal(page, portal: str, pending, *, conf: cfg.Config, api: Api, sta
             break
         print(f"\n· {v.get('url')}  (compatibilidad {v.get('puntaje')})")
         answerer = _answerer(api, conf, v["app"], units=portal != "linkedin", quota=quota)
+        module = importlib.import_module("runner.linkedin" if portal == "linkedin" else f"runner.{portal}_apply")
         if portal == "linkedin":
-            result = linkedin.apply(page, v["url"], Path(v["cv"]), answerer, submit=submit, shots=cfg.DATA_DIR / "capturas")
-        elif portal == "magneto":
-            result = magneto_apply.apply(page, v["url"], Path(v["cv"]), answerer, submit=submit)
-        elif portal == "elempleo":
-            result = elempleo_apply.apply(page, v["url"], Path(v["cv"]), answerer, submit=submit)
-        else:
-            result = computrabajo_apply.apply(page, v["url"], Path(v["cv"]), answerer, submit=submit,
-                                              general=Path(conf.general_cvs[portal]),
-                                              uploaded=state.data.setdefault(f"pdfs_{portal}", []))
+            result = module.apply(page, v["url"], Path(v["cv"]), answerer, submit=submit, shots=cfg.DATA_DIR / "capturas")
+        elif portal == "computrabajo":
+            result = module.apply(page, v["url"], Path(v["cv"]), answerer, submit=submit,
+                                  general=Path(conf.general_cvs[portal]), uploaded=state.data.setdefault(f"pdfs_{portal}", []))
+        else:  # magneto, elempleo
+            result = module.apply(page, v["url"], Path(v["cv"]), answerer, submit=submit)
         print(f"  → {result.status}{': ' + result.detail if result.detail else ''}")
         if result.unanswered:
             print("    Sin respuesta (agrégalas a [respuestas] o a tu perfil):", "; ".join(result.unanswered[:4]))
