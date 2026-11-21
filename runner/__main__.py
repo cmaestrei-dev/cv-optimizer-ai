@@ -495,6 +495,11 @@ def cmd_diario(_args) -> int:
             raise
         except Exception:  # noqa: BLE001 — si la búsqueda falla, igual se postula a lo ya preparado
             traceback.print_exc()
+        try:
+            watched = _watch_sites()
+        except Exception:  # noqa: BLE001 — vigilar nunca tumba la vuelta
+            traceback.print_exc()
+            watched = []
         code = cmd_postular(argparse.Namespace(prueba=False, max=0, portal=None))
         state = State(cfg.DATA_DIR / "estado.json")
         notice = f"Hoy: {state.today('enviadas')} enviadas y {state.today('preparadas')} preparadas."
@@ -513,8 +518,40 @@ def cmd_diario(_args) -> int:
         print(notice)
         _notify(notice)
         questions = telegram.pending_questions(state)
-        telegram.notify(notice + (f"\n\n{len(questions)} preguntas de filtro sin respuesta: /preguntas" if questions else ""))
+        from runner import watch
+
+        telegram.notify(notice + (f"\n\n{len(questions)} preguntas de filtro sin respuesta: /preguntas" if questions else "")
+                        + ("\n\n" + watch.notice(watched) if watched else ""))
         return code
+
+
+def _watch_sites() -> list[dict]:
+    """Revisa los portales de empresas de `[[vigilar]]` y devuelve las vacantes nuevas que encajan (no postula)."""
+    from runner import watch
+
+    sites = watch.load_sites()
+    if not sites:
+        return []
+    state = State(cfg.DATA_DIR / "estado.json")
+    new = watch.check(sites, state.data)
+    state.save()
+    if new:
+        print("\n" + watch.notice(new))
+    return new
+
+
+def cmd_vigilar(_args) -> int:
+    from runner import telegram, watch
+
+    if not watch.load_sites():
+        print("No hay portales para vigilar: agrega [[vigilar]] a la configuración (ver runner/README.md).")
+        return 0
+    new = _watch_sites()
+    if new:
+        telegram.notify(watch.notice(new))
+    else:
+        print("Sin vacantes nuevas que encajen en los portales vigilados.")
+    return 0
 
 
 def cmd_telegram(args) -> int:
@@ -620,6 +657,7 @@ def main(argv: list[str] | None = None) -> int:
     postular.add_argument("--portal", choices=list(cfg.PORTALS), help="solo este portal")
     postular.set_defaults(fn=cmd_postular)
     sub.add_parser("diario").set_defaults(fn=cmd_diario)
+    sub.add_parser("vigilar").set_defaults(fn=cmd_vigilar)
     tg = sub.add_parser("telegram")
     tg.add_argument("accion", nargs="?", default="escuchar", choices=["configurar", "instalar", "quitar", "probar", "escuchar"])
     tg.set_defaults(fn=cmd_telegram)
