@@ -547,3 +547,37 @@ def test_elempleo_login_page():
     from runner import browser
 
     assert browser.LOGINS["elempleo"][2] == "https://www.elempleo.com/co/iniciar-sesion"
+
+
+def test_without_ai_quota_a_vacancy_with_questions_waits_for_the_next_round(tmp_path, monkeypatch):
+    # 2026-11-21: con el cupo diario de IA agotado se saltaron 16 vacantes que solo esperaban respuestas de la IA.
+    from runner import magneto_apply
+    from runner.api import ApiError
+    from runner.linkedin import ApplyResult, Question
+
+    calls = []
+
+    def post(path, body):
+        calls.append(path)
+        raise ApiError(429, "Llegaste al límite diario de uso de la IA.")
+
+    def fake_apply(page, url, cv, answerer, *, submit):
+        if url.endswith("sin-preguntas"):
+            return ApplyResult("enviada")
+        label = "¿En qué semestre estás?"
+        got = answerer([Question("text", label, True, "", [], [])])
+        return ApplyResult("enviada") if got else ApplyResult("saltada", "Preguntas sin respuesta", unanswered=[label])
+
+    monkeypatch.setattr(magneto_apply, "apply", fake_apply)
+    cv = tmp_path / "cv.pdf"
+    cv.write_bytes(b"%PDF-1.4")
+    state = State(tmp_path / "estado.json")
+    for job, url in (("mg:1", "u/con-preguntas"), ("mg:2", "u/otra-con-preguntas"), ("mg:3", "u/sin-preguntas")):
+        state.mark(job, "preparada", portal="magneto", app=1, url=url, cv=str(cv), cv_id=5, puntaje=70)
+    conf = cfg.Config(api="https://x", token="t", pause_seconds=(30, 30))
+    api = SimpleNamespace(post=post)
+    monkeypatch.setattr("time.sleep", lambda s: None)
+    cli._apply_portal(None, "magneto", cli._pending(state, "magneto"), conf=conf, api=api, state=state, submit=True, limit=0)
+    estados = {k: v["estado"] for k, v in state.data["vistas"].items()}
+    assert estados == {"mg:1": "preparada", "mg:2": "preparada", "mg:3": "enviada"}
+    assert calls.count("/applications/1/screening") == 1  # tras el primer «cupo agotado» no se vuelve a preguntar

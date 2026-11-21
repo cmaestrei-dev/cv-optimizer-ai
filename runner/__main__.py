@@ -259,7 +259,7 @@ def cmd_buscar(args) -> int:
     return 0
 
 
-def _answerer(api: Api, conf: cfg.Config, application_id: int, *, units: bool = False):
+def _answerer(api: Api, conf: cfg.Config, application_id: int, *, units: bool = False, quota: dict | None = None):
     """Respuestas: primero el banco de la persona; lo demás, el motor de la app con su perfil (verificado).
 
     - Si la verificación marca una respuesta (p. ej. una sigla que el perfil no usa), se pide una vez más.
@@ -268,13 +268,21 @@ def _answerer(api: Api, conf: cfg.Config, application_id: int, *, units: bool = 
     - Preguntas de experiencia que el perfil no respalda, según `sin_evidencia`: "saltar" la vacante; "cero"
       («No», «0», «Aún no tengo experiencia con eso»); o "si" (decisión del dueño: «Sí» y, en años, lo que muestre
       el perfil o al menos `experiencia_por_defecto`). Solo las de experiencia: el resto sigue igual.
+    - `quota`: compartido entre vacantes. Si la app dice que se acabó el cupo diario de IA, queda `quota["agotado"]`
+      y no se le vuelve a preguntar en esta vuelta (las vacantes con preguntas esperan a la siguiente).
     """
     from runner import answers
 
+    quota = quota if quota is not None else {}
+
     def screening(questions: list) -> dict[str, dict]:
+        if quota.get("agotado"):
+            return {}
         try:
             replies = api.post(f"/applications/{application_id}/screening", {"questions": [q.label for q in questions]})
         except ApiError as e:
+            if e.status == 429:
+                quota["agotado"] = True
             print(f"        No se pudieron preparar respuestas: {e.detail}")
             return {}
         return {r["question"]: r for r in replies} if isinstance(replies, list) else {}
@@ -380,12 +388,13 @@ def _apply_portal(page, portal: str, pending, *, conf: cfg.Config, api: Api, sta
     from runner import computrabajo_apply, elempleo_apply, linkedin, magneto_apply
 
     name, sent_key = cfg.PORTALS[portal], _key("enviadas", portal)
+    quota: dict = {}  # cupo diario de IA de la cuenta (para las preguntas de filtro)
     for n, (job_id, v) in enumerate(pending[: limit or len(pending)]):
         if submit and state.today(sent_key) >= conf.cap(portal):
             print("Tope diario de envíos alcanzado.")
             break
         print(f"\n· {v.get('url')}  (compatibilidad {v.get('puntaje')})")
-        answerer = _answerer(api, conf, v["app"], units=portal != "linkedin")
+        answerer = _answerer(api, conf, v["app"], units=portal != "linkedin", quota=quota)
         if portal == "linkedin":
             result = linkedin.apply(page, v["url"], Path(v["cv"]), answerer, submit=submit, shots=cfg.DATA_DIR / "capturas")
         elif portal == "magneto":
@@ -419,6 +428,8 @@ def _apply_portal(page, portal: str, pending, *, conf: cfg.Config, api: Api, sta
                 print(f"    Enviada en {name}, pero la app no la registró: {e.detail}")
             state.mark(job_id, "enviada", portal=portal, **{k: v[k] for k in ("app", "cv", "cv_id", "url", "puntaje")})
             state.count(sent_key)
+        elif result.status == "saltada" and result.unanswered and quota.get("agotado"):
+            print("    Sin cupo de IA para sus preguntas hoy: sigue preparada para la próxima vuelta.")
         elif result.status in ("saltada", "externa", "ya_postulada"):
             keep = {k: v[k] for k in ("cv", "cv_id", "puntaje") if k in v}  # para reintentarla si luego hay respuesta
             state.mark(job_id, result.status, portal=portal, app=v["app"], url=v["url"], **keep,
