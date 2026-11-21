@@ -161,3 +161,34 @@ class LLMClient:
             # DeepSeek documenta respuestas vacías ocasionales en modo JSON.
             raise RetryableError(f"{self.spec.name} devolvió una respuesta vacía.")
         return text.strip()
+
+
+class FallbackLLM:
+    """Mismo contrato que LLMClient: si el proveedor principal no responde (saturado, sin cupo, caído o lento),
+    repite la llamada con el de respaldo. No cubre una clave inválida (es un error de configuración que hay que
+    ver) ni imágenes que el respaldo no acepta."""
+
+    def __init__(self, primary: LLMClient, fallback: LLMClient):
+        self.primary, self.fallback = primary, fallback
+
+    @property
+    def label(self) -> str:
+        return self.primary.label
+
+    @property
+    def spec(self) -> ProviderSpec:
+        return self.primary.spec
+
+    @property
+    def model(self) -> str:
+        return self.primary.model
+
+    def complete(self, prompt: str, *, images: tuple[Image, ...] = (), **kwargs) -> str:
+        try:
+            return self.primary.complete(prompt, images=images, **kwargs)
+        except (RetryableError, LLMUnavailableError) as e:
+            if images and not self.fallback.spec.supports_images:
+                raise
+            logger.warning("%s no respondió (%s); uso %s.", self.primary.label, str(e)[:120], self.fallback.label)
+            return self.fallback.complete(prompt, images=images, **kwargs)
+

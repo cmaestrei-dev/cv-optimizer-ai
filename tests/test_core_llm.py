@@ -6,7 +6,9 @@ from pydantic import BaseModel
 
 from core.llm import (
     PROVIDERS,
+    FallbackLLM,
     Image,
+    LLMAuthError,
     LLMClient,
     LLMConfigError,
     StructuredOutputError,
@@ -20,7 +22,7 @@ from utils.retry import RetryableError
 
 @pytest.fixture(autouse=True)
 def _clean(monkeypatch):
-    for var in ("LLM_EXTRACT", "LLM_WRITE", "GEMINI_API_KEY", "DEEPSEEK_API_KEY"):
+    for var in ("LLM_EXTRACT", "LLM_WRITE", "LLM_FALLBACK", "GEMINI_API_KEY", "DEEPSEEK_API_KEY"):
         monkeypatch.delenv(var, raising=False)
     monkeypatch.setattr("utils.retry.time.sleep", lambda _s: None)
     response_cache.clear()
@@ -148,3 +150,39 @@ class TestGenerateStructured:
         mock_post.return_value = _response(content='{"nope": true}')
         with pytest.raises(StructuredOutputError):
             generate_structured(_client(), "x", _Pet)
+
+
+class TestFallback:
+    """LLM_FALLBACK: si Gemini no responde (saturado, sin cupo), la misma llamada va a DeepSeek."""
+
+    def test_only_with_the_variable_and_its_key(self, monkeypatch):
+        monkeypatch.setenv("GEMINI_API_KEY", "g")
+        assert isinstance(get_llm("extract"), LLMClient)
+        monkeypatch.setenv("LLM_FALLBACK", "deepseek")
+        assert isinstance(get_llm("extract"), LLMClient)  # sin la clave de DeepSeek no hay respaldo
+        monkeypatch.setenv("DEEPSEEK_API_KEY", "d")
+        llm = get_llm("extract")
+        assert isinstance(llm, FallbackLLM) and llm.label.startswith("gemini:")
+        assert llm.fallback.label == "deepseek:deepseek-flash"
+        monkeypatch.setenv("LLM_FALLBACK", "skynet")
+        with pytest.raises(LLMConfigError):
+            get_llm("extract")
+
+    @patch("core.llm.client.requests.post")
+    def test_saturated_primary_goes_to_the_fallback(self, mock_post):
+        mock_post.side_effect = [_response(503), _response(503), _response(503), _response(content="de deepseek")]
+        llm = FallbackLLM(_client("gemini"), _client("deepseek"))
+        assert llm.complete("hola") == "de deepseek"
+        assert "api.deepseek.com" in mock_post.call_args_list[-1].args[0]
+
+    @patch("core.llm.client.requests.post")
+    def test_bad_key_and_images_are_not_hidden(self, mock_post):
+        mock_post.return_value = _response(401)
+        llm = FallbackLLM(_client("gemini"), _client("deepseek"))
+        with pytest.raises(LLMAuthError):
+            llm.complete("hola")
+        mock_post.return_value = _response(503)
+        with pytest.raises(RetryableError):  # DeepSeek no acepta imágenes: el error de Gemini queda a la vista
+            llm.complete("lee esto", images=(Image(b"x", "image/png"),))
+        assert all("googleapis" in c.args[0] for c in mock_post.call_args_list)
+

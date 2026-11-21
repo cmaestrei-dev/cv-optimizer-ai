@@ -44,6 +44,13 @@ if has_secret alerts-mailbox && has_secret alerts-mailbox-password; then
   SECRETS="${SECRETS},ALERTS_MAILBOX=alerts-mailbox:latest,ALERTS_MAILBOX_PASSWORD=alerts-mailbox-password:latest,ALERTS_CRON_TOKEN=alerts-cron-token:latest"
   ACCESS+=(alerts-mailbox alerts-mailbox-password alerts-cron-token)
 fi
+# IA de respaldo (opcional): con el secreto de DeepSeek, responde cuando Gemini no puede (saturado o sin cupo).
+FALLBACK=""
+if has_secret deepseek-api-key; then
+  SECRETS="${SECRETS},DEEPSEEK_API_KEY=deepseek-api-key:latest"
+  ACCESS+=(deepseek-api-key)
+  FALLBACK="@LLM_FALLBACK=deepseek"
+fi
 for secret in "${ACCESS[@]}"; do
   gcloud secrets add-iam-policy-binding "$secret" --project "$PROJECT" --quiet \
     --role roles/secretmanager.secretAccessor --member "serviceAccount:${SA}" >/dev/null
@@ -56,7 +63,7 @@ PARTIES="https://${SERVICE}-${PN}.${REGION}.run.app"
 EXISTING="$(gcloud run services describe "$SERVICE" --project "$PROJECT" --region "$REGION" --format 'value(status.url)' 2>/dev/null || true)"
 if [ -n "$EXISTING" ] && [ "$EXISTING" != "$PARTIES" ]; then PARTIES="${PARTIES},${EXISTING}"; fi
 
-echo "Proyecto: $PROJECT · Región: $REGION · Servicio: $SERVICE · Clerk: $ISSUER · Alertas por correo: $([ "$ALERTS" = 1 ] && echo sí || echo no)"
+echo "Proyecto: $PROJECT · Región: $REGION · Servicio: $SERVICE · Clerk: $ISSUER · Alertas por correo: $([ "$ALERTS" = 1 ] && echo sí || echo no) · IA de respaldo: $([ -n "$FALLBACK" ] && echo DeepSeek || echo no)"
 
 # --no-cpu-throttling: la CPU sigue activa fuera de las peticiones (la cola de trabajos genera CV y
 #   analiza la bandeja después de responder). Tiene su propia capa gratuita.
@@ -67,7 +74,7 @@ gcloud run deploy "$SERVICE" --project "$PROJECT" --region "$REGION" --source . 
   --allow-unauthenticated --no-cpu-throttling --min-instances 0 --max-instances 1 \
   --cpu 1 --memory 1Gi --concurrency 20 --timeout 300 \
   --set-secrets "$SECRETS" \
-  --set-env-vars "^@^CLERK_PUBLISHABLE_KEY=${CLERK_PUBLISHABLE_KEY}@AUTH_JWKS_URL=${ISSUER}/.well-known/jwks.json@AUTH_ISSUER=${ISSUER}@AUTH_AUTHORIZED_PARTIES=${PARTIES}@AI_DAILY_CALLS=200@AI_GLOBAL_DAILY_CALLS=1000"
+  --set-env-vars "^@^CLERK_PUBLISHABLE_KEY=${CLERK_PUBLISHABLE_KEY}@AUTH_JWKS_URL=${ISSUER}/.well-known/jwks.json@AUTH_ISSUER=${ISSUER}@AUTH_AUTHORIZED_PARTIES=${PARTIES}@AI_DAILY_CALLS=600@AI_GLOBAL_DAILY_CALLS=1500${FALLBACK}"
 
 URL="$(gcloud run services describe "$SERVICE" --project "$PROJECT" --region "$REGION" --format 'value(status.url)')"
 case ",${PARTIES}," in
