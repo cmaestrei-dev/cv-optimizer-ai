@@ -93,7 +93,8 @@ La dirección del servicio no se publica en este repositorio (es público): sác
 | `AUTH_AUTHORIZED_PARTIES` | las direcciones `run.app` del servicio (solo tokens pedidos desde esta web) |
 | `CLERK_PUBLISHABLE_KEY` | la entrega `/api/config` a la web |
 | `ALERTS_MAILBOX`, `ALERTS_MAILBOX_PASSWORD`, `ALERTS_CRON_TOKEN` | Secret Manager, solo si existen los secretos del buzón |
-| `AI_DAILY_CALLS` / `AI_GLOBAL_DAILY_CALLS` | 200 llamadas a la IA por cuenta al día / 1000 en total |
+| `AI_DAILY_CALLS` / `AI_GLOBAL_DAILY_CALLS` | 600 llamadas a la IA por cuenta al día / 1500 en total (el bot del dueño agotaba 200 a media tarde) |
+| `DEEPSEEK_API_KEY`, `LLM_FALLBACK=deepseek` | solo si existe el secreto `deepseek-api-key`: responde cuando Gemini no puede (saturado o sin cupo) |
 
 Cloud Run: CPU siempre asignada (la cola de trabajos genera el CV después de responder), 0 a 1
 instancias, 1 vCPU y 1 GiB, cuenta de servicio `cv-optimizer-run`. Sin `DATABASE_URL` de Postgres el
