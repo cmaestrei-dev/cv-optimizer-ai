@@ -391,8 +391,9 @@ Entregas:
   - «Postularme a oferta» es un `POST /co/JobOffers/JobOfferDetail/Save?jobOfferId=…` con el token de la página, sin preguntas. Responde un código: 2 = sigue en el sitio de la empresa, 3 = hoja de vida incompleta, 4 = ya postulada.
   - La sesión (`.ELEMPLEO`) es una cookie de sesión: Chrome la borraba al cerrarse. El perfil del bot ahora reabre la sesión anterior (`session.restore_on_startup = 1`) y así se conserva.
 - [x] `runner/elempleo.py` (búsqueda) y `runner/elempleo_apply.py` (postular con la petición de la página). Probados con páginas de ejemplo y un elempleo falso, sin red. Lo que solo puede hacer el dueño (sitio de la empresa, videocuestionario, postulación rápida) le llega por Telegram como postulación manual.
-- [x] El navegador del bot ocupado ya no tumba la vuelta: la de las 15:47 del 2026-11-21 falló porque se estaba editando elempleo con ese navegador (24 de Computrabajo y 4 de Magneto quedaron sin enviar; se enviaron a mano después). Ahora espera hasta 30 minutos.
+- [x] El navegador del bot ocupado ya no tumba la vuelta: la de las 15:47 del 2026-11-21 falló porque se estaba editando elempleo con ese navegador (24 de Computrabajo y 4 de Magneto quedaron sin enviar; una vuelta a mano envió 7 y 2). Ahora espera hasta 30 minutos.
 - [ ] Primer envío real a elempleo, vigilado.
+- [x] Sin cupo diario de IA, una vacante con preguntas de filtro sigue «preparada» para la vuelta siguiente, en vez de quedar saltada para siempre. En la vuelta manual del 2026-11-21 se saltaron así 16, que se devolvieron a la cola. Tras el primer «cupo agotado», el bot no vuelve a preguntarle a la app en esa vuelta.
 
 ### CV v2: legible para personas y ATS (2026-11-18, pedido del dueño)
 
