@@ -383,6 +383,17 @@ Entregas:
 - Pragma (práctica 2027-1) y Bold (IT Support, Frontend): sus formularios tienen captcha o piden la cédula, así que postula el dueño; la app le preparó el CV de cada una.
 - [x] `runner/watch.py` y `[[vigilar]]`: en cada vuelta el bot revisa la búsqueda pública de portales SuccessFactors y avisa de las ofertas nuevas cuyo cargo encaja (registro y Telegram). No postula: piden una cuenta por empresa.
 
+**elempleo (Fase 8, 2026-11-21).** Pedido del dueño («ya entré a elempleo, continúa y probablemente también debas modificar el perfil»).
+- [x] Hoja de vida del dueño igual a LinkedIn: descripción, experiencias (El Arte de Nicolás, Equimat, Karta; se quitó una freelance que no estaba), estudios formales (UdeC y UNAB), 12 cursos complementarios, 18 habilidades técnicas, el CV general como adjunto (en lugar de uno viejo de «Auxiliar de recursos educativos») y GitHub.
+- [x] Estudio sin postular:
+  - La búsqueda pública `/co/ofertas-empleo/trabajo-<cargo>?fecha=hoy|hace-1-semana|hace-2-semanas|hace-1-mes` (y `-modalidad-remoto`) trae 20 por página con los datos de cada oferta; sin `fecha` mezcla meses.
+  - La oferta publica `JobPosting` y las condiciones (experiencia, estudios, contrato).
+  - «Postularme a oferta» es un `POST /co/JobOffers/JobOfferDetail/Save?jobOfferId=…` con el token de la página, sin preguntas. Responde un código: 2 = sigue en el sitio de la empresa, 3 = hoja de vida incompleta, 4 = ya postulada.
+  - La sesión (`.ELEMPLEO`) es una cookie de sesión: Chrome la borraba al cerrarse. El perfil del bot ahora reabre la sesión anterior (`session.restore_on_startup = 1`) y así se conserva.
+- [x] `runner/elempleo.py` (búsqueda) y `runner/elempleo_apply.py` (postular con la petición de la página). Probados con páginas de ejemplo y un elempleo falso, sin red. Lo que solo puede hacer el dueño (sitio de la empresa, videocuestionario, postulación rápida) le llega por Telegram como postulación manual.
+- [x] El navegador del bot ocupado ya no tumba la vuelta: la de las 15:47 del 2026-11-21 falló porque se estaba editando elempleo con ese navegador (24 de Computrabajo y 4 de Magneto quedaron sin enviar; se enviaron a mano después). Ahora espera hasta 30 minutos.
+- [ ] Primer envío real a elempleo, vigilado.
+
 ### CV v2: legible para personas y ATS (2026-11-18, pedido del dueño)
 
 La auditoría del PDF anterior encontró:
@@ -415,6 +426,8 @@ Cambios:
 | Fecha | Decisión | Por qué |
 |---|---|---|
 | 2026-11-18 | En Computrabajo, CV por vacante marcado «por defecto» al postular, más un CV general fijo | La empresa recibe el PDF por defecto; un CV general en uno de los 10 espacios garantiza que nunca quede sin PDF si Computrabajo solo guardara una referencia y el bot rotara el de la vacante (decisión del dueño) |
+| 2026-11-21 | elempleo se postula con la petición de su botón, desde la página (no haciendo clic) | Después de responder, la página cambia de dirección o abre el sitio de la empresa, y con eso se perdía la respuesta: no se sabía si quedó postulada. El bot no abre sitios de empresas; se los pasa al dueño por Telegram. elempleo envía su hoja de vida, no un PDF por vacante |
+| 2026-11-21 | El perfil de Chrome del bot reabre la sesión anterior al arrancar | elempleo guarda su sesión en una cookie de sesión, que Chrome borra al cerrarse: habría que entrar en cada vuelta, con captcha. Reabrir la sesión anterior es una opción normal de Chrome, no una forma de esconder el bot |
 | 2026-11-21 | Magneto se postula con la misma petición que envía su página (no haciendo clic) | Su cuestionario es un chat de una pregunta a la vez y sus formularios tienen fallas (fechas, borrar). El bot hace antes las mismas consultas que la página y se detiene donde ella le preguntaría algo a la persona (otra cuenta con la misma cédula, cuestionario ya respondido). La empresa recibe el perfil de Magneto, no un PDF, así que el perfil tiene que estar igual a LinkedIn |
 | 2026-11-20 | Preguntas de experiencia del bot: «Sí» y años de junior (2), aunque el perfil no lo muestre; reemplaza al «No» de la fila siguiente | Decisión del dueño: son preguntas de filtro, dice que ya ha hecho lo que preguntan y que en la entrevista responde por ello. Un «No» lo descarta antes de que una persona lea el CV. Se limita a las preguntas de experiencia (un «Sí» a «¿requieres patrocinio?» lo perjudicaría) y no toca el CV, que sigue verificado |
 | 2026-11-20 | Ante una pregunta de experiencia sin respaldo, el bot responde que no la tiene en vez de saltar la vacante | Saltarla perdía vacantes buenas por una sola herramienta; decir «No» o «0» es verdad y deja que la empresa decida. La regla de no inventar sigue: un «Sí» siempre necesita evidencia del perfil |
@@ -498,5 +511,5 @@ Cambios:
 
 1. El bot corre solo (9:17 y 15:47): revisar `registro.log` y Postulaciones los primeros días. LinkedIn: ver la primera alerta reenviada en la bandeja y el primer envío real. Después, la vista web de lo que hizo el bot.
    Pendiente de producto: el resumen del CV empieza con el cargo de la vacante («Soporte Tester QA con 1 año…»), lo que puede leerse como un cargo que no se tuvo. Cambiarlo a un objetivo honesto con evals (requiere clave de IA local).
-   Después: Computrabajo, elempleo y Magneto (postular suele ser un clic), Get on Board y búsquedas de prácticas.
-2. Después, el resto de portales (Computrabajo, Magneto, elempleo) con el mismo esquema.
+   Portales automáticos: LinkedIn (alertas), Computrabajo, Magneto y elempleo. Falta el primer envío real vigilado a elempleo. Después: Get on Board y búsquedas de prácticas.
+2. LinkedIn sin «Solicitud sencilla»: medir cuántas son y adónde llevan (sitios de empresas → Telegram como manuales).

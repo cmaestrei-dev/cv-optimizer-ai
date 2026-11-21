@@ -8,9 +8,11 @@
 - No se usan herramientas para ocultar la automatización ni el puerto de depuración (que expondría la sesión).
 """
 
+import json
 import os
 import shutil
 import signal
+import socket
 import sqlite3
 import subprocess
 import tempfile
@@ -55,13 +57,76 @@ def has_session(profile: Path = PROFILE_DIR, portal: str = "linkedin") -> bool:
     return cookie is not None and cookie in _cookie_names(domain, profile)
 
 
+def _keep_sessions(profile: Path = PROFILE_DIR) -> None:
+    """Que Chrome reabra la sesión anterior al arrancar: si no, al cerrarse borra las cookies «de sesión», y así
+    guarda elempleo la suya (habría que entrar cada vez). Solo con Chrome cerrado: el archivo es suyo."""
+    prefs = profile / "Default" / "Preferences"
+    try:
+        data = json.loads(prefs.read_text(encoding="utf-8"))
+    except (FileNotFoundError, ValueError):
+        return  # perfil nuevo: Chrome crea el archivo al abrirse y se ajusta la vez siguiente
+    if not isinstance(data, dict) or data.get("session", {}).get("restore_on_startup") == 1:
+        return
+    data.setdefault("session", {})["restore_on_startup"] = 1
+    tmp = prefs.with_name("Preferences.cvo")
+    tmp.write_text(json.dumps(data), encoding="utf-8")
+    os.replace(tmp, prefs)
+
+
 def _prepare_profile() -> None:
     PROFILE_DIR.mkdir(parents=True, exist_ok=True)
     os.chmod(PROFILE_DIR, 0o700)
+    if owner_pid(PROFILE_DIR) is None:
+        _keep_sessions(PROFILE_DIR)
 
 
-class NoDisplayError(RuntimeError):
+class BrowserUnavailableError(RuntimeError):
+    """No se puede abrir el navegador del bot ahora: la próxima vuelta lo intenta."""
+
+
+class NoDisplayError(BrowserUnavailableError):
     """No hay sesión gráfica donde abrir la ventana del bot."""
+
+
+class ProfileBusyError(BrowserUnavailableError):
+    """Otro Chrome (una vuelta anterior o una ventana abierta a mano) tiene el perfil del bot."""
+
+
+def owner_pid(profile: Path = PROFILE_DIR) -> int | None:
+    """El proceso de Chrome que tiene abierto el perfil según su candado, o None si está libre.
+
+    Un candado de un proceso que ya no existe en este equipo no cuenta: Chrome lo reemplaza solo. El de otro equipo
+    no se puede comprobar y cuenta como ocupado (Chrome tampoco abriría el perfil)."""
+    try:
+        target = os.readlink(profile / "SingletonLock")  # «<equipo>-<pid>»
+    except OSError:
+        return None
+    host, _, pid = target.rpartition("-")
+    if not pid.isdigit():
+        return None
+    if host != socket.gethostname():
+        return int(pid)
+    try:
+        os.kill(int(pid), 0)
+    except ProcessLookupError:
+        return None
+    except PermissionError:
+        pass  # existe, pero es de otro usuario
+    return int(pid)
+
+
+def wait_free(wait_seconds: int = 1800, poll_seconds: int = 15) -> None:
+    """Espera a que nadie más tenga abierto el perfil (p. ej. una vuelta que aún no termina). Si no, el Chrome nuevo
+    se uniría al abierto («Se está abriendo en una sesión de navegador existente») y la vuelta fallaría."""
+    deadline = time.monotonic() + wait_seconds
+    told = False
+    while owner_pid(PROFILE_DIR) is not None:
+        if time.monotonic() >= deadline:
+            raise ProfileBusyError("El navegador del bot sigue abierto por otro programa: la próxima vuelta lo intenta.")
+        if not told:
+            print("El navegador del bot está abierto (otra vuelta o una ventana): espero a que se cierre…")
+            told = True
+        time.sleep(poll_seconds)
 
 
 def ensure_display(wait_seconds: int = 600) -> None:
@@ -85,10 +150,11 @@ def ensure_display(wait_seconds: int = 600) -> None:
         time.sleep(15)
 
 
-def open_context(playwright, *, headless: bool = False):
-    _prepare_profile()
+def open_context(playwright, *, headless: bool = False, wait_seconds: int = 1800):
     if not headless:
         ensure_display()
+    wait_free(wait_seconds)
+    _prepare_profile()
     return playwright.chromium.launch_persistent_context(
         str(PROFILE_DIR), channel="chrome", headless=headless, chromium_sandbox=True,
         ignore_default_args=["--password-store=basic"], viewport={"width": 1280, "height": 860}, locale="es-CO",
@@ -103,7 +169,7 @@ def login(portal: str = "linkedin", *, timeout_minutes: int = 25) -> int:
         print("No encuentro Google Chrome instalado.")
         return 1
     domain, cookie, page = LOGINS[portal]
-    if os.path.lexists(PROFILE_DIR / "SingletonLock"):  # otro Chrome tiene el perfil: el nuevo se cerraría al instante
+    if owner_pid(PROFILE_DIR) is not None:  # otro Chrome tiene el perfil: el nuevo se cerraría al instante
         print("El navegador del bot ya está abierto (¿hay una vuelta corriendo?). Ciérralo o espera a que termine.")
         return 1
     if has_session(portal=portal):

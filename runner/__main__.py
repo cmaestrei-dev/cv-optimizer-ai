@@ -2,7 +2,7 @@
 
     python -m runner configurar      crea la configuración para editar
     python -m runner token           guarda el token del bot (se crea en la app: Perfil → Bot de LinkedIn)
-    python -m runner entrar [portal] abre el navegador del bot para que inicies sesión (linkedin, computrabajo o magneto)
+    python -m runner entrar [portal] abre el navegador del bot para que inicies sesión (linkedin, computrabajo, magneto, elempleo)
     python -m runner importar CV.pdf carga tu CV o el PDF de tu LinkedIn en tu perfil de la app (solo lo nuevo)
     python -m runner buscar          busca vacantes, las analiza con tu perfil y prepara el CV de cada una
     python -m runner postular        postula a las preparadas con «Solicitud sencilla» (--prueba: sin enviar)
@@ -18,7 +18,7 @@ from datetime import UTC, date, datetime
 from pathlib import Path
 from types import SimpleNamespace
 
-from runner import computrabajo, discover, magneto
+from runner import computrabajo, discover, elempleo, magneto
 from runner import config as cfg
 from runner.api import Api, ApiError
 from runner.browser import LOGINS  # sin Playwright: solo direcciones y nombres de cookies
@@ -80,10 +80,10 @@ def _key(kind: str, portal: str) -> str:
 
 
 def _portal(name: str):
-    return {"linkedin": discover, "computrabajo": computrabajo, "magneto": magneto}[name]
+    return {"linkedin": discover, "computrabajo": computrabajo, "magneto": magneto, "elempleo": elempleo}[name]
 
 
-PLATFORM_PORTAL = {"LinkedIn": "linkedin", "Computrabajo": "computrabajo", "Magneto": "magneto"}
+PLATFORM_PORTAL = {"LinkedIn": "linkedin", "Computrabajo": "computrabajo", "Magneto": "magneto", "elempleo": "elempleo"}
 
 
 def _job_id(portal: str, url: str) -> str:
@@ -91,9 +91,9 @@ def _job_id(portal: str, url: str) -> str:
     if portal == "linkedin":
         match = re.search(r"/jobs/view/(\d+)", url)
         return match.group(1) if match else ""
-    if portal == "magneto":
+    if portal in ("magneto", "elempleo"):  # el número final del enlace
         match = re.search(r"-(\d+)/?$", url.split("#")[0].split("?")[0])
-        return magneto.PREFIX + match.group(1) if match else ""
+        return (magneto.PREFIX if portal == "magneto" else elempleo.PREFIX) + match.group(1) if match else ""
     match = re.search(r"-([0-9A-Fa-f]{16,})/?$", url.split("#")[0].split("?")[0])
     return computrabajo.PREFIX + match.group(1).upper() if match else ""
 
@@ -172,7 +172,7 @@ def cmd_buscar(args) -> int:
         _refresh_alerts(api)
         inbox = [x for x in api.get("/applications?view=bandeja") if x.get("platform") in PLATFORM_PORTAL]
         if inbox:
-            print(f"\nBandeja de la app: {len(inbox)} vacantes de LinkedIn o Computrabajo por revisar")
+            print(f"\nBandeja de la app: {len(inbox)} vacantes de portales por revisar")
         for item in inbox:
             portal = PLATFORM_PORTAL[item["platform"]]
             job_id = _job_id(portal, item.get("url") or "")
@@ -354,13 +354,30 @@ def _pending(state: State, portal: str) -> list[tuple[str, dict]]:
             and v.get("cv") and Path(v["cv"]).is_file() and v.get("cv_id")]
 
 
+def _hand_over(api: Api, v: dict, name: str, note: str) -> None:
+    """Lo que solo la persona puede hacer tras una postulación (p. ej. seguir en el sitio de la empresa): a Telegram."""
+    from hashlib import sha256
+
+    from runner import telegram
+
+    try:
+        app = api.get(f"/applications/{v['app']}")
+    except ApiError:
+        app = {}
+    item = {"id": sha256(v["url"].encode()).hexdigest()[:12], "url": v["url"], "titulo": app.get("role") or f"Vacante de {name}",
+            "empresa": app.get("company") or name, "cv": v.get("cv") or "", "nota": note, "motivo": "", "respuestas": "",
+            "puntaje": v.get("puntaje")}
+    sent = telegram.add_manual(item)
+    print(f"    Para ti: {note}" + (" (te lo mandé por Telegram)" if sent else ""))
+
+
 def _apply_portal(page, portal: str, pending, *, conf: cfg.Config, api: Api, state: State, submit: bool, limit: int) -> None:
     """Postula a las preparadas de un portal. Se detiene ante una verificación, el tope o una sesión perdida."""
     import random
     import time as _time
     from pathlib import Path
 
-    from runner import computrabajo_apply, linkedin, magneto_apply
+    from runner import computrabajo_apply, elempleo_apply, linkedin, magneto_apply
 
     name, sent_key = cfg.PORTALS[portal], _key("enviadas", portal)
     for n, (job_id, v) in enumerate(pending[: limit or len(pending)]):
@@ -373,6 +390,8 @@ def _apply_portal(page, portal: str, pending, *, conf: cfg.Config, api: Api, sta
             result = linkedin.apply(page, v["url"], Path(v["cv"]), answerer, submit=submit, shots=cfg.DATA_DIR / "capturas")
         elif portal == "magneto":
             result = magneto_apply.apply(page, v["url"], Path(v["cv"]), answerer, submit=submit)
+        elif portal == "elempleo":
+            result = elempleo_apply.apply(page, v["url"], Path(v["cv"]), answerer, submit=submit)
         else:
             result = computrabajo_apply.apply(page, v["url"], Path(v["cv"]), answerer, submit=submit,
                                               general=Path(conf.general_cvs[portal]),
@@ -384,7 +403,9 @@ def _apply_portal(page, portal: str, pending, *, conf: cfg.Config, api: Api, sta
             state.pause(24, f"{name}: {result.status} ({result.detail[:80]})", kind=_key("cuenta", portal))
             print(f"Paro {name} 24 horas. Si fue una verificación, entra tú a {name} y complétala.")
             break
-        if result.status == "sin_espacio":
+        if result.follow_up:
+            _hand_over(api, v, name, result.follow_up)
+        if result.status in ("sin_espacio", "perfil"):
             print(f"Paro {name}: {result.detail}")
             break
         if result.status == "sin_sesion":
@@ -444,7 +465,7 @@ def cmd_postular(args) -> int:
         with sync_playwright() as p:
             try:
                 context = browser.open_context(p)
-            except browser.NoDisplayError as e:
+            except browser.BrowserUnavailableError as e:
                 print(e)
                 return 0
             page = context.pages[0] if context.pages else context.new_page()
@@ -556,7 +577,6 @@ def cmd_vigilar(_args) -> int:
 
 def cmd_manual(args) -> int:
     """Agrega una postulación que debe enviar la persona (captcha, cédula o cuenta propia) y se la manda por Telegram."""
-    import json as _json
     from hashlib import sha256
 
     from runner import telegram
@@ -569,11 +589,7 @@ def cmd_manual(args) -> int:
             "empresa": args.empresa, "cv": cv, "nota": args.nota or "", "motivo": args.motivo or "",
             "respuestas": str(Path(args.respuestas).expanduser().resolve()) if args.respuestas else "",
             "puntaje": args.puntaje}
-    items = [i for i in telegram._read_json(telegram.MANUAL_FILE, []) if i.get("id") != item["id"]]
-    items.append(item)
-    telegram.MANUAL_FILE.parent.mkdir(parents=True, exist_ok=True)
-    telegram.MANUAL_FILE.write_text(_json.dumps(items, ensure_ascii=False, indent=1), encoding="utf-8")
-    sent = telegram.send_manual(item)
+    sent = telegram.add_manual(item)
     print(f"Agregada: {args.titulo} — {args.empresa}." + (" Enviada por Telegram." if sent else " (Telegram no configurado)"))
     return 0
 
