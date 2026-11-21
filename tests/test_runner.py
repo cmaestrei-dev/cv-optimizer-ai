@@ -541,3 +541,9 @@ def test_open_time_questions_keep_the_profiles_fuller_answer():
     conf = cfg.Config(api="https://x", token="t", no_evidence="si", default_years=2)
     out = cli._answerer(api, conf, 1, units=True)([Question("textarea", label, True, "", [], [])])
     assert out[label] == full
+
+
+def test_elempleo_login_page():
+    from runner import browser
+
+    assert browser.LOGINS["elempleo"][2] == "https://www.elempleo.com/co/iniciar-sesion"

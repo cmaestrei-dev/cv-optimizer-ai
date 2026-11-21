@@ -641,7 +641,7 @@ def main(argv: list[str] | None = None) -> int:
     sub.add_parser("token").set_defaults(fn=cmd_token)
     entrar = sub.add_parser("entrar")
     entrar.add_argument("portal", nargs="?", default="linkedin", choices=list(LOGINS),
-                        help="linkedin (si no se dice), computrabajo o magneto")
+                        help="linkedin (si no se dice), computrabajo, magneto o elempleo")
     entrar.set_defaults(fn=cmd_entrar)
     importar = sub.add_parser("importar")
     importar.add_argument("pdf", help="ruta del PDF (tu CV o «Guardar en PDF» de tu perfil de LinkedIn)")

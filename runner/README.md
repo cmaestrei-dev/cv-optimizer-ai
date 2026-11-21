@@ -80,6 +80,7 @@ Inicia sesión una vez en el navegador del bot (con el bot detenido):
 ```bash
 python -m runner entrar computrabajo   # entra con tu correo y contraseña; cierra la ventana al terminar
 python -m runner entrar magneto        # igual, para Magneto
+python -m runner entrar elempleo       # igual, para elempleo (por ahora, para estudiar cómo se postula)
 ```
 
 ## Magneto
