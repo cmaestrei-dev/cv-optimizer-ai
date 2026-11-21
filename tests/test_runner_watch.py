@@ -36,4 +36,10 @@ def test_sites_come_from_the_config(tmp_path):
     path.write_text('[[vigilar]]\nnombre = "Ecopetrol"\nsitio = "https://jobs.ecopetrol.com.co/"\nbuscar = ["practicante"]\n',
                     encoding="utf-8")
     (site,) = watch.load_sites(path)
-    assert site.base == "https://jobs.ecopetrol.com.co" and site.terms == ["practicante"] and "junior" in site.include
+    assert site.base == "https://jobs.ecopetrol.com.co" and site.terms == ["practicante"] and "software" in site.include
+
+
+def test_short_words_match_whole_words_only():
+    assert not watch.matches(SITE, "Practicante de Ciencias Económicas")  # «ti» dentro de «practicante»
+    assert watch.matches(SITE, "Analista de Soporte TI")
+    assert not watch.matches(SITE, "Analista III de Datos") and watch.matches(SITE, "Analista de Datos")

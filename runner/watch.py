@@ -24,8 +24,8 @@ from runner.discover import UA
 
 # Palabras de tecnología en el cargo («Practicante en Tecnología» sí; «Practicante de Ciencias Económicas» no)
 DEFAULT_INCLUDE = ["software", "desarroll", "sistemas", "tecnolog", "informatic", "ciberseg", "seguridad informatica",
-                   "soporte", " ti ", " it ", "qa", "pruebas", "datos", "programa", "devops", "cloud", "web"]
-DEFAULT_EXCLUDE = ["senior", "lider", "arquitect", "gerente", "director", "jefe", " iii", " iv"]
+                   "soporte", "ti", "it", "qa", "pruebas", "datos", "programa", "devops", "cloud", "web"]
+DEFAULT_EXCLUDE = ["senior", "lider", "arquitect", "gerente", "director", "jefe", "iii", "iv"]
 _LINK = re.compile(r'<a[^>]+class="jobTitle-link"[^>]+href="([^"]+)"[^>]*>([^<]+)</a>')
 
 
@@ -79,9 +79,15 @@ def parse(page: str, base: str) -> list[tuple[str, str, str]]:
     return out
 
 
+def _has(word: str, text: str) -> bool:
+    """La palabra al comienzo de una palabra del cargo («desarroll» → «desarrollador»); las cortas, completas («ti»)."""
+    w = _norm(word).strip()
+    return bool(w) and re.search(r"\b" + re.escape(w) + (r"\b" if len(w) <= 3 else ""), text) is not None
+
+
 def matches(site: Site, title: str) -> bool:
     t = _norm(title)
-    return any(_norm(w).strip() in t for w in site.include) and not any(_norm(w).rstrip() in t for w in site.exclude)
+    return any(_has(w, t) for w in site.include) and not any(_has(w, t) for w in site.exclude)
 
 
 def fetch(url: str, *, timeout: float = 25) -> str:
