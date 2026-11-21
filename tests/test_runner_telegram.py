@@ -122,7 +122,7 @@ def test_experience_questions_count_as_answered_in_si_mode(files, tmp_path):
                preguntas=["¿Tiene experiencia en administración de servicios web?", "Vive en Bogotá"])
     conf = cfg.Config(api="https://x", token="t", no_evidence="si", answers={"vive en": "No, vivo en Cartagena."})
     assert cli._retry_answered(state, conf) == 1
-    conf.no_evidence = "saltar"
+    conf = cfg.Config(api="https://x", token="t", no_evidence="saltar", answers={"vive en": "No, vivo en Cartagena."})
     state.mark("mg:1", "saltada", portal="magneto", app=1, url="u", cv="/x.pdf", cv_id=3,
                preguntas=["¿Tiene experiencia en administración de servicios web?"])
     assert cli._retry_answered(state, conf) == 0
