@@ -8,8 +8,11 @@ Lo verificado leyendo su página y su código, sin postular (2026-11-21):
   2 = postulada y la empresa pide seguir en su sitio (`Url`; la página la abre en otra pestaña);
   3 = hoja de vida incompleta; 4 = ya postulada; 5 = la página lleva a otra dirección; lo demás = postulada.
   El bot hace esa misma petición desde la página (no abre el sitio de la empresa: se lo pasa a la persona).
-- Las ofertas de «postulación rápida» (`data-is-quick-offer-application="True"`) abren un formulario con adjuntos.
-  Ninguna de 58 ofertas de tecnología lo era: el bot no las hace y se las pasa a la persona.
+- Las ofertas de «postulación rápida» (`data-is-quick-offer-application="True"`; sin sesión todas se ven normales)
+  abren un formulario: «La hoja de vida que recibirá la empresa es:» con los PDF adjuntos a la hoja de vida
+  (`Attachments.SelectedIds`) y se envía a `/co/JobOffers/JobOfferDetail/SaveQuickApplication?JobOfferId=…` con
+  `IsQuickApplicationOffer=True`. El bot elige el primer PDF adjunto (el CV general) y no sube archivos: lo que se
+  sube ahí queda también en la hoja de vida (máximo 5). Responde con los mismos códigos.
 - Ya postulada: `#hdnvars` trae `"offerapplied": true`. Si la empresa usa videocuestionario (Vprez), la página
   trae su dirección en `#vprezInputHidden`: eso lo hace la persona.
 - elempleo envía la hoja de vida de elempleo (con el CV general adjunto), no un PDF por vacante: el CV de la
@@ -37,6 +40,25 @@ _POST = """async (url) => {
   const field = document.querySelector('input[name="__RequestVerificationToken"]');
   const body = new URLSearchParams({__RequestVerificationToken: field ? field.value : ''});
   const r = await fetch(url, {method: 'POST', body, credentials: 'same-origin',
+    headers: {'X-Requested-With': 'XMLHttpRequest', 'Accept': 'application/json, text/javascript, */*; q=0.01'}});
+  return {status: r.status, text: await r.text()};
+}"""
+
+# La de «postulación rápida» (sin archivo nuevo): los campos del formulario, el primer PDF adjunto de la hoja de vida
+# y lo que agrega la página (`IsQuickApplicationOffer` y la nota, que sin nota va como «undefined»).
+_QUICK = """async () => {
+  const form = document.querySelector('form.js-quick-application-form');
+  const select = form && form.querySelector('select[name="Attachments.SelectedIds"]');
+  const option = select && [...select.options].find(o => o.value && o.value !== '-1');
+  if (!option) return {error: 'no hay un PDF adjunto para elegir'};
+  const body = new URLSearchParams();
+  for (const [key, value] of new FormData(form)) {
+    if (typeof value === 'string' && key !== 'Attachments.SelectedIds') body.append(key, value);
+  }
+  body.append('Attachments.SelectedIds', option.value);
+  body.append('IsQuickApplicationOffer', 'True');
+  body.append('ApplicationNote', 'undefined');
+  const r = await fetch(form.action, {method: 'POST', body, credentials: 'same-origin',
     headers: {'X-Requested-With': 'XMLHttpRequest', 'Accept': 'application/json, text/javascript, */*; q=0.01'}});
   return {status: r.status, text: await r.text()};
 }"""
@@ -76,21 +98,27 @@ def apply(page, offer_url: str, cv_pdf: Path, answerer: Answerer, *, submit: boo
         return ApplyResult("sin_sesion", "El navegador del bot no tiene sesión de elempleo: python -m runner entrar elempleo")
     if _flags(page).get("offerapplied"):
         return ApplyResult("ya_postulada")
-    if not page.locator(".js-apply-offer").count():
+    quick = _attr(page, "input.js-config", "data-is-quick-offer-application").lower() == "true"
+    if quick:
+        attached = _attr(page, "form.js-quick-application-form select[name='Attachments.SelectedIds'] option:not([value='-1'])", "value")
+        if not attached:
+            return ApplyResult("externa", "Postulación rápida sin un PDF adjunto en tu hoja de vida de elempleo",
+                               follow_up="Adjunta tu CV a tu hoja de vida de elempleo y postúlate (postulación rápida).")
+    elif not page.locator(".js-apply-offer").count():
         return ApplyResult("saltada", "La oferta no tiene «Postularme a oferta» (¿cerrada o con postulación especial?)")
-    if _attr(page, "input.js-config", "data-is-quick-offer-application").lower() == "true":
-        return ApplyResult("externa", "Oferta de «postulación rápida» con adjuntos: el bot no la hace",
-                           follow_up="Postúlate tú en elempleo (postulación rápida con adjuntos).")
     video = _attr(page, "#vprezInputHidden", "data-vprez-url")
     if not submit:
-        return ApplyResult("revisada", "Modo prueba: todo listo y no se envió" + (" (pide videocuestionario)" if video else ""))
-    target = _attr(page, ".js-apply-offer", "data-url")
-    if SAVE not in target:
+        return ApplyResult("revisada", "Modo prueba: todo listo y no se envió" + (" (postulación rápida)" if quick else "")
+                           + (" (pide videocuestionario)" if video else ""))
+    target = "" if quick else _attr(page, ".js-apply-offer", "data-url")
+    if not quick and SAVE not in target:
         return ApplyResult("error", "No encontré la dirección de «Postularme a oferta» en la página")
     try:
-        reply = page.evaluate(_POST, target)
+        reply = page.evaluate(_QUICK) if quick else page.evaluate(_POST, target)
     except Exception as e:  # noqa: BLE001 — sin respuesta no se sabe si se postuló: que lo revise la persona
         return ApplyResult("error", f"elempleo no respondió al postular ({str(e)[:80]})")
+    if reply.get("error"):
+        return ApplyResult("error", f"elempleo: {reply['error']}")
     try:
         data = json.loads(reply.get("text") or "")
     except ValueError:  # una página en vez de JSON: verificación o sesión vencida

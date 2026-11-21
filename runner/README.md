@@ -120,7 +120,8 @@ no hay que entrar cada vez.
 4. Si elempleo dice que tu hoja de vida está incompleta, se detiene.
 
 elempleo le muestra a la empresa **tu hoja de vida de elempleo** (con el CV que tengas adjunto allá), no un PDF por
-vacante: mantenla al día. Las ofertas de «postulación rápida» (con adjuntos) te las pasa por Telegram.
+vacante: mantenla al día. En las ofertas de «postulación rápida», donde se elige qué PDF recibe la empresa, el bot
+elige el primero que tengas adjunto (tu CV general) y no sube archivos.
 
 ## El navegador del bot ocupado
 
