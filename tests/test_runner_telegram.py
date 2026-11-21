@@ -20,6 +20,8 @@ def files(tmp_path, monkeypatch):
     monkeypatch.setattr(telegram, "EXTRA_ANSWERS", tmp_path / "extra.json")
     monkeypatch.setattr(cfg, "EXTRA_ANSWERS_FILE", tmp_path / "extra.json")
     monkeypatch.setattr(telegram, "_bank", lambda: {"aspiracion salarial": "3000000"})
+    monkeypatch.setattr(telegram, "MANUAL_FILE", tmp_path / "manuales.json")
+    monkeypatch.setattr(telegram, "MANUAL_DONE", tmp_path / "manuales_hechas.json")
     return tmp_path
 
 
@@ -135,3 +137,19 @@ def test_start_button_without_code_gets_a_hint_and_the_code_is_used_once(files):
     assert telegram.pair(client, telegram.pending_code(), minutes=1) == 999
     assert "código" in client.sent[0][1] and client.sent[0][0] == 999
     assert telegram.pending_code() == ""  # se usa una sola vez
+
+
+def test_manual_applications_are_listed_and_marked_done(files, tmp_path, monkeypatch):
+    cv = tmp_path / "cv.pdf"
+    cv.write_bytes(b"%PDF-1.4 prueba")
+    sent = []
+    monkeypatch.setattr(telegram, "send_manual", lambda item: sent.append(item) or True)
+    assert cli.main(["manual", "https://jobs.bold.co/o/it-support-analyst-colombia", "--titulo", "IT Support Analyst",
+                     "--empresa", "Bold", "--cv", str(cv), "--nota", "Pide aspiración salarial", "--puntaje", "70"]) == 0
+    assert sent and sent[0]["cv"] == str(cv.resolve())
+    reply, _ = telegram.handle("/manuales", State(tmp_path / "e.json"), [])
+    assert "1. IT Support Analyst — Bold" in reply
+    assert "Marqué como enviada" in telegram.handle("/hecha 1", State(tmp_path / "e.json"), [])[0]
+    assert telegram.manual_items() == []
+    text = telegram.manual_message(sent[0])
+    assert "compatibilidad 70" in text and "jobs.bold.co" in text and "/hecha" in text
