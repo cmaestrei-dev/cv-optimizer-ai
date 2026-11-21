@@ -300,7 +300,9 @@ def _answerer(api: Api, conf: cfg.Config, application_id: int, *, units: bool = 
             reply = by_question.get(q.label, {})
             text = "" if reply.get("needs_you") else (reply.get("answer") or "")
             choice = q.kind in ("radio", "select")
-            if answers.is_years(q.label):
+            if answers.is_years(q.label) and not choice and not q.numeric and len(re.findall(r"[^\W\d_]{3,}", text)) >= 4:
+                pass  # pregunta abierta («¿cuánto tiempo y en qué empresas?»): la respuesta del perfil dice más que un número
+            elif answers.is_years(q.label):
                 text = answers.to_integer(text) or ""
                 if conf.no_evidence == "si":
                     least = conf.default_years * (12 if answers.asks_months(q.label) else 1)

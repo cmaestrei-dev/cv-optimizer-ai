@@ -87,12 +87,14 @@ def pick_option(answer: str, options: list[str]) -> str | None:
             return original
     if a.isdigit() and any(_NUMBER.search(o) for _, o in clean):
         return pick_years(int(a), [original for original, _ in clean])
-    if a in _YES or a in _NO:
-        wanted = _YES if a in _YES else _NO
+    first = lambda s: re.split(r"[\s,.;:]+", s, maxsplit=1)[0]  # noqa: E731 — «Sí, tengo…» → «si»
+    if a in _YES or a in _NO or first(a) in (_YES | _NO) - {"1", "0"}:
+        wanted = _YES if (a in _YES or first(a) in _YES) else _NO
         for original, o in clean:
-            if o in wanted or o.split(" ")[0] in wanted:
+            if o in wanted or first(o) in wanted:
                 return original
-        return None
+        if a in _YES or a in _NO:
+            return None  # un «sí» o «no» solo no se parece a ninguna otra opción
     for original, o in clean:
         if a in o or o in a:
             return original
