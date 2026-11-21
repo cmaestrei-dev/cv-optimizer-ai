@@ -25,6 +25,7 @@ from runner.state import State
 
 TOKEN_FILE = cfg.CONFIG_DIR / "telegram"
 CHAT_FILE = cfg.CONFIG_DIR / "telegram_chat"
+CODE_FILE = cfg.CONFIG_DIR / "telegram_codigo"  # código de emparejamiento pendiente (se borra al usarlo)
 CONTROL_FILE = cfg.DATA_DIR / "control.json"
 EXTRA_ANSWERS = cfg.EXTRA_ANSWERS_FILE
 API = "https://api.telegram.org/bot{token}/{method}"
@@ -108,19 +109,42 @@ def chat_id() -> int | None:
         return None
 
 
-def pair(client: Client, code: str, *, minutes: int = 10, offset: int = 0) -> int | None:
+def pair(client: Client, code: str, *, minutes: float = 10, offset: int = 0) -> int | None:
     """Espera «/start <código>» y guarda ese chat como el único que el bot atiende."""
     deadline = time.monotonic() + minutes * 60
     while time.monotonic() < deadline:
-        for update in client.updates(offset, wait=20):
+        try:
+            updates = client.updates(offset, wait=20)
+        except TelegramError as e:
+            print(e)
+            time.sleep(15)
+            continue
+        for update in updates:
             offset = update["update_id"] + 1
             message = update.get("message") or {}
-            if (message.get("text") or "").strip() == f"/start {code}" and message.get("chat", {}).get("type") == "private":
-                chat = int(message["chat"]["id"])
+            text, chat_info = (message.get("text") or "").strip(), message.get("chat", {})
+            if chat_info.get("type") != "private":
+                continue
+            if text == f"/start {code}":
+                chat = int(chat_info["id"])
                 _write_private(CHAT_FILE, f"{chat}\n")
+                CODE_FILE.unlink(missing_ok=True)
                 client.call("getUpdates", offset=offset, timeout=0)  # marca como leídos los mensajes de antes
                 return chat
+            if text.startswith("/start"):  # p. ej. el botón «Iniciar», que no lleva el código
+                client.send(int(chat_info["id"]), "Para emparejar, escribe /start seguido del código que muestra tu computador.")
     return None
+
+
+def pending_code() -> str:
+    try:
+        return CODE_FILE.read_text(encoding="utf-8").strip()
+    except FileNotFoundError:
+        return ""
+
+
+def save_code(code: str) -> None:
+    _write_private(CODE_FILE, code + "\n")
 
 
 def new_code() -> str:

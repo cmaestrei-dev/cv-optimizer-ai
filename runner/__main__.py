@@ -532,12 +532,14 @@ def cmd_telegram(args) -> int:
         except telegram.TelegramError as e:
             print(e)
             return 1
-        code = telegram.new_code()
-        print(f"3. Abre tu bot @{me.get('username')} en Telegram y envíale exactamente:  /start {code}")
-        print("   (tienes 10 minutos; solo ese chat podrá usar el bot)")
+        code = telegram.pending_code() or telegram.new_code()
+        telegram.save_code(code)
+        print(f"3. Abre tu bot @{me.get('username')} en Telegram y escríbele exactamente:  /start {code}")
+        print("   (solo ese chat podrá usar el bot; te espero 10 minutos aquí)")
         chat = telegram.pair(client, code)
         if not chat:
-            print("No llegó el código a tiempo. Vuelve a correr: python -m runner telegram configurar")
+            print("No llegó todavía. Si ya instalaste el servicio (python -m runner telegram instalar), tu bot seguirá")
+            print(f"esperando «/start {code}» sin límite de tiempo.")
             return 1
         client.send(chat, "¡Listo! Desde aquí te aviso lo que solo tú puedes hacer.\n\n" + telegram.HELP)
         print("Emparejado. Ahora deja el bot escuchando siempre: python -m runner telegram instalar")
@@ -556,6 +558,12 @@ def cmd_telegram(args) -> int:
         print("Listo: el bot de Telegram ya no escucha.")
         return 0
     tok, chat = telegram.token(), telegram.chat_id()
+    if tok and not chat and args.accion == "escuchar" and (code := telegram.pending_code()):
+        print(f"Esperando «/start {code}» en Telegram para emparejar…")
+        client = telegram.Client(tok)
+        chat = telegram.pair(client, code, minutes=60 * 24 * 365)
+        if chat:
+            client.send(chat, "¡Listo! Desde aquí te aviso lo que solo tú puedes hacer.\n\n" + telegram.HELP)
     if not tok or not chat:
         print("Falta configurarlo: python -m runner telegram configurar")
         return 1

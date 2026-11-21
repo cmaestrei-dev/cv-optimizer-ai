@@ -15,6 +15,7 @@ from runner.state import State
 def files(tmp_path, monkeypatch):
     monkeypatch.setattr(telegram, "TOKEN_FILE", tmp_path / "telegram")
     monkeypatch.setattr(telegram, "CHAT_FILE", tmp_path / "telegram_chat")
+    monkeypatch.setattr(telegram, "CODE_FILE", tmp_path / "telegram_codigo")
     monkeypatch.setattr(telegram, "CONTROL_FILE", tmp_path / "control.json")
     monkeypatch.setattr(telegram, "EXTRA_ANSWERS", tmp_path / "extra.json")
     monkeypatch.setattr(cfg, "EXTRA_ANSWERS_FILE", tmp_path / "extra.json")
@@ -126,3 +127,11 @@ def test_experience_questions_count_as_answered_in_si_mode(files, tmp_path):
     state.mark("mg:1", "saltada", portal="magneto", app=1, url="u", cv="/x.pdf", cv_id=3,
                preguntas=["¿Tiene experiencia en administración de servicios web?"])
     assert cli._retry_answered(state, conf) == 0
+
+
+def test_start_button_without_code_gets_a_hint_and_the_code_is_used_once(files):
+    telegram.save_code("654321")
+    client = FakeClient([[msg(1, 999, "/start")], [msg(2, 999, "/start 654321")]])
+    assert telegram.pair(client, telegram.pending_code(), minutes=1) == 999
+    assert "código" in client.sent[0][1] and client.sent[0][0] == 999
+    assert telegram.pending_code() == ""  # se usa una sola vez
