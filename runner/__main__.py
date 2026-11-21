@@ -2,7 +2,7 @@
 
     python -m runner configurar      crea la configuración para editar
     python -m runner token           guarda el token del bot (se crea en la app: Perfil → Bot de LinkedIn)
-    python -m runner entrar [portal] abre el navegador del bot para que inicies sesión (linkedin o computrabajo)
+    python -m runner entrar [portal] abre el navegador del bot para que inicies sesión (linkedin, computrabajo o magneto)
     python -m runner importar CV.pdf carga tu CV o el PDF de tu LinkedIn en tu perfil de la app (solo lo nuevo)
     python -m runner buscar          busca vacantes, las analiza con tu perfil y prepara el CV de cada una
     python -m runner postular        postula a las preparadas con «Solicitud sencilla» (--prueba: sin enviar)
@@ -20,6 +20,7 @@ from types import SimpleNamespace
 from runner import computrabajo, discover
 from runner import config as cfg
 from runner.api import Api, ApiError
+from runner.browser import LOGINS  # sin Playwright: solo direcciones y nombres de cookies
 from runner.state import State
 
 
@@ -503,7 +504,8 @@ def main(argv: list[str] | None = None) -> int:
     sub.add_parser("configurar").set_defaults(fn=cmd_configurar)
     sub.add_parser("token").set_defaults(fn=cmd_token)
     entrar = sub.add_parser("entrar")
-    entrar.add_argument("portal", nargs="?", default="linkedin", choices=list(cfg.PORTALS), help="linkedin (si no se dice) o computrabajo")
+    entrar.add_argument("portal", nargs="?", default="linkedin", choices=list(LOGINS),
+                        help="linkedin (si no se dice), computrabajo o magneto")
     entrar.set_defaults(fn=cmd_entrar)
     importar = sub.add_parser("importar")
     importar.add_argument("pdf", help="ruta del PDF (tu CV o «Guardar en PDF» de tu perfil de LinkedIn)")

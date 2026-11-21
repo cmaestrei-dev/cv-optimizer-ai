@@ -499,3 +499,21 @@ def test_asks_the_app_to_check_the_alerts_mailbox_and_waits_for_the_analysis(mon
         raise ApiError(504, "La app no respondió a tiempo")
 
     cli._refresh_alerts(SimpleNamespace(post=down, get=lambda path: pytest.fail("no debía esperar")))  # no tumba la vuelta
+
+
+def test_can_log_in_to_magneto(tmp_path, monkeypatch, capsys):
+    from runner import browser
+
+    monkeypatch.setattr(browser, "PROFILE_DIR", tmp_path)
+    monkeypatch.setattr(browser.shutil, "which", lambda _: "/usr/bin/google-chrome")
+    opened = []
+
+    class Window:
+        def wait(self, timeout):
+            return 0
+
+    monkeypatch.setattr(browser.subprocess, "Popen", lambda cmd, **k: opened.append(cmd) or Window())
+    monkeypatch.setattr(browser.time, "sleep", lambda s: None)
+    assert cli.main(["entrar", "magneto"]) == 0
+    assert opened[0][-1] == "https://web.magneto365.com/sign-in"
+    assert "entra a Magneto" in capsys.readouterr().out
