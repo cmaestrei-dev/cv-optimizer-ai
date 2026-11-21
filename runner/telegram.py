@@ -28,6 +28,8 @@ CHAT_FILE = cfg.CONFIG_DIR / "telegram_chat"
 CODE_FILE = cfg.CONFIG_DIR / "telegram_codigo"  # código de emparejamiento pendiente (se borra al usarlo)
 CONTROL_FILE = cfg.DATA_DIR / "control.json"
 EXTRA_ANSWERS = cfg.EXTRA_ANSWERS_FILE
+MANUAL_FILE = cfg.DATA_DIR / "manuales.json"  # las agrega el bot (`python -m runner manual`)
+MANUAL_DONE = cfg.DATA_DIR / "manuales_hechas.json"  # las marca la persona por Telegram
 API = "https://api.telegram.org/bot{token}/{method}"
 TOKEN_RE = re.compile(r"^\d{5,15}:[A-Za-z0-9_-]{30,}$")
 HELP = """Comandos:
@@ -37,7 +39,9 @@ HELP = """Comandos:
 /pausar [horas]: no correr vueltas (24 h si no dices)
 /reanudar: quitar la pausa
 /preguntas: preguntas de filtro que el bot no supo responder
-/responder N texto: tu respuesta a la pregunta N (queda en tu banco y esas vacantes se reintentan)"""
+/responder N texto: tu respuesta a la pregunta N (queda en tu banco y esas vacantes se reintentan)
+/manuales: postulaciones que debes enviar tú (captcha, cédula o cuenta en su sitio)
+/hecha N: marcar como enviada la postulación manual N"""
 
 
 class TelegramError(RuntimeError):
@@ -81,6 +85,27 @@ class Client:
     def send(self, chat_id: int, text: str) -> None:
         for start in range(0, len(text), 3900):  # Telegram admite 4096 caracteres por mensaje
             self.call("sendMessage", chat_id=chat_id, text=text[start:start + 3900], disable_web_page_preview=True)
+
+    def send_document(self, chat_id: int, path: Path, caption: str = "") -> None:
+        """Envía un archivo (p. ej. el CV en PDF). Telegram admite hasta 50 MB."""
+        import secrets as _secrets
+
+        boundary = "----cvo" + _secrets.token_hex(12)
+        parts = [f'--{boundary}\r\nContent-Disposition: form-data; name="chat_id"\r\n\r\n{chat_id}\r\n'.encode()]
+        if caption:
+            parts.append(f'--{boundary}\r\nContent-Disposition: form-data; name="caption"\r\n\r\n{caption[:1000]}\r\n'.encode())
+        parts.append((f'--{boundary}\r\nContent-Disposition: form-data; name="document"; filename="{path.name}"\r\n'
+                      "Content-Type: application/pdf\r\n\r\n").encode() + path.read_bytes() + b"\r\n")
+        parts.append(f"--{boundary}--\r\n".encode())
+        request = urllib.request.Request(API.format(token=self.token, method="sendDocument"), data=b"".join(parts),
+                                         headers={"Content-Type": f"multipart/form-data; boundary={boundary}"})
+        try:
+            with urllib.request.urlopen(request, timeout=self.timeout) as response:
+                body = json.loads(response.read().decode("utf-8"))
+        except (urllib.error.URLError, TimeoutError, json.JSONDecodeError):
+            raise TelegramError("No se pudo enviar el archivo por Telegram") from None
+        if not body.get("ok"):
+            raise TelegramError(f"Telegram rechazó el archivo: {str(body.get('description', ''))[:100]}")
 
     def updates(self, offset: int, wait: int = 50) -> list[dict]:
         return self.call("getUpdates", offset=offset, timeout=wait, allowed_updates=["message"]) or []
@@ -162,6 +187,44 @@ def paused_until() -> datetime | None:
 def extra_answers() -> dict[str, str]:
     data = _read_json(EXTRA_ANSWERS, {})
     return {str(k): str(v) for k, v in data.items()} if isinstance(data, dict) else {}
+
+
+def manual_items() -> list[dict]:
+    """Las postulaciones manuales pendientes (las que la persona no ha marcado como enviadas)."""
+    done = set(_read_json(MANUAL_DONE, []))
+    items = _read_json(MANUAL_FILE, [])
+    return [i for i in items if isinstance(i, dict) and i.get("id") not in done] if isinstance(items, list) else []
+
+
+def manual_message(item: dict) -> str:
+    lines = [f"Postulación para enviar TÚ: {item.get('titulo', '')} — {item.get('empresa', '')}"]
+    if item.get("puntaje") is not None:
+        lines[0] += f" (compatibilidad {item['puntaje']})"
+    lines.append(item.get("url", ""))
+    if item.get("motivo"):
+        lines.append(f"Por qué tú: {item['motivo']}")
+    if item.get("nota"):
+        lines.append(item["nota"])
+    lines.append("Cuando la envíes: /manuales y luego /hecha N")
+    return "\n".join(line for line in lines if line)
+
+
+def send_manual(item: dict) -> bool:
+    """Envía por Telegram una postulación manual con su CV. Nunca falla la vuelta."""
+    tok, chat = token(), chat_id()
+    if not tok or not chat:
+        return False
+    client = Client(tok, timeout=60)
+    try:
+        client.send(chat, manual_message(item))
+        if item.get("cv") and Path(item["cv"]).is_file():
+            client.send_document(chat, Path(item["cv"]), caption=f"CV para {item.get('empresa', '')}")
+        if item.get("respuestas") and Path(item["respuestas"]).is_file():
+            client.send(chat, "Respuestas sugeridas (ajústalas a tu voz):\n\n" + Path(item["respuestas"]).read_text(encoding="utf-8")[:3500])
+        return True
+    except TelegramError as e:
+        print(f"Postulación manual no enviada por Telegram: {e}")
+        return False
 
 
 def notify(text: str) -> bool:
@@ -264,6 +327,21 @@ def handle(text: str, state: State, listed: list[str]) -> tuple[str, list[str]]:
         return HELP, listed
     if command == "/estado":
         return _status_text(state), listed
+    if command == "/manuales":
+        items = manual_items()
+        if not items:
+            return "No tienes postulaciones manuales pendientes.", listed
+        rows = [f"{n}. {i.get('titulo', '')} — {i.get('empresa', '')}\n   {i.get('url', '')}" for n, i in enumerate(items, 1)]
+        return "Pendientes de enviar tú (marca con /hecha N):\n" + "\n".join(rows), listed
+    if command == "/hecha":
+        items = manual_items()
+        if not rest.strip().isdigit() or not 1 <= int(rest) <= len(items):
+            return "Escribe /hecha N (N es el número de /manuales).", listed
+        item = items[int(rest) - 1]
+        done = _read_json(MANUAL_DONE, [])
+        done.append(item["id"])
+        _write_private(MANUAL_DONE, json.dumps(done))
+        return f"¡Bien! Marqué como enviada: {item.get('titulo', '')} — {item.get('empresa', '')}.", listed
     if command == "/hoy":
         return _today_sent(state), listed
     if command == "/vuelta":

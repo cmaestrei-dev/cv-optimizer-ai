@@ -374,7 +374,8 @@ Entregas:
   - Al final de cada vuelta envía el resumen y las preguntas pendientes.
   - No escribe `estado.json`: la pausa va en `control.json` y las respuestas en `respuestas_extra.json`, que `config.load` une al banco.
 - [x] Las vacantes saltadas guardan su CV. Si después sus preguntas tienen respuesta, `postular` las devuelve a la cola (`_retry_answered`).
-- [ ] **(dueño)** Crear el bot con @BotFather; luego `python -m runner telegram configurar` e `instalar`.
+- [x] **(dueño)** Creó @SoyEmpleo_bot y lo emparejó (2026-11-21). Como no alcanzó en 10 minutos, el servicio instalado ahora espera el código sin límite de tiempo (#53).
+- [x] Postulaciones manuales por Telegram (pedido del dueño): `python -m runner manual …` las agrega y las envía con su CV en PDF. `/manuales` las lista y `/hecha N` marca una como enviada (en `manuales_hechas.json`, aparte, como la pausa).
 
 **Empresas objetivo (2026-11-21).** Revisión en vivo de la lista de empresas:
 - Bancolombia: no tiene prácticas de tecnología publicadas, y sus vacantes junior de software piden título profesional.

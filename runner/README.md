@@ -134,8 +134,9 @@ python -m runner telegram probar       # te envía un mensaje de prueba
 
 - **Avisos:** al terminar cada vuelta te llega el resumen. También te avisa de lo que solo tú puedes hacer:
   verificaciones, una sesión perdida y preguntas de filtro sin respuesta.
-- **Comandos:** `/estado`, `/hoy`, `/vuelta` (correr una ahora), `/pausar [horas]`, `/reanudar`, `/preguntas`
-  y `/responder N texto`.
+- **Comandos:** `/estado`, `/hoy`, `/vuelta` (correr una ahora), `/pausar [horas]`, `/reanudar`, `/preguntas`,
+  `/responder N texto`, `/manuales` y `/hecha N`.
+- **Postulaciones manuales:** las que debes enviar tú (formulario con captcha, que pide cédula o cuenta propia) llegan por Telegram con el enlace, el CV en PDF y lo que pide el formulario. `/manuales` las lista y `/hecha N` marca una como enviada. Se agregan con `python -m runner manual URL --titulo … --empresa … --cv …`.
 - **Respuestas:** lo que respondes queda en `respuestas_extra.json`, junto a tu banco. Las vacantes que se habían
   saltado por esa pregunta vuelven solas a la cola.
 - **Seguridad:** el token queda en `~/.config/cv-optimizer-bot/telegram` (solo tú puedes leerlo) y nunca se

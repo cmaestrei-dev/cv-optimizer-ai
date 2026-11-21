@@ -554,6 +554,30 @@ def cmd_vigilar(_args) -> int:
     return 0
 
 
+def cmd_manual(args) -> int:
+    """Agrega una postulación que debe enviar la persona (captcha, cédula o cuenta propia) y se la manda por Telegram."""
+    import json as _json
+    from hashlib import sha256
+
+    from runner import telegram
+
+    cv = str(Path(args.cv).expanduser().resolve()) if args.cv else ""
+    if cv and not Path(cv).is_file():
+        print(f"No existe el CV: {cv}")
+        return 2
+    item = {"id": sha256(args.url.encode()).hexdigest()[:12], "url": args.url, "titulo": args.titulo,
+            "empresa": args.empresa, "cv": cv, "nota": args.nota or "", "motivo": args.motivo or "",
+            "respuestas": str(Path(args.respuestas).expanduser().resolve()) if args.respuestas else "",
+            "puntaje": args.puntaje}
+    items = [i for i in telegram._read_json(telegram.MANUAL_FILE, []) if i.get("id") != item["id"]]
+    items.append(item)
+    telegram.MANUAL_FILE.parent.mkdir(parents=True, exist_ok=True)
+    telegram.MANUAL_FILE.write_text(_json.dumps(items, ensure_ascii=False, indent=1), encoding="utf-8")
+    sent = telegram.send_manual(item)
+    print(f"Agregada: {args.titulo} — {args.empresa}." + (" Enviada por Telegram." if sent else " (Telegram no configurado)"))
+    return 0
+
+
 def cmd_telegram(args) -> int:
     """Configura y corre el bot de Telegram del dueño (avisos y control desde el celular)."""
     import getpass
@@ -658,6 +682,16 @@ def main(argv: list[str] | None = None) -> int:
     postular.set_defaults(fn=cmd_postular)
     sub.add_parser("diario").set_defaults(fn=cmd_diario)
     sub.add_parser("vigilar").set_defaults(fn=cmd_vigilar)
+    manual = sub.add_parser("manual", help="una postulación que envías tú; te llega por Telegram con su CV")
+    manual.add_argument("url")
+    manual.add_argument("--titulo", required=True)
+    manual.add_argument("--empresa", required=True)
+    manual.add_argument("--cv", help="ruta del CV en PDF")
+    manual.add_argument("--nota", help="qué te pide el formulario")
+    manual.add_argument("--motivo", help="por qué encaja contigo")
+    manual.add_argument("--respuestas", help="archivo con respuestas sugeridas")
+    manual.add_argument("--puntaje", type=int)
+    manual.set_defaults(fn=cmd_manual)
     tg = sub.add_parser("telegram")
     tg.add_argument("accion", nargs="?", default="escuchar", choices=["configurar", "instalar", "quitar", "probar", "escuchar"])
     tg.set_defaults(fn=cmd_telegram)
