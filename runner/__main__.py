@@ -15,6 +15,7 @@ import getpass
 import re
 import sys
 from datetime import UTC, date, datetime
+from pathlib import Path
 from types import SimpleNamespace
 
 from runner import computrabajo, discover, magneto
@@ -324,6 +325,20 @@ def _answerer(api: Api, conf: cfg.Config, application_id: int, *, units: bool = 
     return answer
 
 
+def _retry_answered(state: State, conf: cfg.Config) -> int:
+    """Las vacantes saltadas por preguntas que ahora sí tienen respuesta en el banco vuelven a «preparada»."""
+    from runner import answers
+
+    retried = 0
+    for job_id, v in list(state.data["vistas"].items()):
+        questions = v.get("preguntas") or []
+        if v.get("estado") == "saltada" and questions and v.get("cv") and v.get("cv_id") \
+                and all(answers.bank_answer(q, conf.answers) is not None for q in questions):
+            state.mark(job_id, "preparada", **{k: v[k] for k in ("portal", "app", "cv", "cv_id", "url", "puntaje") if k in v})
+            retried += 1
+    return retried
+
+
 def _pending(state: State, portal: str) -> list[tuple[str, dict]]:
     from pathlib import Path
 
@@ -377,7 +392,8 @@ def _apply_portal(page, portal: str, pending, *, conf: cfg.Config, api: Api, sta
             state.mark(job_id, "enviada", portal=portal, **{k: v[k] for k in ("app", "cv", "cv_id", "url", "puntaje")})
             state.count(sent_key)
         elif result.status in ("saltada", "externa", "ya_postulada"):
-            state.mark(job_id, result.status, portal=portal, app=v["app"], url=v["url"],
+            keep = {k: v[k] for k in ("cv", "cv_id", "puntaje") if k in v}  # para reintentarla si luego hay respuesta
+            state.mark(job_id, result.status, portal=portal, app=v["app"], url=v["url"], **keep,
                        preguntas=result.unanswered[:6], detalle=result.detail[:200])
         state.save()
         if n < min(len(pending), limit or len(pending)) - 1:
@@ -395,6 +411,8 @@ def cmd_postular(args) -> int:
     state = State(cfg.DATA_DIR / "estado.json")
     state.data["sesion_perdida"] = []
     print("Modo AUTOMÁTICO: se envían." if submit else "Modo PRUEBA: no se envía nada.")
+    if retried := _retry_answered(state, conf):
+        print(f"{retried} vacantes saltadas ya tienen respuesta a sus preguntas: vuelven a la cola.")
     todo = []
     for portal, name in cfg.PORTALS.items():
         if args.portal and portal != args.portal:
@@ -459,6 +477,11 @@ def cmd_diario(_args) -> int:
             print("Ya hay una vuelta del bot corriendo: esta se omite.")
             return 0
         print(f"\n===== Vuelta del {datetime.now():%Y-%m-%d %H:%M} =====")
+        from runner import telegram
+
+        if until := telegram.paused_until():
+            print(f"En pausa (pedida por Telegram) hasta {until.astimezone():%Y-%m-%d %H:%M}: no corro esta vuelta.")
+            return 0
         try:
             cmd_buscar(argparse.Namespace(sin_cv=False, max=0, portal=None))
         except (cfg.ConfigError, ApiError):
@@ -482,7 +505,58 @@ def cmd_diario(_args) -> int:
             notice += f" El navegador del bot perdió la sesión de {cfg.PORTALS[portal]}: python -m runner entrar {portal}."
         print(notice)
         _notify(notice)
+        questions = telegram.pending_questions(state)
+        telegram.notify(notice + (f"\n\n{len(questions)} preguntas de filtro sin respuesta: /preguntas" if questions else ""))
         return code
+
+
+def cmd_telegram(args) -> int:
+    """Configura y corre el bot de Telegram del dueño (avisos y control desde el celular)."""
+    import getpass
+
+    from runner import schedule, telegram
+
+    if args.accion == "configurar":
+        print("1. En Telegram, habla con @BotFather, envía /newbot y sigue los pasos.")
+        try:
+            telegram.save_token(getpass.getpass("2. Pega aquí el token que te dio (no se verá): "))
+            client = telegram.Client(telegram.token())
+            me = client.call("getMe")
+        except telegram.TelegramError as e:
+            print(e)
+            return 1
+        code = telegram.new_code()
+        print(f"3. Abre tu bot @{me.get('username')} en Telegram y envíale exactamente:  /start {code}")
+        print("   (tienes 10 minutos; solo ese chat podrá usar el bot)")
+        chat = telegram.pair(client, code)
+        if not chat:
+            print("No llegó el código a tiempo. Vuelve a correr: python -m runner telegram configurar")
+            return 1
+        client.send(chat, "¡Listo! Desde aquí te aviso lo que solo tú puedes hacer.\n\n" + telegram.HELP)
+        print("Emparejado. Ahora deja el bot escuchando siempre: python -m runner telegram instalar")
+        return 0
+    if args.accion == "instalar":
+        workdir = Path(__file__).resolve().parent.parent
+        try:
+            schedule.install_listener(sys.executable, workdir, cfg.DATA_DIR / "telegram.log")
+        except schedule.ScheduleError as e:
+            print(e, file=sys.stderr)
+            return 2
+        print("El bot de Telegram queda escuchando (también al encender el computador).")
+        return 0
+    if args.accion == "quitar":
+        schedule.remove_listener()
+        print("Listo: el bot de Telegram ya no escucha.")
+        return 0
+    tok, chat = telegram.token(), telegram.chat_id()
+    if not tok or not chat:
+        print("Falta configurarlo: python -m runner telegram configurar")
+        return 1
+    if args.accion == "probar":
+        return 0 if telegram.notify("Prueba del bot: todo bien.") else 1
+    print("Escuchando mensajes de Telegram… (Ctrl+C para salir)")
+    telegram.serve(telegram.Client(tok), chat)
+    return 0
 
 
 def cmd_programar(args) -> int:
@@ -531,6 +605,9 @@ def main(argv: list[str] | None = None) -> int:
     postular.add_argument("--portal", choices=list(cfg.PORTALS), help="solo este portal")
     postular.set_defaults(fn=cmd_postular)
     sub.add_parser("diario").set_defaults(fn=cmd_diario)
+    tg = sub.add_parser("telegram")
+    tg.add_argument("accion", nargs="?", default="escuchar", choices=["configurar", "instalar", "quitar", "probar", "escuchar"])
+    tg.set_defaults(fn=cmd_telegram)
     programar = sub.add_parser("programar")
     programar.add_argument("--horas", nargs="+", default=["09:17", "15:47"], help="horas del día (HH:MM)")
     programar.add_argument("--quitar", action="store_true", help="dejar de correrlo solo")

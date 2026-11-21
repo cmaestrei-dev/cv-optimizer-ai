@@ -101,6 +101,25 @@ Para postular usa tu sesión de Magneto en el navegador del bot:
 Magneto le muestra a la empresa **tu perfil de Magneto**, no un PDF por vacante: mantenlo al día (igual a tu
 LinkedIn). El CV de la vacante queda en la app como referencia. En modo prueba responde todo y no envía.
 
+## Telegram (avisos y control desde el celular)
+
+Un bot de Telegram tuyo, que corre en tu computador (sin abrir puertos) y solo atiende tu chat:
+
+```bash
+python -m runner telegram configurar   # pide el token de @BotFather (oculto) y te da un código para emparejar
+python -m runner telegram instalar     # lo deja escuchando siempre (servicio de systemd del usuario)
+python -m runner telegram probar       # te envía un mensaje de prueba
+```
+
+- **Avisos:** al terminar cada vuelta te llega el resumen. También te avisa de lo que solo tú puedes hacer:
+  verificaciones, una sesión perdida y preguntas de filtro sin respuesta.
+- **Comandos:** `/estado`, `/hoy`, `/vuelta` (correr una ahora), `/pausar [horas]`, `/reanudar`, `/preguntas`
+  y `/responder N texto`.
+- **Respuestas:** lo que respondes queda en `respuestas_extra.json`, junto a tu banco. Las vacantes que se habían
+  saltado por esa pregunta vuelven solas a la cola.
+- **Seguridad:** el token queda en `~/.config/cv-optimizer-bot/telegram` (solo tú puedes leerlo) y nunca se
+  imprime. El bot de Telegram no escribe el estado de las vueltas: las pausas van a `control.json`.
+
 ## Cómo responde el formulario
 
 1. Lo que LinkedIn ya trae (tu correo, teléfono, respuestas anteriores) se deja.

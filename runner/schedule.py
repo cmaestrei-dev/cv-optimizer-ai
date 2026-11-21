@@ -99,3 +99,45 @@ def remove() -> None:
     for name in (f"{NAME}.service", f"{NAME}.timer"):
         (UNIT_DIR / name).unlink(missing_ok=True)
     _systemctl("daemon-reload")
+
+
+LISTENER = "cv-optimizer-telegram"
+
+
+def listener_unit(python: str, workdir: Path, log: Path) -> str:
+    for path in (Path(python), workdir, log):
+        _check_path(path)
+    if "/.claude/worktrees/" in f"{workdir}/":
+        raise ScheduleError("Ese código está en una carpeta temporal de trabajo; instálalo desde una copia estable.")
+    return f"""[Unit]
+Description=Bot de Telegram de CV Optimizer (avisos y control desde el celular)
+After=network-online.target
+
+[Service]
+WorkingDirectory={workdir}
+ExecStart={python} -m runner telegram escuchar
+Environment=PYTHONUNBUFFERED=1
+StandardOutput=append:{log}
+StandardError=append:{log}
+Restart=always
+RestartSec=30
+
+[Install]
+WantedBy=default.target
+"""
+
+
+def install_listener(python: str, workdir: Path, log: Path) -> None:
+    text = listener_unit(python, workdir, log)
+    UNIT_DIR.mkdir(parents=True, exist_ok=True)
+    log.parent.mkdir(parents=True, exist_ok=True)
+    (UNIT_DIR / f"{LISTENER}.service").write_text(text, encoding="utf-8")
+    _systemctl("daemon-reload")
+    _systemctl("enable", "--now", f"{LISTENER}.service")
+
+
+def remove_listener() -> None:
+    if (UNIT_DIR / f"{LISTENER}.service").exists():
+        _systemctl("disable", "--now", f"{LISTENER}.service")
+    (UNIT_DIR / f"{LISTENER}.service").unlink(missing_ok=True)
+    _systemctl("daemon-reload")
