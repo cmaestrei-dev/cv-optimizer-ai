@@ -392,8 +392,9 @@ Entregas:
   - La sesión (`.ELEMPLEO`) es una cookie de sesión: Chrome la borraba al cerrarse. El perfil del bot ahora reabre la sesión anterior (`session.restore_on_startup = 1`) y así se conserva.
 - [x] `runner/elempleo.py` (búsqueda) y `runner/elempleo_apply.py` (postular con la petición de la página). Probados con páginas de ejemplo y un elempleo falso, sin red. Lo que solo puede hacer el dueño (sitio de la empresa, videocuestionario, postulación rápida) le llega por Telegram como postulación manual.
 - [x] El navegador del bot ocupado ya no tumba la vuelta: la de las 15:47 del 2026-11-21 falló porque se estaba editando elempleo con ese navegador (24 de Computrabajo y 4 de Magneto quedaron sin enviar; una vuelta a mano envió 7 y 2). Ahora espera hasta 30 minutos.
-- [ ] Primer envío real a elempleo, vigilado.
-- [x] Sin cupo diario de IA, una vacante con preguntas de filtro sigue «preparada» para la vuelta siguiente, en vez de quedar saltada para siempre. En la vuelta manual del 2026-11-21 se saltaron así 16, que se devolvieron a la cola. Tras el primer «cupo agotado», el bot no vuelve a preguntarle a la app en esa vuelta.
+- [x] «Postulación rápida». Sin sesión, todas las ofertas se ven normales; con sesión, una práctica la tenía. La empresa recibe el PDF que se elige entre los adjuntos de la hoja de vida, así que el bot elige el primero (el CV general) y envía ese formulario como la página. No sube archivos, porque quedarían también en la hoja de vida. Probado en modo prueba contra la oferta real.
+- [ ] Primer envío real a elempleo (lo hará la vuelta de las 9:17 del 2026-11-22: el 21 ya no quedaba cupo de IA para analizar vacantes nuevas).
+- [x] Sin cupo diario de IA, una vacante con preguntas de filtro sigue «preparada» para la vuelta siguiente, en vez de quedar saltada para siempre. En la vuelta manual del 2026-11-21 se saltaron así 19 (17 de Computrabajo y 2 de Magneto), que se devolvieron a la cola. Tras el primer «cupo agotado», el bot no vuelve a preguntarle a la app en esa vuelta.
 
 ### CV v2: legible para personas y ATS (2026-11-18, pedido del dueño)
 

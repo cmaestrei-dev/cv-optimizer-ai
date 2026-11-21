@@ -8,7 +8,7 @@ si no están (p. ej. en la CI), se salta.
 import html
 import json
 import re
-from urllib.parse import urlparse
+from urllib.parse import parse_qs, urlparse
 
 import pytest
 
@@ -23,9 +23,9 @@ OFFER = "https://www.elempleo.com/co/ofertas-trabajo/practicante-ingenieria-en-s
 
 class FakeElempleo:
     def __init__(self, *, logged: bool = True, applied: bool = False, code: int = 1, quick: bool = False,
-                 video: str = ""):
+                 video: str = "", attachments: tuple = ("1897633635",)):
         self.logged, self.applied, self.code, self.quick, self.video = logged, applied, code, quick, video
-        self.posts, self.outside = [], []
+        self.attachments, self.posts, self.outside = attachments, [], []
 
     def _offer(self) -> str:
         flags = {"applypostlogin": False, "offerapplied": self.applied}
@@ -36,6 +36,14 @@ class FakeElempleo:
           <form><input name="__RequestVerificationToken" type="hidden" value="tok-2"></form>
           <input type="hidden" class="js-config" data-is-quick-offer-application="{self.quick}" data-is-vip="False">
           <input type="hidden" id="vprezInputHidden" data-vprez-url="{self.video}" data-apply-post-login="False">
+          <form action="/co/JobOffers/JobOfferDetail/SaveQuickApplication?JobOfferId=1886801108&amp;CurrentAttachmentCVId=0"
+                class="js-quick-application-form" enctype="multipart/form-data" method="post">
+            <input name="__RequestVerificationToken" type="hidden" value="tok-q">
+            <select class="form-control js-select-file" name="Attachments.SelectedIds">
+              <option disabled="disabled" selected="selected" value="-1">Selecciona una opción</option>
+              {"".join(f'<option value="{a}">CV_{a}.pdf</option>' for a in self.attachments)}
+            </select>
+            <input class="attachment-file js-attachment-file" name="File" type="file"></form>
           <button class="btn js-apply-offer" type="button" data-url="/co/JobOffers/JobOfferDetail/Save?jobOfferId=1886801108">
             Postularme a oferta</button>
           <script>
@@ -50,6 +58,11 @@ class FakeElempleo:
 
     def handle(self, route, request):
         url = urlparse(request.url)
+        if url.path.startswith("/co/JobOffers/JobOfferDetail/SaveQuickApplication") and request.method == "POST":
+            self.posts.append(("rapida", request.post_data))
+            self.applied = self.code in (1, 2)
+            return route.fulfill(status=200, content_type="application/json",
+                                 body=json.dumps({"Response": self.code, "Url": "/co/x", "ModelInvalid": False}))
         if url.path.startswith("/co/JobOffers/JobOfferDetail/Save") and request.method == "POST":
             self.posts.append((request.post_data, request.headers.get("x-requested-with")))
             self.applied = self.code in (1, 2)
@@ -99,10 +112,22 @@ def test_dry_run_and_stops_never_send(chromium):
     dry = FakeElempleo()
     assert run(chromium, dry, submit=False).status == "revisada" and dry.posts == []
     for fake, status in ((FakeElempleo(applied=True), "ya_postulada"), (FakeElempleo(logged=False), "sin_sesion"),
-                         (FakeElempleo(quick=True), "externa")):
+                         (FakeElempleo(quick=True, attachments=()), "externa")):
         result = run(chromium, fake)
         assert result.status == status and fake.posts == [], status
-    assert run(chromium, FakeElempleo(quick=True)).follow_up  # la postulación rápida se la pasa a la persona
+    assert run(chromium, FakeElempleo(quick=True, attachments=())).follow_up  # sin PDF que elegir: a la persona
+
+
+def test_quick_application_sends_the_cv_attached_to_the_profile(chromium):
+    fake = FakeElempleo(quick=True, attachments=("1897633635", "222"))
+    assert run(chromium, fake, submit=False).status == "revisada" and fake.posts == []
+    result = run(chromium, fake)
+    assert result.status == "enviada" and result.detail == "Confirmada en la oferta"
+    (kind, body), = fake.posts
+    sent = parse_qs(body)
+    assert kind == "rapida" and sent["Attachments.SelectedIds"] == ["1897633635"]  # el primer PDF (el CV general)
+    assert sent["IsQuickApplicationOffer"] == ["True"] and sent["__RequestVerificationToken"] == ["tok-q"]
+    assert "File" not in sent  # nunca sube archivos: quedarían también en la hoja de vida
 
 
 def test_company_site_and_video_steps_go_to_the_person(chromium):
