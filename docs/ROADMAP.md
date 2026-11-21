@@ -289,7 +289,9 @@ Entregas:
   - [ ] El primer envío real de LinkedIn aún no ocurre: la búsqueda pública devuelve 429 a la primera petición desde la IP de casa (tres días seguidos).
   - [x] **Vacantes desde la bandeja de la app** (2026-11-20): `buscar` toma primero las vacantes de LinkedIn y Computrabajo que esperan en la bandeja, que llegan ya analizadas por las alertas por correo de la fase 5e. Les aplica las mismas exclusiones, mínimo y topes; lo excluido o descartado queda «descartado» en la app con el motivo. Decisión del dueño: LinkedIn se alimenta de sus alertas, no de la búsqueda pública ni de buscar con su sesión.
   - [x] Alertas diarias en LinkedIn (2026-11-20, con el navegador del bot): 8 búsquedas solo con «Solicitud sencilla»: desarrollador (Colombia, Cartagena, Medellín, remoto), desarrollador python, desarrollador full stack, practicante desarrollo de software y ciberseguridad. «Alertas por correo» activadas en la app.
-  - [ ] **(dueño)** Gmail pidió verificar la identidad para añadir la dirección de reenvío de la app. Después: confirmar el código (lo muestra `GET /alerts`) y crear el filtro `from:jobalerts-noreply@linkedin.com` → reenviar. Nunca el reenvío de todo el correo.
+  - [x] **(dueño, 2026-11-20)** Reenvío desde Gmail: la dirección de la app quedó verificada y el filtro `from:(jobalerts-noreply@linkedin.com)` → «Reenviar a» está creado. El reenvío de todo el correo sigue inhabilitado. Google pide verificar la identidad para la dirección y para el filtro, y su ventana no se abre en el navegador del agente: el dueño lo hizo en su Chrome.
+  - [x] `buscar` pide a la app revisar el buzón (`POST /alerts/check`) y espera hasta 5 min a que analice lo nuevo. Antes solo lo revisaba Cloud Scheduler a las 7:00, y una alerta de la tarde esperaba al otro día.
+  - [ ] Ver la primera alerta de LinkedIn en la bandeja y su envío real.
   - [ ] Mostrar en la web lo que hizo el bot cada día.
 - [ ] Después: postulaciones externas (Greenhouse, Lever…) y los otros portales.
 
@@ -459,7 +461,7 @@ Cambios:
 
 ## Próximo paso
 
-1. El bot corre solo (9:17 y 15:47): revisar `registro.log` y Postulaciones los primeros días. LinkedIn: que el dueño verifique su identidad en Gmail para terminar el reenvío de las alertas; luego, ver la primera alerta en la bandeja y el primer envío real. Después, la vista web de lo que hizo el bot.
+1. El bot corre solo (9:17 y 15:47): revisar `registro.log` y Postulaciones los primeros días. LinkedIn: ver la primera alerta reenviada en la bandeja y el primer envío real. Después, la vista web de lo que hizo el bot.
    Pendiente de producto: el resumen del CV empieza con el cargo de la vacante («Soporte Tester QA con 1 año…»), lo que puede leerse como un cargo que no se tuvo. Cambiarlo a un objetivo honesto con evals (requiere clave de IA local).
    Después: Computrabajo, elempleo y Magneto (postular suele ser un clic), Get on Board y búsquedas de prácticas.
 2. Después, el resto de portales (Computrabajo, Magneto, elempleo) con el mismo esquema.

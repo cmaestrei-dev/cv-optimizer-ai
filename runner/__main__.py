@@ -100,6 +100,28 @@ def _discard(api: Api, app_id: int, note: str) -> None:
         print(f"        No se pudo descartar en la app: {e.detail}")
 
 
+def _refresh_alerts(api: Api, *, wait_seconds: int = 300, poll_seconds: int = 15) -> None:
+    """Pide a la app revisar el buzón de alertas por correo y espera a que analice lo nuevo (hasta `wait_seconds`).
+
+    La app solo lo revisa sola una vez al día (temprano): sin esto, una alerta de la tarde esperaría al otro día.
+    Lo que siga en análisis al terminar la espera se toma en la vuelta siguiente.
+    """
+    import time as _time
+
+    try:
+        status = api.post("/alerts/check", {})
+        if not status.get("enabled") or not status.get("address"):
+            return
+        deadline = _time.monotonic() + wait_seconds
+        if status.get("analyzing"):
+            print(f"Alertas por correo: {status['analyzing']} en análisis; espero a que terminen…")
+        while status.get("analyzing") and _time.monotonic() < deadline:
+            _time.sleep(poll_seconds)
+            status = api.get("/alerts")
+    except ApiError as e:
+        print(f"No se pudo revisar el buzón de alertas: {e.detail}")
+
+
 def _prepare(api: Api, conf: cfg.Config, state: State, args, *, portal: str, job_id: str, app_id: int,
              score: int | None, url: str) -> bool:
     """Descarta por compatibilidad o hace el CV y deja la vacante lista para postular. True si quedó preparada."""
@@ -142,6 +164,7 @@ def cmd_buscar(args) -> int:
 
     try:
         # Primero la bandeja de la app (p. ej. las alertas de LinkedIn por correo): ya vienen analizadas.
+        _refresh_alerts(api)
         inbox = [x for x in api.get("/applications?view=bandeja") if x.get("platform") in PLATFORM_PORTAL]
         if inbox:
             print(f"\nBandeja de la app: {len(inbox)} vacantes de LinkedIn o Computrabajo por revisar")

@@ -478,3 +478,24 @@ class TestAnswerer:
         assert out["¿Qué experiencia tienes con Terraform?"] == "Aún no tengo experiencia con eso."
         out = self._answer("saltar", {})
         assert set(out) == {"¿Cuál es tu aspiración salarial?"}
+
+
+def test_asks_the_app_to_check_the_alerts_mailbox_and_waits_for_the_analysis(monkeypatch):
+    # La app revisa el buzón sola una vez al día: el bot lo pide en cada vuelta para no esperar al otro día.
+    calls, analyzing = [], iter([1, 0])
+    api = SimpleNamespace(
+        post=lambda path, body: calls.append(("post", path)) or {"enabled": True, "address": "x", "analyzing": 2},
+        get=lambda path: calls.append(("get", path)) or {"enabled": True, "address": "x", "analyzing": next(analyzing)})
+    monkeypatch.setattr("time.sleep", lambda s: None)
+    cli._refresh_alerts(api)
+    assert calls == [("post", "/alerts/check"), ("get", "/alerts"), ("get", "/alerts")]
+
+    calls.clear()
+    off = SimpleNamespace(post=lambda path, body: calls.append(path) or {"enabled": False}, get=lambda path: pytest.fail("no debía esperar"))
+    cli._refresh_alerts(off)
+    assert calls == ["/alerts/check"]
+
+    def down(path, body):
+        raise ApiError(504, "La app no respondió a tiempo")
+
+    cli._refresh_alerts(SimpleNamespace(post=down, get=lambda path: pytest.fail("no debía esperar")))  # no tumba la vuelta
