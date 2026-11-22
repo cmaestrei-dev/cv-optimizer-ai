@@ -78,3 +78,10 @@ def test_favorable_option_for_experience_questions():
     assert answers.favorable_option(["Ninguno", "Básico", "Avanzado"]) == "Avanzado"
     assert answers.favorable_option(["No tengo", "Ninguna"]) is None
     assert answers.negative("No, nunca") and not answers.negative("Nociones básicas")
+
+
+def test_experience_questions_with_typos():
+    assert answers.asks_experience("¿haz tenido experiencien administrando infraestructura Cloud, AWS?")
+    assert answers.asks_experience("Do you have experience with Docker?")
+    assert not answers.asks_experience("¿Es mayor de edad?")
+
