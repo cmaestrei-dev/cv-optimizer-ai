@@ -30,35 +30,50 @@ class FakeSF:
         self.logged, self.applied, self.posted = logged, 1, []
 
     def _form(self) -> str:
+        # Como el real: los valores cuentan cuando el formulario los recibe (change o clic), subir el CV redibuja y
+        # borra lo respondido, y «Detalles» depende de «¿Cómo supo de este puesto?».
         return f"""<html><body><a>Salir</a><span>Ampliar todas las secciones</span>
           <div>Mis documentos <span id="cv-name">CV_viejo.pdf</span>
             <span id="41:_attachIcon" onclick="document.getElementById('f').style.display='block'">✎</span>
-            <input type="file" id="f" style="display:none"
-                   onchange="document.getElementById('cv-name').innerText = this.files[0].name"></div>
+            <input type="file" id="f" style="display:none" onchange="uploaded(this)"></div>
           <div><h3>Información específica del puesto</h3>
+            <label for="800:_input" class="rcmFormFieldLabel"><span class="requiredField">*</span>&nbsp;¿Cómo supo de este puesto?</label>
+            <input id="800:_input" role="combobox" onkeydown="menu(this, ['Otros Portales de Empleo', 'Portal de Empleo Externo'])">
+            <label for="810:_input" class="rcmFormFieldLabel"><span class="requiredField">*</span>&nbsp;Detalles</label>
+            <input id="810:_input" role="combobox"
+                   onkeydown="menu(this, model['800:_input'] === 'Portal de Empleo Externo' ? ['empleo.grupobancolombia.com'] : ['Indeed'])">
             {radio(700, "¿Tienes algún pariente, cónyuge o persona con relación análoga que trabaje actualmente con Bancolombia?",
                    ["1 familiar", "Mas de 3 familiares", "No tengo familiares en Bancolombia"])}
             {radio(710, "¿Cómo te enteraste de esta vacante?",
                    ["LinkedIn: La encontré navegando en LinkedIn.", "Portal de empleo de Bancolombia: Apliqué directamente."])}
             {radio(720, "¿Tienes experiencia con Kubernetes?", ["Si.", "No."])}
             <label for="730:" class="rcmFormQuestionLabel"><span class="requiredField">*</span>&nbsp;¿Cuál es tu salario actual o último salario?</label>
-            <textarea id="730:"></textarea>
+            <textarea id="730:" onchange="model[this.id] = this.value"></textarea>
             <label for="740:" class="rcmFormQuestionLabel"><span class="requiredField">*</span>&nbsp;¿Cuál es tu nivel de formación académica?</label>
-            <select id="740:"><option>1-Bachiller</option><option>5-6 a 10 semestre carrera universitaria</option></select>
+            <select id="740:" onchange="model[this.id] = this.value"><option>1-Bachiller</option><option>5-6 a 10 semestre carrera universitaria</option></select>
             <label for="750:" class="rcmFormQuestionLabel">¿Algo más que quieras contarnos?</label><textarea id="750:"></textarea>
           </div>
-          <input type="text" name="disclaimerAcknowledge">
+          <label for="837:_txtFld" class="rcmFormFieldLabel"><span class="requiredField">*</span>&nbsp;Si estás de acuerdo con la Declaración de Conformidad, por favor escribe tu nombre completo a continuación.</label>
+          <input type="text" id="837:_txtFld" name="disclaimerAcknowledge" onchange="model.firma = this.value">
+          <ul id="menu"></ul>
           <span id="apply" onclick="send()">Aplicar</span>
           <script>
+            const model = {{}};
             function pick(group, id) {{
               document.querySelectorAll('[id="' + group + ':"] [role=radio]').forEach(r => r.setAttribute('aria-checked', 'false'));
-              document.getElementById(id + ':_anchor').setAttribute('aria-checked', 'true'); }}
+              document.getElementById(id + ':_anchor').setAttribute('aria-checked', 'true');
+              model[group] = document.getElementById(id + ':_radiolabel').innerText; }}
+            function menu(input, items) {{
+              const ul = document.getElementById('menu'); ul.innerHTML = '';
+              for (const it of items) {{ const li = document.createElement('li'); li.className = 'globalMenuItem'; li.innerText = it;
+                li.onclick = () => {{ input.value = it; model[input.id] = it; ul.innerHTML = ''; }}; ul.appendChild(li); }} }}
+            function uploaded(f) {{
+              document.getElementById('cv-name').innerText = f.files[0].name;
+              for (const k of Object.keys(model)) delete model[k];  // se redibuja: lo respondido se pierde
+              document.querySelectorAll('[role=radio]').forEach(r => r.setAttribute('aria-checked', 'false'));
+              document.querySelectorAll('textarea, input[type=text], input[role=combobox]').forEach(e => e.value = ''); }}
             async function send() {{
-              const radios = {{}}; document.querySelectorAll('[role=radiogroup]').forEach(g => {{
-                const c = g.querySelector('[aria-checked=true]'); radios[g.id] = c ? document.getElementById(c.getAttribute('aria-labelledby')).innerText : ''; }});
-              await fetch('/apply', {{method: 'POST', body: JSON.stringify({{radios, salario: document.getElementById('730:').value,
-                formacion: document.getElementById('740:').value, firma: document.querySelector('[name=disclaimerAcknowledge]').value,
-                cv: document.getElementById('cv-name').innerText}})}});
+              await fetch('/apply', {{method: 'POST', body: JSON.stringify({{model, cv: document.getElementById('cv-name').innerText}})}});
               document.body.insertAdjacentHTML('beforeend', '<p>Gracias por postularte</p>'); }}
           </script></body></html>"""
 
@@ -104,6 +119,7 @@ def run(chromium, fake, tmp_path, *, submit=True, answers=None):
     cv.write_bytes(b"%PDF-1.4")
     known = {"¿Tienes experiencia con Kubernetes?": "Si."} if answers is None else answers
     overrides = {"pariente, conyuge|relacion analoga": "No tengo familiares en Bancolombia",
+                 "como supo de este puesto": "Portal de Empleo Externo", "detalles": "empleo.grupobancolombia.com",
                  "como te enteraste": "Portal de empleo de Bancolombia", "nivel de formacion academica": "5-6 a 10 semestre carrera universitaria",
                  "salario actual|ultimo salario": "2000000"}
     try:
@@ -118,10 +134,12 @@ def test_applies_with_this_vacancys_cv_and_the_bank(chromium, tmp_path):
     result = run(chromium, fake, tmp_path)
     assert result.status == "enviada" and "pasó de 1 a 2" in result.detail, result
     (sent,) = fake.posted
-    assert sent["radios"] == {"700:": "No tengo familiares en Bancolombia",
-                              "710:": "Portal de empleo de Bancolombia: Apliqué directamente.", "720:": "Si."}
-    assert sent["salario"] == "2000000" and sent["formacion"] == "5-6 a 10 semestre carrera universitaria"
-    assert sent["firma"] == "Camilo Andres Maestre Iglesias" and sent["cv"] == "Camilo_Maestre_Backend_Junior.pdf"
+    assert sent["model"] == {
+        "800:_input": "Portal de Empleo Externo", "810:_input": "empleo.grupobancolombia.com",  # lista en cascada
+        "700": "No tengo familiares en Bancolombia", "710": "Portal de empleo de Bancolombia: Apliqué directamente.",
+        "720": "Si.", "730:": "2000000", "740:": "5-6 a 10 semestre carrera universitaria",
+        "firma": "Camilo Andres Maestre Iglesias"}  # todo confirmado después de subir el CV
+    assert sent["cv"] == "Camilo_Maestre_Backend_Junior.pdf"
 
 
 def test_dry_run_unanswered_and_no_session_never_send(chromium, tmp_path):
