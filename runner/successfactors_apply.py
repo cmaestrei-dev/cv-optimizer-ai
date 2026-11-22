@@ -292,21 +292,49 @@ def apply(page, offer_url: str, cv_pdf: Path, answerer: Answerer, *, submit: boo
     return ApplyResult("enviada", "El portal aceptó el envío, pero no pude confirmarlo en «Puestos solicitados»: revísalo tú")
 
 
-def restore_cv(page, profile_url: str, cv_pdf: Path) -> bool:
-    """Deja en el perfil el CV general (después de un lote cada postulación ya llevó el suyo)."""
+def restore_cv(page, profile_url: str, cv_pdf: Path, *, shot: Path | None = None) -> str:
+    """Deja en el perfil el CV general (después de un lote cada postulación ya llevó el suyo). Devuelve "" si quedó o
+    el paso en que falló (y deja una captura en `shot`). Se confirma recargando el perfil, no por el aviso."""
     page.goto(profile_url, wait_until="domcontentloaded")
     time.sleep(5)
+    problem = _restore(page, profile_url, cv_pdf)
+    if problem and shot:
+        try:
+            shot.parent.mkdir(parents=True, exist_ok=True)
+            page.screenshot(path=str(shot), full_page=True)
+        except Exception:  # noqa: BLE001 — la captura es solo para revisar
+            pass
+    return problem
+
+
+def _notices(page) -> str:
+    texts = page.locator(".rcmValidationMsgArea:visible, [role=alert]:visible, .globalMessage:visible").all_inner_texts()
+    return "; ".join(re.sub(r"\s+", " ", t).strip() for t in texts if t.strip())[:300]
+
+
+def _restore(page, profile_url: str, cv_pdf: Path) -> str:
+    if not logged_in(page):
+        return f"el perfil no abrió con la sesión ({page.url[:80]})"
     _expand(page)
     if _current_cv(page) == cv_pdf.name:
-        return True
+        return ""
+    if not page.locator("[id$='_attachIcon']:visible").count():
+        return f"no vi el lápiz de «Mis documentos» (el perfil muestra «{_current_cv(page) or '?'}»)"
     if not _replace_cv(page, cv_pdf):
-        return False
+        return f"el archivo no quedó cargado (el perfil muestra «{_current_cv(page) or '?'}»; avisos: {_notices(page) or 'ninguno'})"
     save = page.locator("span.rcmSaveButton:visible, [id$='_saveBtn']:visible")
     if not save.count():
-        return False
+        return "no encontré «Guardar» en el perfil"
     save.first.click()
     for _ in range(15):
         time.sleep(1)
         if "guardado correctamente" in page.inner_text("body"):
-            return True
-    return False
+            break
+    notices = _notices(page)
+    page.goto(profile_url, wait_until="domcontentloaded")
+    time.sleep(5)
+    _expand(page)
+    shown = _current_cv(page)
+    if shown == cv_pdf.name:
+        return ""
+    return f"tras guardar, el perfil sigue con «{shown or '?'}» (avisos: {notices or 'ninguno'})"
