@@ -358,3 +358,15 @@ def test_a_verb_the_ai_makes_up_from_a_noun_is_fixed():
     assert _fix_verbs("Hice el inventario") == "Hice el inventario"
     assert _fix_verbs("Durante el incidente contuve la intrusión") == "Durante el incidente contuve la intrusión"
     assert _fix_verbs("Wrote 139 test files", "en") == "Wrote 139 test files"  # en inglés no se toca
+
+
+def test_a_bullet_left_as_written_drops_its_leading_label():
+    # Caso real: «Alcance: sitio en español e inglés con SEO; …» salió así en el CV tras no pasar la verificación.
+    from core.engine.writing import _without_label
+
+    assert _without_label("Alcance: sitio en español e inglés con SEO") == "Sitio en español e inglés con SEO"
+    assert _without_label("Privacidad (Ley 1581): cuenta sin datos personales") == "Cuenta sin datos personales"
+    assert _without_label("Atendí 30 clientes: todos satisfechos") == "Atendí 30 clientes: todos satisfechos"
+    assert _without_label("Elaboré 180 facturas al mes en Excel") == "Elaboré 180 facturas al mes en Excel"
+    assert _without_label("En la sede principal del cliente más grande del país: reduje costos") == (
+        "En la sede principal del cliente más grande del país: reduje costos")

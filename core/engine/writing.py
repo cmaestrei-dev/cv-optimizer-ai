@@ -159,6 +159,20 @@ _IRREGULAR_E = {
 _NOT_VERBS = {"desde", "durante", "mediante", "entre", "siempre", "sobre", "este", "base", "clave", "cliente", "parte"}
 
 
+_LABEL = re.compile(r"^[A-ZÁÉÍÓÚÑ][\wáéíóúñü ()/-]{1,30}:\s+(?=\S)")
+
+
+def _without_label(text: str) -> str:
+    """El texto del usuario sin su etiqueta inicial («Alcance: sitio…» → «Sitio…»), para la viñeta que se deja tal cual.
+    Una etiqueta tiene hasta 4 palabras y no empieza con un verbo en pasado («Atendí 30 clientes: …» se deja)."""
+    match = _LABEL.match(text)
+    label = match.group(0).rstrip(": \t") if match else ""
+    if not match or len(label.split()) > 4 or label.split()[0][-1] in "éíó":
+        return text
+    rest = text[match.end():]
+    return rest[:1].upper() + rest[1:]
+
+
 def _fix_verbs(text: str, language: str = "es") -> str:
     """Corrige el verbo inicial: una forma inventada, o la tilde que falta en español («Configure» → «Configuré»:
     sin tilde es otro tiempo verbal)."""
@@ -248,7 +262,7 @@ def write_cv(
                     failing.pop(b.id)
 
     for aid in failing:
-        written[aid] = originals[aid].rstrip(".")  # el texto del usuario nunca miente
+        written[aid] = _without_label(originals[aid]).rstrip(".")  # el texto del usuario nunca miente
 
     summary_source = " ".join(
         [
