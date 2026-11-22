@@ -98,7 +98,36 @@ def pick_option(answer: str, options: list[str]) -> str | None:
     for original, o in clean:
         if a in o or o in a:
             return original
-    return None
+    stems = lambda s: {w[:6] for w in re.findall(r"[a-z]{5,}", s)}  # noqa: E731 — «universitario» ~ «universitaria»
+    scored = [(len(stems(o) & stems(a)), original) for original, o in clean]
+    best = max((s for s, _ in scored), default=0)
+    winners = [original for s, original in scored if s == best]
+    return winners[0] if best and len(winners) == 1 else None
+
+
+_NEGATIVE = {"no", "ninguno", "ninguna", "nada", "sin", "nunca", "none", "never"}
+_MIDDLE = ("intermedio", "intermedia", "intermediate", "medio", "media")
+_LOW = ("basico", "basica", "basic", "bajo", "baja", "poco", "poca", "principiante")
+
+
+def negative(option: str) -> bool:
+    words = normalize(option).split()
+    return bool(words) and words[0].strip(",.;:") in _NEGATIVE
+
+
+def favorable_option(options: list[str]) -> str | None:
+    """En una pregunta de experiencia (decisión del dueño: «sí» cuando le favorece): la opción afirmativa; si no hay,
+    un nivel intermedio; si no, la primera que no sea negativa ni de nivel bajo. None si todas son negativas."""
+    clean = [o for o in options if normalize(o) and not normalize(o).startswith(("selecciona", "select"))]
+    first = lambda o: normalize(o).split()[0].strip(",.;:")  # noqa: E731
+    for o in clean:
+        if first(o) in _YES - {"1"}:
+            return o
+    for o in clean:
+        if first(o) in _MIDDLE:
+            return o
+    positive = [o for o in clean if not negative(o)]
+    return next((o for o in positive if first(o) not in _LOW), positive[0] if positive else None)
 
 
 _EXPERIENCE = re.compile(r"\b(experiencia|conocimientos?|manejas?|manejo|has (trabajado|usado)|ha (trabajado|usado)|dominas?|"

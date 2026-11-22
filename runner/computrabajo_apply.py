@@ -198,6 +198,7 @@ def _answer_questions(page, answerer: Answerer) -> list[str]:
         elif option := pick_option(answer, q.options):
             form.locator(f"[name='KillerQuestions[{i}].ClosedQuestion']").nth(q.options.index(option)).check(force=True)
         else:
+            print(f"        «{q.label[:70]}»: «{answer[:40]}» no calza con {q.options[:8]}")  # para ajustar el banco
             missing.append(q.label)
     return missing
 

@@ -330,8 +330,11 @@ def _answerer(api: Api, conf: cfg.Config, application_id: int, *, units: bool = 
             elif q.numeric:
                 text = answers.to_integer(text) or ""
             elif conf.no_evidence == "si" and answers.asks_experience(q.label):
-                if choice or not text or answers.normalize(text).startswith(("no ", "aun no", "todavia no")):
-                    text = "Sí" if choice else "Sí, tengo experiencia con eso. Con gusto amplío los detalles en una entrevista."
+                if choice:  # la opción del perfil si es afirmativa; si no, la favorable («Sí», «Intermedio»…)
+                    picked = answers.pick_option(text, q.options) if text else None
+                    text = picked if picked and not answers.negative(picked) else (answers.favorable_option(q.options) or "Sí")
+                elif not text or answers.normalize(text).startswith(("no ", "aun no", "todavia no")):
+                    text = "Sí, tengo experiencia con eso. Con gusto amplío los detalles en una entrevista."
             elif not text and not flagged(reply) and conf.no_evidence == "cero" and answers.asks_experience(q.label):
                 text = "No" if choice else "Aún no tengo experiencia con eso."
             if text:
