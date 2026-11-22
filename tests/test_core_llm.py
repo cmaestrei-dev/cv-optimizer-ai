@@ -169,14 +169,26 @@ class TestFallback:
             get_llm("extract")
 
     @patch("core.llm.client.requests.post")
-    def test_saturated_primary_goes_to_the_fallback(self, mock_post):
+    def test_saturated_primary_goes_to_the_fallback(self, mock_post, monkeypatch):
+        monkeypatch.setattr(FallbackLLM, "_paused_until", {})
         mock_post.side_effect = [_response(503), _response(503), _response(503), _response(content="de deepseek")]
         llm = FallbackLLM(_client("gemini"), _client("deepseek"))
         assert llm.complete("hola") == "de deepseek"
         assert "api.deepseek.com" in mock_post.call_args_list[-1].args[0]
 
     @patch("core.llm.client.requests.post")
-    def test_bad_key_and_images_are_not_hidden(self, mock_post):
+    def test_after_a_quota_error_the_primary_is_skipped_for_a_while(self, mock_post, monkeypatch):
+        monkeypatch.setattr(FallbackLLM, "_paused_until", {})
+        mock_post.side_effect = [_response(429), _response(429), _response(429), _response(content="uno"),
+                                 _response(content="dos")]
+        llm = FallbackLLM(_client("gemini"), _client("deepseek"))
+        assert llm.complete("a") == "uno"
+        assert llm.complete("b") == "dos"  # sin volver a intentar Gemini
+        assert [("googleapis" in c.args[0]) for c in mock_post.call_args_list] == [True, True, True, False, False]
+
+    @patch("core.llm.client.requests.post")
+    def test_bad_key_and_images_are_not_hidden(self, mock_post, monkeypatch):
+        monkeypatch.setattr(FallbackLLM, "_paused_until", {})
         mock_post.return_value = _response(401)
         llm = FallbackLLM(_client("gemini"), _client("deepseek"))
         with pytest.raises(LLMAuthError):

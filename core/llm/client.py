@@ -3,6 +3,7 @@ import hashlib
 import json
 import logging
 import threading
+import time
 from collections import OrderedDict
 from dataclasses import dataclass
 
@@ -166,7 +167,14 @@ class LLMClient:
 class FallbackLLM:
     """Mismo contrato que LLMClient: si el proveedor principal no responde (saturado, sin cupo, caído o lento),
     repite la llamada con el de respaldo. No cubre una clave inválida (es un error de configuración que hay que
-    ver) ni imágenes que el respaldo no acepta."""
+    ver) ni imágenes que el respaldo no acepta.
+
+    Si el principal dice que se le acabó el cupo (HTTP 429, p. ej. el plan gratuito de Gemini por el día), las
+    llamadas siguientes van directo al respaldo durante `QUOTA_PAUSE` segundos: reintentarlo tres veces en cada
+    llamada solo demora (pasó el 2026-11-21 con las alertas acumuladas)."""
+
+    QUOTA_PAUSE = 15 * 60
+    _paused_until: dict[str, float] = {}  # etiqueta del principal → hasta cuándo se salta (compartido entre clientes)
 
     def __init__(self, primary: LLMClient, fallback: LLMClient):
         self.primary, self.fallback = primary, fallback
@@ -184,11 +192,16 @@ class FallbackLLM:
         return self.primary.model
 
     def complete(self, prompt: str, *, images: tuple[Image, ...] = (), **kwargs) -> str:
+        usable = not images or self.fallback.spec.supports_images
+        if usable and time.monotonic() < self._paused_until.get(self.primary.label, 0.0):
+            return self.fallback.complete(prompt, images=images, **kwargs)
         try:
             return self.primary.complete(prompt, images=images, **kwargs)
         except (RetryableError, LLMUnavailableError) as e:
-            if images and not self.fallback.spec.supports_images:
+            if not usable:
                 raise
+            if "HTTP 429" in str(e):
+                self._paused_until[self.primary.label] = time.monotonic() + self.QUOTA_PAUSE
             logger.warning("%s no respondió (%s); uso %s.", self.primary.label, str(e)[:120], self.fallback.label)
             return self.fallback.complete(prompt, images=images, **kwargs)
 
