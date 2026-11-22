@@ -381,6 +381,9 @@ def _pending(state: State, portal: str) -> list[tuple[str, dict]]:
             and v.get("cv") and Path(v["cv"]).is_file() and v.get("cv_id")]
 
 
+EXTERNAL_MIN_SCORE = 60  # vacantes de LinkedIn sin «Solicitud sencilla» que se le pasan a la persona por Telegram
+
+
 def _hand_over(api: Api, v: dict, name: str, note: str) -> None:
     """Lo que solo la persona puede hacer tras una postulación (p. ej. seguir en el sitio de la empresa): a Telegram."""
     from hashlib import sha256
@@ -428,6 +431,10 @@ def _apply_portal(page, portal: str, pending, *, conf: cfg.Config, api: Api, sta
             state.pause(24, f"{name}: {result.status} ({result.detail[:80]})", kind=_key("cuenta", portal))
             print(f"Paro {name} 24 horas. Si fue una verificación, entra tú a {name} y complétala.")
             break
+        if (result.status == "externa" and portal == "linkedin" and not result.follow_up
+                and (v.get("puntaje") or 0) >= EXTERNAL_MIN_SCORE):  # ya tiene su CV: que la persona la envíe
+            result.follow_up = ("En LinkedIn esta vacante se postula en el sitio de la empresa: abre el enlace, pulsa "
+                                "«Solicitar» y usa el CV adjunto.")
         if result.follow_up:
             _hand_over(api, v, name, result.follow_up)
         if result.status in ("sin_espacio", "perfil"):

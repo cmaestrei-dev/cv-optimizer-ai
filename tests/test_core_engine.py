@@ -262,6 +262,7 @@ class TestWriting:
         found = summary_style_problems(copied, role, real, ["Manejo de herramientas de control de versiones como Git"])
         assert any("copia una frase" in p for p in found)
         assert any("relleno" in p for p in summary_style_problems("Desarrollador apasionado " * 10, role, real, []))
+        assert any("relleno" in p for p in summary_style_problems("Estudiante y desarrollador experto en Python " * 4, role, real, []))
         assert summary_style_problems("Editor audiovisual " + "con años de trabajo real " * 6, role, [role], []) == []
 
 
