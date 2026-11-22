@@ -793,7 +793,7 @@ def cmd_lote(args) -> int:
                 print(f"\n· {rec.get('cargo', '')}  (compatibilidad {rec.get('puntaje')})")
                 answerer = _answerer(api, conf, rec["app"], units=True)
                 result = sf.apply(page, rec["url"], Path(rec["cv"]), answerer, submit=submit, full_name=site.signature,
-                                  overrides=site.answers, profile_url=site.profile_url)
+                                  overrides=site.answers, login_url=site.login_url)
                 print(f"  → {result.status}{': ' + result.detail if result.detail else ''}")
                 if result.unanswered:
                     print("    Sin respuesta:", "; ".join(result.unanswered[:4]))
@@ -814,7 +814,7 @@ def cmd_lote(args) -> int:
             # Subir el CV en el formulario también lo cambia en el perfil (aunque no se envíe): se deja el general.
             if general and any(s in ("enviada", "revisada") for _, s in results):
                 shot = cfg.DATA_DIR / "capturas" / f"{site.name.lower()}_perfil.png"
-                problem = sf.restore_cv(page, site.profile_url, Path(general), shot=shot)
+                problem = sf.restore_cv(page, site.login_url, Path(general), shot=shot)
                 print("CV general de vuelta en tu perfil." if not problem else
                       f"No pude dejar el CV general en tu perfil ({problem}). Captura: {shot}. Cámbialo tú en «Mis documentos».")
         finally:
