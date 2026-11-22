@@ -147,11 +147,27 @@ def summary_style_problems(summary: str, vacancy_role: str, real_roles: list[str
 
 # Conjugaciones que la IA inventa al volver verbo un sustantivo del original («auditoría» → «Auditorié»).
 _VERB_FIXES = {"auditorié": "Audité", "auditoré": "Audité", "auditorie": "Audité"}
+# Pretéritos irregulares que terminan en «e» sin tilde (los regulares en -ar la llevan: «Configuré», «Activé»).
+_IRREGULAR_E = {
+    "hice", "rehice", "deshice", "satisfice", "tuve", "obtuve", "mantuve", "estuve", "anduve", "contuve", "retuve",
+    "detuve", "sostuve", "entretuve", "puse", "propuse", "compuse", "dispuse", "expuse", "supuse", "impuse", "repuse",
+    "opuse", "pospuse", "produje", "conduje", "reduje", "traduje", "introduje", "deduje", "induje", "reproduje",
+    "traje", "atraje", "extraje", "contraje", "distraje", "dije", "predije", "contradije", "pude", "supe", "cupe",
+    "quise", "vine", "convine", "intervine", "previne", "provine", "hube",
+}
+# Palabras con que a veces empieza una viñeta y no son verbos.
+_NOT_VERBS = {"desde", "durante", "mediante", "entre", "siempre", "sobre", "este", "base", "clave", "cliente", "parte"}
 
 
-def _fix_verbs(text: str) -> str:
+def _fix_verbs(text: str, language: str = "es") -> str:
+    """Corrige el verbo inicial: una forma inventada, o la tilde que falta en español («Configure» → «Configuré»:
+    sin tilde es otro tiempo verbal)."""
     first, _, rest = text.partition(" ")
     fixed = _VERB_FIXES.get(first.lower())
+    if not fixed and language == "es":
+        word = first.lower()
+        if len(word) >= 4 and word.isalpha() and word.endswith("e") and word not in _IRREGULAR_E | _NOT_VERBS:
+            fixed = first[:-1] + "é"
     return f"{fixed} {rest}".rstrip() if fixed else text
 
 
@@ -211,7 +227,7 @@ def write_cv(
     draft = generate_structured(llm, prompt, Draft, cache=False)
 
     strict = language_code == SOURCE_LANGUAGE
-    written = {b.id: _fix_verbs(b.text.strip().rstrip(".")) for b in draft.bullets if b.id in originals}
+    written = {b.id: _fix_verbs(b.text.strip().rstrip("."), language_code) for b in draft.bullets if b.id in originals}
     problems = {
         aid: unsupported(written[aid], originals[aid], strict=strict) if aid in written else ["sin respuesta"]
         for aid in originals
@@ -226,7 +242,7 @@ def write_cv(
         repaired = generate_structured(llm, _REPAIR.format(language=language, items=items), Draft, cache=False)
         for b in repaired.bullets:
             if b.id in failing:
-                text = b.text.strip().rstrip(".")
+                text = _fix_verbs(b.text.strip().rstrip("."), language_code)
                 if not unsupported(text, originals[b.id], strict=strict):
                     written[b.id] = text
                     failing.pop(b.id)
