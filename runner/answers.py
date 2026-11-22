@@ -130,8 +130,8 @@ def favorable_option(options: list[str]) -> str | None:
     return next((o for o in positive if first(o) not in _LOW), positive[0] if positive else None)
 
 
-_EXPERIENCE = re.compile(r"\b(experiencia|conocimientos?|manejas?|manejo|has (trabajado|usado)|ha (trabajado|usado)|dominas?|"
-                         r"sabes|experience|knowledge)\b")
+_EXPERIENCE = re.compile(r"\b(experienc\w*|conocimientos?|manejas?|manejo|(has|ha|haz) (trabajado|usado|tenido)|dominas?|"
+                         r"sabes|knowledge)\b")  # «experienc…» también con errores («¿haz tenido experiencien…?»)
 
 
 def asks_experience(question: str) -> bool:
