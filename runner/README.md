@@ -123,6 +123,13 @@ elempleo le muestra a la empresa **tu hoja de vida de elempleo** (con el CV que 
 vacante: mantenla al día. En las ofertas de «postulación rápida», donde se elige qué PDF recibe la empresa, el bot
 elige el primero que tengas adjunto (tu CV general) y no sube archivos.
 
+## Analizar solo los cargos que te interesan
+
+Cada vacante que el bot analiza gasta cupo de IA. Con `[incluir]`, las búsquedas en los portales solo analizan los
+cargos con alguna de esas palabras; las demás se omiten sin gastar nada. Las palabras cortas («ti», «qa») cuentan
+completas, y las largas, al comienzo de una palabra («desarroll» → «desarrollador»). Sin `[incluir]`, se analiza
+todo. Las vacantes de la bandeja (alertas por correo) no pasan por este filtro: ya vienen analizadas.
+
 ## El navegador del bot ocupado
 
 Si al empezar una vuelta el navegador del bot está abierto (otra vuelta, o una ventana que abriste con

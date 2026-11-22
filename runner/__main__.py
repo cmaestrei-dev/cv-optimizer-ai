@@ -74,6 +74,16 @@ def cmd_entrar(args) -> int:
     return login(args.portal)
 
 
+def _not_included(title: str, conf: cfg.Config) -> str:
+    """Motivo para no analizar una vacante cuyo cargo no tiene ninguna palabra de `[incluir]` (vacío si pasa)."""
+    from runner import watch
+
+    if not conf.include_words:
+        return ""
+    text = watch._norm(title)
+    return "" if any(watch._has(w, text) for w in conf.include_words) else "el cargo no tiene ninguna palabra de [incluir]"
+
+
 def _key(kind: str, portal: str) -> str:
     """Claves del estado por portal; las de LinkedIn conservan su nombre de antes."""
     return kind if portal == "linkedin" else f"{kind}_{portal}"
@@ -221,8 +231,8 @@ def cmd_buscar(args) -> int:
                         break
                     if state.seen(card.job_id):
                         continue
-                    if reason := _excluded(card, conf):
-                        state.mark(card.job_id, "excluida", portal=portal, motivo=reason)
+                    if reason := _excluded(card, conf) or _not_included(card.title, conf):
+                        state.mark(card.job_id, "excluida", portal=portal, motivo=reason, cargo=card.title[:120])
                         print(f"  · {card.title} — {card.company}: omitida ({reason})")
                         continue
                     discover.pause()
