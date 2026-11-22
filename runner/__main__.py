@@ -84,6 +84,27 @@ def _not_included(title: str, conf: cfg.Config) -> str:
     return "" if any(watch._has(w, text) for w in conf.include_words) else "el cargo no tiene ninguna palabra de [incluir]"
 
 
+def _foreign(api: Api, conf: cfg.Config, app_id: int) -> str:
+    """Motivo para omitir una vacante escrita en un idioma que no está en `solo_idiomas`, salvo que sea de
+    `salvo_pais` (decisión del dueño, 2026-11-22: su inglés es básico; llegaban ofertas de EE. UU. y Alemania)."""
+    from runner import watch
+
+    if not conf.languages:
+        return ""
+    try:
+        detail = api.get(f"/applications/{app_id}")
+    except ApiError:
+        return ""
+    vacancy = detail.get("vacancy") or {}
+    language = str(vacancy.get("language") or "").lower()[:2]
+    if not language or language in conf.languages:
+        return ""
+    where = watch._norm(f"{vacancy.get('location') or ''} {(detail.get('vacancy_text') or '')[:300]}")
+    if conf.home_country and watch._norm(conf.home_country).strip() in where:
+        return ""
+    return f"vacante en «{language}» fuera de {conf.home_country or 'tu país'}"
+
+
 def _key(kind: str, portal: str) -> str:
     """Claves del estado por portal; las de LinkedIn conservan su nombre de antes."""
     return kind if portal == "linkedin" else f"{kind}_{portal}"
@@ -145,7 +166,13 @@ def _refresh_alerts(api: Api, *, wait_seconds: int = 300, poll_seconds: int = 15
 
 def _prepare(api: Api, conf: cfg.Config, state: State, args, *, portal: str, job_id: str, app_id: int,
              score: int | None, url: str) -> bool:
-    """Descarta por compatibilidad o hace el CV y deja la vacante lista para postular. True si quedó preparada."""
+    """Descarta por idioma o compatibilidad, o hace el CV y deja la vacante lista para postular. True si quedó preparada."""
+    if reason := _foreign(api, conf, app_id):
+        _discard(api, app_id, f"El bot la omitió: {reason}.")
+        state.mark(job_id, "excluida", portal=portal, app=app_id, motivo=reason, puntaje=score)
+        print(f"        Omitida: {reason}.")
+        state.save()
+        return False
     minimum = conf.min_score(portal)
     if minimum and (score is None or score < minimum):
         _discard(api, app_id, f"El bot la descartó: compatibilidad {score if score is not None else '—'} (mínimo {minimum}).")
