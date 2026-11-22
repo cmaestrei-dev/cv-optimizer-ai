@@ -219,26 +219,50 @@ class TestWriting:
         vacancy, m, sel = self._selection()
         ids = [a.id for s in sel.experiences for a in s.achievements]
         first, second = ids[0], ids[1]
+        natural = ("Asistente Administrativa con 7 años de experiencia en facturación y Excel, formada como Tecnóloga "
+                   "en Gestión Administrativa en el SENA. Llevo la facturación del concesionario y atiendo a clientes "
+                   "y proveedores con orden y buen trato, lo que puedo aportar desde el primer día en el área.")
         llm = FakeLLM(
             {"summary": "Auxiliar Administrativo con 7 años de experiencia en facturación y Excel",
              "bullets": [{"id": first, "text": "Elaboré 180 facturas al mes en SAP"},
                          {"id": second, "text": "Texto correcto."}]},
             {"bullets": [{"id": first, "text": "Elaboré 180 facturas en SAP otra vez"}]},
+            {"summary": natural},
         )
         written = write_cv(llm, vacancy, sel, m, _profile())
         assert written.bullets[first] == _profile().achievement(first)[1].text.rstrip(".")
         assert first in written.reverted and second not in written.reverted
         assert written.bullets[second] == "Texto correcto"
-        assert written.summary.startswith("Auxiliar Administrativo con 7")
-        assert "180 facturas" in llm.prompts[0] and len(llm.prompts) == 2
+        # empezaba con el cargo de la vacante y era muy corto: se pidió una corrección y quedó la natural
+        assert written.summary == natural and not written.summary_problems
+        assert "180 facturas" in llm.prompts[0] and "empieza con el cargo de la vacante" in llm.prompts[2]
 
     def test_summary_with_invented_tool_falls_back(self):
         vacancy, m, sel = self._selection()
         ids = [a.id for s in sel.experiences for a in s.achievements]
-        llm = FakeLLM({"summary": "Experta en SAP y Power BI", "bullets": [{"id": i, "text": "Hice algo"} for i in ids]})
+        llm = FakeLLM({"summary": "Experta en SAP y Power BI", "bullets": [{"id": i, "text": "Hice algo"} for i in ids]},
+                      {"summary": "Experta en SAP con 7 años de experiencia"})
         written = write_cv(llm, vacancy, sel, m, _profile())
         assert written.summary_problems and "SAP" not in written.summary
-        assert written.summary.startswith("Auxiliar Administrativo: 7 años")
+        # el respaldo dice quién es la persona (nunca con el cargo de la vacante), su formación y con qué trabaja
+        assert written.summary.startswith("Asistente Administrativa y Auxiliar Administrativa con 7 años de experiencia")
+        assert "Tecnóloga en Gestión Administrativa (SENA)" in written.summary and "Auxiliar Administrativo" not in written.summary
+
+    def test_summary_style_problems(self):
+        from core.engine.writing import summary_style_problems
+
+        role, real = "Editor audiovisual", ["Desarrollador Fullstack"]
+        assert summary_style_problems("Editor audiovisual con 1 año de experiencia como Desarrollador Fullstack.", role,
+                                      real, [])[:2] == ["empieza con el cargo de la vacante, que el candidato no ha tenido",
+                                                        "es demasiado corto: no dice qué aporta el candidato"]
+        dump = "Competente en Python, Java, JavaScript, TypeScript, C#, Ruby, Node.js, React, PostgreSQL, Docker. " * 3
+        assert any("lista larga" in p for p in summary_style_problems(dump, role, real, []))
+        copied = ("Desarrollador con experiencia que busca crecer. Manejo de herramientas de control de versiones como "
+                  "Git en equipos ágiles, con buen trato y entregas a tiempo para cada cliente de la empresa del sector.")
+        found = summary_style_problems(copied, role, real, ["Manejo de herramientas de control de versiones como Git"])
+        assert any("copia una frase" in p for p in found)
+        assert any("relleno" in p for p in summary_style_problems("Desarrollador apasionado " * 10, role, real, []))
+        assert summary_style_problems("Editor audiovisual " + "con años de trabajo real " * 6, role, [role], []) == []
 
 
 class TestDocument:

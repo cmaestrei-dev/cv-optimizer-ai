@@ -5,7 +5,10 @@ de los datos del usuario, así que no los puede inventar. Cada texto pasa por ve
 que no se respalda se corrige una vez y, si sigue fallando, se usa el texto original.
 """
 
+import re
+import unicodedata
 from dataclasses import dataclass, field
+from datetime import date
 
 from pydantic import BaseModel, Field
 
@@ -27,8 +30,12 @@ class WrittenBullet(BaseModel):
 
 
 class Draft(BaseModel):
-    summary: str = Field(default="", description="Perfil profesional de 3 a 4 líneas")
+    summary: str = Field(default="", description="Perfil profesional: 2 o 3 oraciones naturales")
     bullets: list[WrittenBullet] = Field(default_factory=list)
+
+
+class SummaryDraft(BaseModel):
+    summary: str = Field(description="Perfil profesional corregido: 2 o 3 oraciones naturales")
 
 
 @dataclass
@@ -53,7 +60,9 @@ LOGROS A REESCRIBIR (id | experiencia | requisitos de la vacante que respalda | 
 DATOS PARA EL RESUMEN:
 - Años totales de experiencia (calculados): {years}
 - Cargos reales: {roles}
+- Formación: {education}
 - Habilidades reales: {skills}
+- Lo que la vacante pide y el candidato demuestra: {strengths}
 
 REGLAS:
 1. Cada viñeta usa SOLO hechos de su texto original. Puedes reordenar, acortar, traducir y nombrar \
@@ -63,9 +72,74 @@ responsabilidades que no estén en el texto original. Conserva las cifras tal cu
 3. Cada viñeta: una oración de máximo 200 caracteres que empieza con un verbo de acción en \
 pasado (primera persona en español). No termines con punto.
 4. Devuelve una viñeta por cada id recibido, con el mismo id.
-5. Resumen: 3-4 líneas en primera persona implícita, empieza con el cargo exacto de la vacante \
-("{role}"), menciona solo años, cargos y habilidades de los DATOS PARA EL RESUMEN y de los logros.
+5. Resumen (perfil profesional): 2 o 3 oraciones, entre 40 y 70 palabras, que suenen escritas por \
+una persona para ESTA vacante, en primera persona implícita (sin «yo»):
+   - Quién es: sus cargos reales, sus años y su formación. NUNCA empieces con el cargo de la vacante \
+ni lo presentes como un cargo que tuvo; si lo nombras, solo como objetivo («para aportar como…»).
+   - Qué aporta aquí: 3 a 5 habilidades reales que la vacante pide (no listes todas) y un logro \
+concreto de los LOGROS que lo respalde, con su cifra tal cual si la tiene.
+   - No copies frases de la vacante ni uses relleno: «apasionado», «proactivo», «orientado a \
+resultados», «altamente motivado», «sólidos conocimientos», «amplia experiencia».
+   - Solo datos de los DATOS PARA EL RESUMEN y de los logros: nada inventado.
 6. Todo en {language}."""
+
+_SUMMARY_REPAIR = """Corrige este perfil profesional de un CV para la vacante «{role}» (idioma: {language}).
+
+Perfil actual: {summary}
+Problemas: {problems}
+
+Datos reales que puedes usar (nada más): cargos {roles}; años de experiencia {years}; formación {education}; \
+habilidades {skills}; logros: {achievements}
+
+Escribe 2 o 3 oraciones naturales (40 a 70 palabras), en primera persona implícita: quién es (cargos, \
+años, formación), 3 a 5 habilidades que la vacante pide y un logro concreto con su cifra tal cual. No empieces \
+con el cargo de la vacante, no listes todas las habilidades, no copies frases de la vacante ni uses relleno."""
+
+_FILLER = ("apasionad", "proactiv", "orientado a resultados", "orientada a resultados", "altamente motivad",
+           "solidos conocimientos", "amplia experiencia", "passionate", "results-driven", "highly motivated")
+_MIN_WORDS, _MAX_LISTED = 25, 7
+
+
+def _plain(text: str) -> str:
+    text = unicodedata.normalize("NFKD", text.lower()).encode("ascii", "ignore").decode()
+    return re.sub(r"\s+", " ", re.sub(r"[^a-z0-9+#.]+", " ", text)).strip()
+
+
+def _ongoing(edu, today: date | None = None) -> bool:
+    today = today or date.today()
+    return edu.period.is_current or bool(edu.period.end_year and edu.period.end_year > today.year)
+
+
+def _education_text(profile: ProfileSnapshot, language_code: str) -> str:
+    items = []
+    for edu in profile.education[:3]:
+        where = f", {edu.institution}" if edu.institution else ""
+        status = ((" (in progress)" if language_code == "en" else " (en curso)") if _ongoing(edu) else "")
+        items.append(f"{edu.title}{where}{status}")
+    return "; ".join(items) or "-"
+
+
+def summary_style_problems(summary: str, vacancy_role: str, real_roles: list[str], vacancy_texts: list[str]) -> list[str]:
+    """Lo que hace sonar robótico o inútil un perfil (aparte de la verificación de datos): empezar con el cargo de
+    la vacante como si fuera propio, ser muy corto, listar demasiadas habilidades, relleno o frases copiadas."""
+    problems, text = [], _plain(summary)
+    role = _plain(vacancy_role)
+    if role and text.startswith(role) and not any(_plain(r) == role for r in real_roles):
+        problems.append("empieza con el cargo de la vacante, que el candidato no ha tenido")
+    if len(text.split()) < _MIN_WORDS:
+        problems.append("es demasiado corto: no dice qué aporta el candidato")
+    if max((len(part.split(",")) for part in re.split(r"[.;:](?:\s|$)", summary)), default=0) > _MAX_LISTED:
+        problems.append("es una lista larga de habilidades: elige las 3 a 5 que pide la vacante")
+    if filler := [f for f in _FILLER if f in text]:
+        problems.append(f"usa relleno ({', '.join(filler)})")
+    words = text.split()
+    sources = [f" {_plain(t)} " for t in vacancy_texts if t]
+    for i in range(len(words) - 5):
+        chunk = " " + " ".join(words[i:i + 6]) + " "
+        if any(chunk in s for s in sources):
+            problems.append(f"copia una frase de la vacante («{chunk.strip()}»)")
+            break
+    return problems
 
 _REPAIR = """Estas viñetas reescritas contienen datos que NO están en su texto original. \
 Reescríbelas de nuevo usando SOLO el texto original (idioma: {language}). Mismo formato y reglas.
@@ -103,6 +177,9 @@ def write_cv(
             lines.append(f"{a.id} | {header} | {reqs} | {a.text}")
 
     skills = [s.name for _, group in selection.skill_groups for s in group]
+    roles = list(dict.fromkeys(e.role for e in profile.experiences))
+    education = _education_text(profile, language_code)
+    strengths = [m.requirement.text for m in match.requirements if m.level in ("cubre", "parcial")][:6]
     prompt = _PROMPT.format(
         role=vacancy.role,
         company=f" en {vacancy.company}" if vacancy.company else "",
@@ -112,8 +189,10 @@ def write_cv(
         focus=extra_focus.strip() or "ninguno",
         bullets="\n".join(lines),
         years=_years_text(match),
-        roles=", ".join(dict.fromkeys(e.role for e in profile.experiences)) or "-",
+        roles=", ".join(roles) or "-",
+        education=education,
         skills=", ".join(skills) or "-",
+        strengths="; ".join(strengths) or "-",
     )
     draft = generate_structured(llm, prompt, Draft, cache=False)
 
@@ -143,28 +222,72 @@ def write_cv(
 
     summary_source = " ".join(
         [
-            *originals.values(), *skills, vacancy.role, vacancy.area,
+            *originals.values(), *written.values(), *skills, vacancy.role, vacancy.area,
             *(f"{e.role} {e.company}" for e in profile.experiences),
             *(f"{e.title} {e.institution}" for e in profile.education),
         ]
     )
-    summary_problems = unsupported(
-        draft.summary, summary_source, strict=strict,
-        extra_numbers={str(int(match.experience_years)), str(round(match.experience_years))},
-    )
+    extra_numbers = {str(int(match.experience_years)), str(round(match.experience_years))}
+    vacancy_texts = [vacancy.role, *(m.requirement.text for m in match.requirements), *vacancy.keywords]
+
+    def check(text: str) -> tuple[list[str], list[str]]:
+        if not text.strip():
+            return ["sin resumen"], []
+        return (unsupported(text, summary_source, strict=strict, extra_numbers=extra_numbers),
+                summary_style_problems(text, vacancy.role, roles, vacancy_texts))
+
+    summary = draft.summary.strip()
+    summary_problems, style = check(summary)
+    if summary_problems or style:  # una corrección: datos sin respaldo o un perfil robótico, corto o copiado
+        try:
+            fixed = generate_structured(llm, _SUMMARY_REPAIR.format(
+                role=vacancy.role, language=language, summary=summary or "-",
+                problems="; ".join(summary_problems + style), roles=", ".join(roles) or "-", years=_years_text(match),
+                education=education, skills=", ".join(skills) or "-",
+                achievements=" | ".join(list(written.values())[:6]) or "-"), SummaryDraft, cache=False).summary.strip()
+        except Exception:  # noqa: BLE001 — si la corrección falla, se decide con lo que ya hay
+            fixed = ""
+        fixed_problems, fixed_style = check(fixed)
+        if not fixed_problems and (summary_problems or len(fixed_style) <= len(style)):
+            summary, summary_problems = fixed, []
     return WrittenCV(
-        summary=fallback_summary(vacancy, match, profile, language_code) if summary_problems or not draft.summary.strip()
-        else draft.summary.strip(),
+        summary=summary if not summary_problems
+        else fallback_summary(vacancy, match, profile, language_code, skills=_relevant(skills, vacancy_texts)),
         bullets=written,
         reverted=failing,
         summary_problems=summary_problems,
     )
 
 
-def fallback_summary(vacancy: VacancyAnalysis, match: MatchResult, profile: ProfileSnapshot, language_code: str) -> str:
-    """Resumen armado solo con datos reales, para cuando el de la IA no pasa la verificación."""
-    roles = list(dict.fromkeys(e.role for e in profile.experiences))[:3]
-    years = _years_text(match)
+def _relevant(skills: list[str], vacancy_texts: list[str], limit: int = 5) -> list[str]:
+    """Las habilidades que nombra la vacante primero (sin repetir), hasta `limit`."""
+    wanted = " " + " ".join(_plain(t) for t in vacancy_texts) + " "
+    named = [s for s in skills if f" {_plain(s)} " in wanted]
+    return list(dict.fromkeys(named + skills))[:limit]
+
+
+def fallback_summary(vacancy: VacancyAnalysis, match: MatchResult, profile: ProfileSnapshot, language_code: str,
+                     *, skills: list[str] | tuple[str, ...] = ()) -> str:
+    """Resumen armado solo con datos reales, para cuando el de la IA no pasa la verificación: quién es (cargos,
+    años y formación) y con qué trabaja. Nunca se presenta con el cargo de la vacante."""
+    roles = list(dict.fromkeys(e.role for e in profile.experiences))[:2]
+    years = match.experience_years
+    edu = next((e for e in profile.education if _ongoing(e)), profile.education[0] if profile.education else None)
+    skills = list(skills)[:5]
+
+    def join(items: list[str], word: str) -> str:
+        return items[0] if len(items) == 1 else f"{', '.join(items[:-1])} {word} {items[-1]}"
+
     if language_code == "en":
-        return f"{vacancy.role} candidate with {years} years of experience as {', '.join(roles)}."
-    return f"{vacancy.role}: {years} años de experiencia como {', '.join(roles)}."
+        span = "less than a year" if years < 1 else ("1 year" if int(years) == 1 else f"{int(years)} years")
+        text = f"{join(roles, 'and')} with {span} of experience" if roles else "Professional"
+        if edu:
+            where = f" ({edu.institution})" if edu.institution else ""
+            text += f"; {'currently studying' if _ongoing(edu) else 'education:'} {edu.title}{where}"
+        return text + "." + (f" Hands-on work with {join(skills, 'and')}." if skills else "")
+    span = "menos de un año" if years < 1 else ("1 año" if int(years) == 1 else f"{int(years)} años")
+    text = f"{join(roles, 'y')} con {span} de experiencia" if roles else "Profesional"
+    if edu:
+        where = f" ({edu.institution})" if edu.institution else ""
+        text += f"; {'estudio' if _ongoing(edu) else 'formación:'} {edu.title}{where}"
+    return text + "." + (f" Trabajo con {join(skills, 'y')}." if skills else "")
