@@ -331,3 +331,23 @@ class TestPipeline:
         )
         assert cv.output.pages == 1 and not cv.reverted
         assert "### Asistente Administrativa - Autos del Caribe" in cv.document.to_markdown()
+
+
+def test_devops_tools_saved_in_the_old_mixed_category_join_one_group():
+    # Caso real: «Nube y DevOps: AWS Lambda» y «Herramientas / DevOps: Git, CI/CD, Docker» en el mismo CV.
+    from core.engine.skill_groups import display_category
+
+    assert display_category("Docker", "Herramientas / DevOps") == "Nube y DevOps"
+    assert display_category("AWS S3", "Herramientas y software") == "Nube y DevOps"
+    assert display_category("Tableau", "Herramientas / DevOps") == "Datos y analítica"
+    assert display_category("Zero Trust", "Otros") == "Ciberseguridad"
+    assert display_category("Torno CNC", "Herramientas / DevOps") == "Herramientas / DevOps"  # otras profesiones, igual
+    assert display_category("Docker", "Mis herramientas") == "Mis herramientas"  # una categoría propia se respeta
+
+
+def test_a_verb_the_ai_makes_up_from_a_noun_is_fixed():
+    from core.engine.writing import _fix_verbs
+
+    assert _fix_verbs("Auditorié todo el sistema y corregí 24 hallazgos") == "Audité todo el sistema y corregí 24 hallazgos"
+    assert _fix_verbs("Auditoré la red") == "Audité la red"
+    assert _fix_verbs("Integré la pasarela Wompi") == "Integré la pasarela Wompi"
