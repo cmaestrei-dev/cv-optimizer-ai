@@ -813,8 +813,10 @@ def cmd_lote(args) -> int:
                     break
             # Subir el CV en el formulario también lo cambia en el perfil (aunque no se envíe): se deja el general.
             if general and any(s in ("enviada", "revisada") for _, s in results):
-                restored = sf.restore_cv(page, site.profile_url, Path(general))
-                print("CV general de vuelta en tu perfil." if restored else "No pude dejar el CV general en tu perfil: revísalo tú.")
+                shot = cfg.DATA_DIR / "capturas" / f"{site.name.lower()}_perfil.png"
+                problem = sf.restore_cv(page, site.profile_url, Path(general), shot=shot)
+                print("CV general de vuelta en tu perfil." if not problem else
+                      f"No pude dejar el CV general en tu perfil ({problem}). Captura: {shot}. Cámbialo tú en «Mis documentos».")
         finally:
             state.save()
             context.close()

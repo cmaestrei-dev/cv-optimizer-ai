@@ -29,6 +29,7 @@ class FakeSF:
     def __init__(self, *, logged: bool = True):
         self.logged, self.applied, self.posted = logged, 1, []
         self.profile_cv, self.saved = "Camilo_Maestre_Backend_Junior.pdf", []  # subir el CV en el formulario lo cambia también aquí
+        self.ignore_saves = False
 
     def _form(self) -> str:
         # Como el real: los valores cuentan cuando el formulario los recibe (change o clic), subir el CV o elegir en
@@ -93,8 +94,9 @@ class FakeSF:
             self.applied += 1
             return route.fulfill(status=200, content_type="application/json", body="{}")
         if url.path == "/save":
-            self.profile_cv = request.post_data
-            self.saved.append(self.profile_cv)
+            if not self.ignore_saves:
+                self.profile_cv = request.post_data
+                self.saved.append(self.profile_cv)
             return route.fulfill(status=200, content_type="application/json", body="{}")
         if "navBarLevel=MY_PROFILE" in request.url:  # «Mis documentos» carga cerrada, como en el real
             body = f"""<html><body><a>Salir</a> Puestos solicitados ({self.applied})
@@ -183,8 +185,14 @@ def test_the_general_cv_goes_back_to_the_profile(chromium, tmp_path):
     general.write_bytes(b"%PDF-1.4")
     page = open_page(chromium, fake)
     try:
-        assert sf.restore_cv(page, PROFILE, general)  # abre «Mis documentos», cambia el CV y guarda
+        assert sf.restore_cv(page, PROFILE, general) == ""  # abre «Mis documentos», cambia el CV, guarda y lo confirma
         assert fake.profile_cv == general.name and fake.saved == [general.name]
-        assert sf.restore_cv(page, PROFILE, general) and fake.saved == [general.name]  # ya estaba: no guarda otra vez
+        assert sf.restore_cv(page, PROFILE, general) == "" and fake.saved == [general.name]  # ya estaba: no guarda otra vez
+        fake.ignore_saves = True  # el portal no guarda: se dice en qué paso falló y queda la captura
+        other = tmp_path / "Otro_CV.pdf"
+        other.write_bytes(b"%PDF-1.4")
+        shot = tmp_path / "capturas" / "perfil.png"
+        problem = sf.restore_cv(page, PROFILE, other, shot=shot)
+        assert problem.startswith(f"tras guardar, el perfil sigue con «{general.name}»") and shot.exists()
     finally:
         page.close()
