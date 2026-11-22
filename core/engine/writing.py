@@ -66,11 +66,14 @@ DATOS PARA EL RESUMEN:
 
 REGLAS:
 1. Cada viñeta usa SOLO hechos de su texto original. Puedes reordenar, acortar, traducir y nombrar \
-lo mismo con el término que usa la vacante (sinónimo exacto), nada más.
+lo mismo con el término que usa la vacante (sinónimo exacto), nada más. Adáptala a ESTA vacante: \
+empieza por la parte del logro que respalda sus requisitos (la columna de requisitos) y deja de lado \
+los detalles que a esta vacante no le importan.
 2. PROHIBIDO agregar herramientas, software, empresas, cifras, porcentajes, resultados o \
-responsabilidades que no estén en el texto original. Conserva las cifras tal cual.
-3. Cada viñeta: una oración de máximo 200 caracteres que empieza con un verbo de acción en \
-pasado (primera persona en español). No termines con punto.
+responsabilidades que no estén en el texto original. Conserva las cifras tal cual: son lo que más vale.
+3. Cada viñeta: una oración corta, idealmente de una línea (unos 100 caracteres y nunca más de 130), \
+que empieza con un verbo de acción en pasado (primera persona en español). Sin la etiqueta inicial \
+del original («Pagos:», «Calidad:»). No termines con punto.
 4. Devuelve una viñeta por cada id recibido, con el mismo id.
 5. Resumen (perfil profesional): 2 o 3 oraciones, entre 40 y 70 palabras, que suenen escritas por \
 una persona para ESTA vacante, en primera persona implícita (sin «yo»):
@@ -142,6 +145,16 @@ def summary_style_problems(summary: str, vacancy_role: str, real_roles: list[str
             break
     return problems
 
+# Conjugaciones que la IA inventa al volver verbo un sustantivo del original («auditoría» → «Auditorié»).
+_VERB_FIXES = {"auditorié": "Audité", "auditoré": "Audité", "auditorie": "Audité"}
+
+
+def _fix_verbs(text: str) -> str:
+    first, _, rest = text.partition(" ")
+    fixed = _VERB_FIXES.get(first.lower())
+    return f"{fixed} {rest}".rstrip() if fixed else text
+
+
 _REPAIR = """Estas viñetas reescritas contienen datos que NO están en su texto original. \
 Reescríbelas de nuevo usando SOLO el texto original (idioma: {language}). Mismo formato y reglas.
 
@@ -198,7 +211,7 @@ def write_cv(
     draft = generate_structured(llm, prompt, Draft, cache=False)
 
     strict = language_code == SOURCE_LANGUAGE
-    written = {b.id: b.text.strip().rstrip(".") for b in draft.bullets if b.id in originals}
+    written = {b.id: _fix_verbs(b.text.strip().rstrip(".")) for b in draft.bullets if b.id in originals}
     problems = {
         aid: unsupported(written[aid], originals[aid], strict=strict) if aid in written else ["sin respuesta"]
         for aid in originals

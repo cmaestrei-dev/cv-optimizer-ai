@@ -1,7 +1,8 @@
 """Agrupar habilidades técnicas como se espera en un CV de tecnología (lenguajes, frameworks, bases de datos…).
 
 Solo reordena lo que la persona YA tiene en su perfil, y solo las que guardó en una categoría genérica
-(«Herramientas y software», «Otros»): nunca agrega ni renombra habilidades. Cualquier otra profesión queda igual.
+(«Herramientas y software», «Herramientas / DevOps», «Otros»): nunca agrega ni renombra habilidades. Cualquier otra
+profesión queda igual.
 """
 
 from core.profile.repository import skill_key
@@ -13,7 +14,8 @@ DEVOPS = "Nube y DevOps"
 SECURITY = "Ciberseguridad"
 DATA = "Datos y analítica"
 
-_GENERIC = {"Herramientas y software", "Otros", "Otras"}
+# «Herramientas / DevOps» mezcla de todo (Docker, Tableau, Excel…) y dejaba dos grupos de DevOps en el mismo CV.
+_GENERIC = {"Herramientas y software", "Herramientas / DevOps", "Otros", "Otras"}
 
 _TECH: dict[str, set[str]] = {
     LANGUAGES: {"python", "java", "javascript", "typescript", "c#", "c/c++", "c++", "c", "ruby", "r", "dart", "go",
@@ -26,9 +28,11 @@ _TECH: dict[str, set[str]] = {
                 "oracle", "firebase", "dynamodb", "mariadb", "supabase"},
     DEVOPS: {"docker", "kubernetes", "aws", "amazon web services", "amazon web services (aws)", "aws lambda", "s3",
              "gcp", "google cloud", "azure", "git", "github", "github actions", "ci/cd", "linux", "terraform",
-             "vercel", "cloudflare", "nginx", "cloud run", "heroku"},
+             "vercel", "cloudflare", "nginx", "cloud run", "heroku", "aws s3", "amazon s3", "cloudwatch",
+             "amazon cloudwatch", "aws iam"},
     SECURITY: {"nmap", "shodan", "siem", "wireshark", "burp suite", "metasploit", "owasp", "kali linux",
-               "seguridad de redes", "pentesting", "hardening"},
+               "seguridad de redes", "pentesting", "hardening", "mfa", "vlan", "nist csf", "cis controls",
+               "zero trust", "ufw"},
     DATA: {"pandas", "numpy", "matplotlib", "power bi", "tableau", "jupyter notebooks", "jupyter", "scikit-learn",
            "excel avanzado", "web scraping", "analisis exploratorio de datos (eda)", "etl"},
 }
