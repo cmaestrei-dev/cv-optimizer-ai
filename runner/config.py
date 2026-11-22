@@ -58,6 +58,11 @@ compatibilidad_minima = 60   # en elempleo, «dias» es 1 (hoy y ayer), 7, 15 o 
 palabras = ["senior", "lead"]   # palabras completas del cargo que no te interesan
 empresas = []
 
+# Opcional: solo se analizan (con IA) las vacantes cuyo cargo tiene alguna de estas palabras. Una palabra corta
+# («ti», «qa») cuenta completa; una larga, al comienzo de una palabra («desarroll» → «desarrollador»).
+# [incluir]
+# palabras = ["software", "desarroll", "sistemas", "tecnolog", "datos", "soporte", "ti", "qa"]
+
 # Respuestas tuyas para las preguntas del formulario que tu perfil no responde. Clave: partes de la pregunta,
 # separadas por «|», sin tildes ni mayúsculas. Lo que no esté aquí lo responde la app con tu perfil (verificado);
 # si nadie lo sabe, la vacante se salta: nunca se responde al azar.
@@ -100,6 +105,7 @@ class Config:
     searches: list[Search] = field(default_factory=list)
     exclude_words: list[str] = field(default_factory=list)
     exclude_companies: list[str] = field(default_factory=list)
+    include_words: list[str] = field(default_factory=list)  # si hay, el cargo debe tener alguna (antes de gastar IA)
     answers: dict[str, str] = field(default_factory=dict)  # banco: «patrón|patrón» → respuesta
     no_evidence: str = "saltar"  # experiencia que el perfil no muestra: "saltar" la vacante, "cero" o "si"
     default_years: int = 2  # con "si": años que se responden si el perfil no muestra más
@@ -161,7 +167,7 @@ def load(path: Path = CONFIG_FILE) -> Config:
         raise ConfigError(f"Error en {path}: {e}") from None
     # En TOML, lo que se escribe debajo de una tabla queda dentro de ella: «sin_evidencia» puesto tras [respuestas]
     # sería una «pregunta». Las opciones generales se suben a su lugar.
-    for table in ("respuestas", "excluir"):
+    for table in ("respuestas", "excluir", "incluir"):
         if isinstance(raw.get(table), dict):
             for key in GENERAL_KEYS & raw[table].keys():
                 raw.setdefault(key, raw[table].pop(key))
@@ -205,6 +211,7 @@ def load(path: Path = CONFIG_FILE) -> Config:
     if not all(0 <= m <= 100 for m in min_scores.values()):
         raise ConfigError("«compatibilidad_minima» debe estar entre 0 y 100.")
     exclude = raw.get("excluir", {})
+    include = raw.get("incluir", {})
     no_evidence = str(raw.get("sin_evidencia", "saltar")).strip().lower()
     if no_evidence not in ("saltar", "cero", "si", "sí"):
         raise ConfigError("«sin_evidencia» debe ser \"saltar\", \"cero\" o \"si\".")
@@ -218,6 +225,7 @@ def load(path: Path = CONFIG_FILE) -> Config:
         api=api, token=_token(), mode=mode, daily_cap=cap, make_cv=bool(raw.get("generar_cv", True)), searches=searches,
         exclude_words=[str(w).lower() for w in exclude.get("palabras", [])],
         exclude_companies=[str(c).lower() for c in exclude.get("empresas", [])],
+        include_words=[str(w).strip().lower() for w in include.get("palabras", []) if str(w).strip()],
         answers={**{str(k): str(v) for k, v in raw.get("respuestas", {}).items()}, **_extra_answers()},
         no_evidence=no_evidence.replace("sí", "si"), default_years=default_years, pause_seconds=(int(pause[0]), int(pause[1])),
         portal_caps=portal_caps, min_scores=min_scores, general_cvs=general_cvs,

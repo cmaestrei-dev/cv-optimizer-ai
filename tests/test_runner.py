@@ -607,3 +607,19 @@ def test_a_broken_alert_mailbox_reaches_telegram(monkeypatch):
     cli._refresh_alerts(api)
     assert told and "buzón de alertas" in told[0]
 
+
+
+def test_titles_without_an_included_word_are_not_analyzed(tmp_path, monkeypatch):
+    # 2026-11-22: 196 de 258 vacantes analizadas quedaron bajo 60 («Editor audiovisual», «Programador de turnos»…):
+    # gastaban cupo de IA. Con [incluir], solo se analizan los cargos con alguna de esas palabras.
+    monkeypatch.setenv("CVO_BOT_TOKEN", "cvb_x")
+    path = tmp_path / "config.toml"
+    path.write_text(cfg.TEMPLATE.replace("https://TU-SERVICIO.run.app/api", "https://app.example.com/api")
+                    + '\n[incluir]\npalabras = ["software", "desarroll", "ti", "qa"]\n', encoding="utf-8")
+    conf = cfg.load(path)
+    assert conf.include_words == ["software", "desarroll", "ti", "qa"]
+    assert cli._not_included("Desarrolladora de Software Backend", conf) == ""
+    assert cli._not_included("Analista de soporte TI", conf) == ""
+    assert cli._not_included("Practicante de ciencias económicas", conf)  # «ti» no cuenta dentro de «practicante»
+    assert cli._not_included("Editor audiovisual", conf)
+    assert cli._not_included("Editor audiovisual", cfg.Config(api="https://x", token="t")) == ""  # sin [incluir], todo pasa
