@@ -163,8 +163,7 @@ nombre = "Bancolombia"
 sitio = "https://empleo.grupobancolombia.com"
 buscar = ["practicante", "software", "junior"]
 postular = true
-acceso = "https://career8.successfactors.com/career?company=…&loginFlowRequired=true&lang=es_ES"
-perfil = "https://career8.successfactors.com/portalcareer?company=…&navBarLevel=MY_PROFILE"
+acceso = "https://career8.successfactors.com/career?company=…&loginFlowRequired=true&lang=es_ES"   # con sesión, lleva al perfil
 firma = "Tu nombre completo"   # con esto autorizas aceptar la declaración de conformidad
 respuestas = { "como te enteraste" = "Portal de empleo de Bancolombia" }
 ```

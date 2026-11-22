@@ -13,7 +13,7 @@ playwright = pytest.importorskip("playwright.sync_api")
 from runner import successfactors_apply as sf  # noqa: E402
 
 OFFER = "https://empleo.grupobancolombia.com/bancolombia/job/Etipani-Ingenieroa-Software-Backend-COL/1451777800/"
-PROFILE = "https://career8.successfactors.com/portalcareer?company=X&navBarLevel=MY_PROFILE"
+LOGIN = "https://career8.successfactors.com/career?company=X&loginFlowRequired=true&lang=es_ES"
 
 
 def radio(qid: int, label: str, options: list[str]) -> str:
@@ -98,7 +98,12 @@ class FakeSF:
                 self.profile_cv = request.post_data
                 self.saved.append(self.profile_cv)
             return route.fulfill(status=200, content_type="application/json", body="{}")
-        if "navBarLevel=MY_PROFILE" in request.url:  # «Mis documentos» carga cerrada, como en el real
+        if url.path == "/career":  # el acceso: con sesión lleva al perfil con el código de la sesión (`_s.crb`)
+            body = ('<html><body><script>location.href = "/portalcareer?company=X&navBarLevel=MY_PROFILE&_s.crb=tok"</script></body></html>'
+                    if self.logged else '<html><body><input type="password"></body></html>')
+        elif "navBarLevel=MY_PROFILE" in request.url and "_s.crb=tok" not in request.url:  # el enlace directo, como en el real
+            body = "<html><body>The requested operation is not available. You are not authorized to access the functionality you have requested.</body></html>"
+        elif "navBarLevel=MY_PROFILE" in request.url:  # «Mis documentos» carga cerrada, como en el real
             body = f"""<html><body><a>Salir</a> Puestos solicitados ({self.applied})
               <span onclick="document.getElementById('docs').style.display='block'">Ampliar todas las secciones</span>
               <div id="docs" style="display:none">Mis documentos * Currículum Descargar documento <span id="cv-name">{self.profile_cv}</span>
@@ -153,7 +158,7 @@ def run(chromium, fake, tmp_path, *, submit=True, answers=None):
                  "salario actual|ultimo salario": "2000000"}
     try:
         return sf.apply(page, OFFER, cv, lambda qs: {q.label: known[q.label] for q in qs if q.label in known}, submit=submit,
-                        full_name="Camilo Andres Maestre Iglesias", overrides=overrides, profile_url=PROFILE)
+                        full_name="Camilo Andres Maestre Iglesias", overrides=overrides, login_url=LOGIN)
     finally:
         page.close()
 
@@ -161,7 +166,7 @@ def run(chromium, fake, tmp_path, *, submit=True, answers=None):
 def test_applies_with_this_vacancys_cv_and_the_bank(chromium, tmp_path):
     fake = FakeSF()
     result = run(chromium, fake, tmp_path)
-    assert result.status == "enviada" and "pasó de 1 a 2" in result.detail, result
+    assert result.status == "enviada" and "pasó de 1 a 2" in result.detail, result  # contado en el perfil, entrando por el acceso
     (sent,) = fake.posted
     assert sent["model"] == {
         "800:_input": "Portal de Empleo Externo", "810:_input": "empleo.grupobancolombia.com",  # lista en cascada
@@ -185,14 +190,14 @@ def test_the_general_cv_goes_back_to_the_profile(chromium, tmp_path):
     general.write_bytes(b"%PDF-1.4")
     page = open_page(chromium, fake)
     try:
-        assert sf.restore_cv(page, PROFILE, general) == ""  # abre «Mis documentos», cambia el CV, guarda y lo confirma
+        assert sf.restore_cv(page, LOGIN, general) == ""  # abre «Mis documentos», cambia el CV, guarda y lo confirma
         assert fake.profile_cv == general.name and fake.saved == [general.name]
-        assert sf.restore_cv(page, PROFILE, general) == "" and fake.saved == [general.name]  # ya estaba: no guarda otra vez
+        assert sf.restore_cv(page, LOGIN, general) == "" and fake.saved == [general.name]  # ya estaba: no guarda otra vez
         fake.ignore_saves = True  # el portal no guarda: se dice en qué paso falló y queda la captura
         other = tmp_path / "Otro_CV.pdf"
         other.write_bytes(b"%PDF-1.4")
         shot = tmp_path / "capturas" / "perfil.png"
-        problem = sf.restore_cv(page, PROFILE, other, shot=shot)
+        problem = sf.restore_cv(page, LOGIN, other, shot=shot)
         assert problem.startswith(f"tras guardar, el perfil sigue con «{general.name}»") and shot.exists()
     finally:
         page.close()

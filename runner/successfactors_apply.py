@@ -14,6 +14,8 @@ Lo verificado con la cuenta del dueño (2026-11-22), sin postular:
   (`select`), texto o área de texto. Las listas con autocompletar (`NNN:_input`) muestran `li.globalMenuItem`.
 - La «Declaración de conformidad» se acepta escribiendo el nombre completo (el dueño lo autorizó: `firma`).
 - «Puestos solicitados (N)» en el perfil cuenta las postulaciones: si sube, la postulación quedó.
+- El perfil solo abre con el código de la sesión en la dirección (`_s.crb`): el enlace directo responde «You are
+  not authorized». Con la sesión abierta, el acceso lleva al perfil con ese código: se entra siempre por ahí.
 - Los identificadores de los campos cambian al redibujarse: se buscan por etiqueta o valor, nunca por número fijo.
 El bot nunca resuelve el captcha ni guarda la contraseña.
 """
@@ -80,9 +82,31 @@ def wait_login(page, login_url: str, *, minutes: int = 15, poll: float = 3) -> b
     return False
 
 
-def applied_count(page, profile_url: str) -> int | None:
-    page.goto(profile_url, wait_until="domcontentloaded")
-    time.sleep(4)
+def open_profile(page, login_url: str) -> bool:
+    """Abre el perfil del candidato pasando por el acceso (ver arriba). False si no llegó."""
+    page.goto(login_url, wait_until="domcontentloaded")
+    for _ in range(20):
+        try:
+            page.wait_for_url(re.compile(r"navBarLevel=MY_PROFILE"), timeout=1_000)
+            break
+        except Exception:  # noqa: BLE001 — aún no llega; sin sesión se queda en el acceso pidiendo la contraseña
+            if page.locator("input[type=password]:visible").count():
+                return False
+    else:
+        return False
+    for _ in range(10):
+        time.sleep(1.5)
+        try:
+            if APPLIED.search(page.inner_text("body")):
+                return True
+        except Exception:  # noqa: BLE001 — la página está cambiando (redirección al perfil)
+            pass
+    return False
+
+
+def applied_count(page, login_url: str) -> int | None:
+    if not open_profile(page, login_url):
+        return None
     match = APPLIED.search(page.inner_text("body"))
     return int(match.group(1)) if match else None
 
@@ -221,13 +245,13 @@ def _pending(page) -> list[dict]:
 
 
 def apply(page, offer_url: str, cv_pdf: Path, answerer: Answerer, *, submit: bool, full_name: str,
-          overrides: dict[str, str], profile_url: str) -> ApplyResult:
+          overrides: dict[str, str], login_url: str) -> ApplyResult:
     """Postula a una oferta con la sesión ya abierta. `overrides`: respuestas propias del portal (patrón → opción).
 
     Orden (verificado el 2026-11-22: el primer intento real perdió respuestas): primero el CV; luego cada pregunta
     obligatoria vacía, en el orden del formulario (las listas en cascada, como «Detalles», dependen de la anterior);
     luego la firma; y solo si ya no queda nada obligatorio vacío, «Aplicar»."""
-    before = applied_count(page, profile_url) if submit else None
+    before = applied_count(page, login_url) if submit else None
     reason = _open_form(page, offer_url)
     if reason == "sin_sesion":
         return ApplyResult("sin_sesion", "La sesión del portal venció: vuelve a entrar")
@@ -286,18 +310,17 @@ def apply(page, offer_url: str, cv_pdf: Path, answerer: Answerer, *, submit: boo
     errors = [t.strip() for t in page.locator(".rcmValidationMsgArea:visible, [role=alert]:visible").all_inner_texts() if t.strip()]
     if any(re.search(r"corrija|obligatori|error", t, re.I) for t in errors):
         return ApplyResult("error", "El portal no aceptó el formulario: " + "; ".join(errors)[:600])
-    after = applied_count(page, profile_url)
+    after = applied_count(page, login_url)
     if before is not None and after is not None and after > before:
         return ApplyResult("enviada", f"Confirmada: «Puestos solicitados» pasó de {before} a {after}")
     return ApplyResult("enviada", "El portal aceptó el envío, pero no pude confirmarlo en «Puestos solicitados»: revísalo tú")
 
 
-def restore_cv(page, profile_url: str, cv_pdf: Path, *, shot: Path | None = None) -> str:
+def restore_cv(page, login_url: str, cv_pdf: Path, *, shot: Path | None = None) -> str:
     """Deja en el perfil el CV general (después de un lote cada postulación ya llevó el suyo). Devuelve "" si quedó o
     el paso en que falló (y deja una captura en `shot`). Se confirma recargando el perfil, no por el aviso."""
-    page.goto(profile_url, wait_until="domcontentloaded")
-    time.sleep(5)
-    problem = _restore(page, profile_url, cv_pdf)
+    problem = _restore(page, page.url, cv_pdf) if open_profile(page, login_url) else (
+        f"el perfil no abrió con la sesión ({page.url[:80]})")
     if problem and shot:
         try:
             shot.parent.mkdir(parents=True, exist_ok=True)
@@ -313,8 +336,7 @@ def _notices(page) -> str:
 
 
 def _restore(page, profile_url: str, cv_pdf: Path) -> str:
-    if not logged_in(page):
-        return f"el perfil no abrió con la sesión ({page.url[:80]})"
+    """`profile_url`: la dirección del perfil con el código de la sesión (la de la página abierta)."""
     _expand(page)
     if _current_cv(page) == cv_pdf.name:
         return ""

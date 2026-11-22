@@ -137,7 +137,7 @@ def test_low_scores_are_discarded_and_no_quota_retries_later(tmp_path, monkeypat
 
 
 
-def test_a_site_with_postular_needs_its_login_and_profile(tmp_path):
+def test_a_site_with_postular_needs_its_login(tmp_path):
     from runner import config as cfg
 
     base = '[[vigilar]]\nnombre = "Bancolombia"\nsitio = "https://empleo.grupobancolombia.com"\nbuscar = ["software"]\n'
@@ -146,7 +146,6 @@ def test_a_site_with_postular_needs_its_login_and_profile(tmp_path):
     with pytest.raises(cfg.ConfigError):
         watch.load_sites(path)
     path.write_text(base + 'postular = true\nacceso = "https://career8.successfactors.com/career?company=X"\n'
-                    'perfil = "https://career8.successfactors.com/portalcareer?company=X&navBarLevel=MY_PROFILE"\n'
                     'firma = "Camilo Andres Maestre Iglesias"\n[vigilar.respuestas]\n"como te enteraste" = "Portal de empleo"\n',
                     encoding="utf-8")
     (site,) = watch.load_sites(path)
@@ -162,7 +161,7 @@ def test_offers_of_a_postular_site_wait_for_the_batch_with_their_cv(tmp_path, mo
     told = []
     monkeypatch.setattr(telegram, "add_manual", lambda item: pytest.fail("no debía ir como manual"))
     monkeypatch.setattr(telegram, "notify", lambda text: told.append(text) or True)
-    site = replace(SITE, apply=True, login_url="https://login", profile_url="https://perfil", signature="Camilo")
+    site = replace(SITE, apply=True, login_url="https://login", signature="Camilo")
     assert cli._prepare_watched(FakeApi(score=75), state, [site]) == 0
     rec = state.data["vigiladas"]["Bancolombia:1451777800"]
     assert rec["estado"] == "preparada" and rec["cv"].endswith(".pdf") and rec["cv_id"] == 9
