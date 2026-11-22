@@ -518,7 +518,8 @@ Cambios:
 
 ## Próximo paso
 
-1. El bot corre solo (9:17 y 15:47): revisar `registro.log` y Postulaciones los primeros días. LinkedIn: ver la primera alerta reenviada en la bandeja y el primer envío real. Después, la vista web de lo que hizo el bot.
-   Pendiente de producto: el resumen del CV empieza con el cargo de la vacante («Soporte Tester QA con 1 año…»), lo que puede leerse como un cargo que no se tuvo. Cambiarlo a un objetivo honesto con evals (requiere clave de IA local).
-   Portales automáticos: LinkedIn (alertas), Computrabajo, Magneto y elempleo. Falta el primer envío real vigilado a elempleo. Después: Get on Board y búsquedas de prácticas.
-2. LinkedIn sin «Solicitud sencilla»: medir cuántas son y adónde llevan (sitios de empresas → Telegram como manuales).
+1. **(dueño)** Renovar la contraseña de aplicación de Gmail del buzón de alertas. Desde el 11–14 de noviembre la app no puede abrirlo, así que las alertas de LinkedIn (22 en 3 días) esperan allá. Pasos en `deploy/README.md` (alertas por correo). Después, ver el primer envío de LinkedIn.
+2. **(dueño)** Crear su cuenta en el portal de Bancolombia con `python -m runner entrar bancolombia`. Mientras tanto, las ofertas que encajan le llegan por Telegram con su CV. Con la cuenta, medir cuánto dura la sesión: solo si dura días se puede postular solo, porque el inicio de sesión tiene captcha.
+3. Revisar `registro.log` tras las vueltas: el primer envío real a elempleo (20 preparadas el 2026-11-21) y las opciones de las preguntas que quedan sin respuesta (ahora se anotan), para ajustar el banco.
+4. Pendiente de producto: el resumen del CV empieza con el cargo de la vacante («Soporte Tester QA con 1 año…»), y puede leerse como un cargo que no se tuvo. Cambiarlo a un objetivo honesto con evals (la clave de Gemini local está en `.env`).
+5. Después: LinkedIn sin «Solicitud sencilla» (medir adónde llevan), Get on Board y la vista web de lo que hizo el bot.
