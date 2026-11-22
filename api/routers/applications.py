@@ -78,7 +78,7 @@ def list_applications(
     account: CurrentAccount,
     view: Literal["activas", "cerradas", "todas", "bandeja", "descartadas"] = "activas",
 ) -> list[ApplicationSummaryOut]:
-    applications = tracking.list_applications(account.username, _VIEWS[view], with_files=False)
+    applications = tracking.list_applications(account.username, _VIEWS[view], with_files=False, light=True)
     if view in ("cerradas", "todas"):  # lo descartado sin enviar vive en la bandeja
         applications = [a for a in applications if not (a.status == "descartada" and a.applied_on is None)]
     if view == "bandeja":  # las ya cerradas al final: no se puede postular

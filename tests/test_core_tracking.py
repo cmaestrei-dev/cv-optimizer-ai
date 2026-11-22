@@ -112,3 +112,29 @@ def test_deleting_user_or_application_cascades():
 
     with session_scope() as s:
         assert s.execute(text("SELECT COUNT(*) FROM cv_documents")).scalar() == 0
+
+
+def test_find_by_url_reads_only_ids_and_links(monkeypatch):
+    # 2026-11: traía todas las postulaciones con sus textos en cada vacante nueva y agotó la transferencia de Neon.
+    from sqlalchemy import event
+
+    from core.db import get_engine
+
+    # «ana» ya existe (fixture)
+    big = "x" * 50_000
+    for i in range(5):
+        tracking.create_application("ana", role=f"Cargo {i}", url=f"https://co.computrabajo.com/oferta-{i}",
+                                    vacancy_text=big, evidence_json=big)
+    statements = []
+    listener = lambda conn, cursor, statement, *a: statements.append(statement)  # noqa: E731
+    event.listen(get_engine(), "before_cursor_execute", listener)
+    try:
+        found = tracking.find_by_url("ana", "https://co.computrabajo.com/oferta-3")
+        assert tracking.find_by_url("ana", "https://co.computrabajo.com/otra") is None
+    finally:
+        event.remove(get_engine(), "before_cursor_execute", listener)
+    assert found is not None and found.role == "Cargo 3" and found.vacancy_text == big
+    scans = [s for s in statements if "applications.url" in s and "WHERE applications.user_id" in s]
+    assert scans and all("vacancy_text" not in s and "evidence_json" not in s for s in scans)
+    light = tracking.list_applications("ana", with_files=False, light=True)
+    assert [a.role for a in light][-1] == "Cargo 0"

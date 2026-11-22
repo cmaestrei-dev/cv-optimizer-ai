@@ -8,7 +8,7 @@ from urllib.parse import parse_qsl, urlencode, urlparse
 from zoneinfo import ZoneInfo
 
 from sqlalchemy import func, select
-from sqlalchemy.orm import Session, selectinload
+from sqlalchemy.orm import Session, defer, selectinload
 
 from core.capture import canonical_url
 from core.db import session_scope
@@ -120,11 +120,15 @@ def exists(username: str, application_id: int) -> bool:
 
 
 def list_applications(
-    username: str, statuses: tuple[str, ...] | None = None, *, with_files: bool = True
+    username: str, statuses: tuple[str, ...] | None = None, *, with_files: bool = True, light: bool = False
 ) -> list[Application]:
-    """with_files=False no trae el PDF/DOCX de cada CV (listas, resumen, mercado): solo sus datos."""
+    """with_files=False no trae el PDF/DOCX de cada CV (listas, resumen, mercado): solo sus datos.
+    light=True tampoco trae el texto de la vacante ni el mapa de evidencias (las listas de la API no los usan;
+    leerlos después, fuera de la sesión, falla)."""
     with session_scope() as s:
         query = select(Application).where(Application.user_id == _user_id(s, username))
+        if light:
+            query = query.options(defer(Application.vacancy_text), defer(Application.evidence_json))
         if statuses:
             query = query.where(Application.status.in_(statuses))
         cvs = selectinload(Application.cvs)
@@ -180,12 +184,21 @@ def normalize_url(url: str) -> str:
 
 
 def find_by_url(username: str, url: str) -> Application | None:
+    """La postulación con ese enlace (en forma canónica), o None.
+
+    Se llama varias veces por cada vacante nueva y por cada enlace de las alertas: por eso compara solo el id y el
+    enlace de cada postulación y trae completa solo la que coincide. Antes traía todas con sus textos (vacante,
+    análisis, evidencias): unos 7 MB por llamada con 310 postulaciones, y agotó en noviembre de 2026 los 5 GB de
+    transferencia del plan gratuito de Neon."""
     key = normalize_url(url)
     if not key:
         return None
-    with session_scope() as s:  # sin cargar eventos ni CVs: se llama por cada enlace de la bandeja
-        query = select(Application).where(Application.user_id == _user_id(s, username), Application.url != "")
-        return next((a for a in s.scalars(query.order_by(Application.id.desc())) if normalize_url(a.url) == key), None)
+    with session_scope() as s:
+        rows = s.execute(select(Application.id, Application.url)
+                         .where(Application.user_id == _user_id(s, username), Application.url != "")
+                         .order_by(Application.id.desc()))
+        found = next((app_id for app_id, app_url in rows if normalize_url(app_url) == key), None)
+        return s.get(Application, found) if found is not None else None
 
 
 def delete_application(username: str, application_id: int) -> None:
@@ -312,7 +325,7 @@ def summary(username: str, on: date | None = None) -> Summary:
     on = on or today()
     # La bandeja (por revisar) y lo descartado sin enviar no son postulaciones.
     applications = [
-        a for a in list_applications(username, with_files=False)
+        a for a in list_applications(username, with_files=False, light=True)
         if a.status not in TRIAGE_STATUSES and not (a.status == "descartada" and a.applied_on is None)
     ]
     by_status = dict.fromkeys(STATUSES, 0)
