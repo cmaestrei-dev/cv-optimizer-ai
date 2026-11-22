@@ -169,6 +169,23 @@ class TestCV:
         assert client.get(f"/cvs/{cv_id}", headers=_h("eve")).status_code == 404
         assert client.get(f"/jobs/{job.json()['id']}", headers=_h("eve")).status_code == 404
 
+    def test_a_cv_after_a_profile_change_looks_for_evidence_again(self, ana):
+        # Caso real: el dueño confirmó 23 logros nuevos y las vacantes ya analizadas los habrían ignorado.
+        client, h, fake = ana
+        app_id = _add(client, h, prepare=True).json()["id"]
+        exp_id = client.get("/profile", headers=h).json()["experiences"][0]["id"]
+        client.post(f"/experiences/{exp_id}/achievements", headers=h, json={"texts": ["Atendí proveedores"]})
+        assert client.get(f"/applications/{app_id}/analysis", headers=h).json()["stale"] is True
+        fake.calls.clear()
+        client.post(f"/applications/{app_id}/cvs", headers=h, json={})
+        worker.run_once()
+        assert fake.calls == ["evidencias", "cv"]
+        assert client.get(f"/applications/{app_id}/analysis", headers=h).json()["stale"] is False
+        fake.calls.clear()
+        client.post(f"/applications/{app_id}/cvs", headers=h, json={})
+        worker.run_once()
+        assert fake.calls == ["cv"]  # sin cambios en el perfil, no se repite
+
     def test_failed_job_has_a_friendly_message(self, ana):
         client, h, fake = ana
         app_id = _add(client, h).json()["id"]

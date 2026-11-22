@@ -151,6 +151,8 @@ def _store_cv(username: str, application_id: int, document: CVDocument, output, 
 
 def generate_cv(username: str, application_id: int, *, write_llm: LLMClient, extract_llm: LLMClient, focus: str = "") -> dict:
     loaded = ensure(username, application_id, extract_llm)
+    if loaded.stale:  # el perfil cambió desde el análisis: sin evidencias nuevas, los logros nuevos casi no contarían
+        loaded = refresh(username, application_id, extract_llm)
     generated = pipeline.generate(write_llm, loaded.snapshot, contact(username), loaded.analysis, extra_focus=focus)
     cv_id, filename = _store_cv(username, application_id, generated.document, generated.output,
                                 loaded.vacancy.role, loaded.vacancy.company)
