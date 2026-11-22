@@ -351,3 +351,10 @@ def test_a_verb_the_ai_makes_up_from_a_noun_is_fixed():
     assert _fix_verbs("Auditorié todo el sistema y corregí 24 hallazgos") == "Audité todo el sistema y corregí 24 hallazgos"
     assert _fix_verbs("Auditoré la red") == "Audité la red"
     assert _fix_verbs("Integré la pasarela Wompi") == "Integré la pasarela Wompi"
+    # Caso real en producción: «Configure el pipeline…», «Active MFA…».
+    assert _fix_verbs("Configure el pipeline en GitHub Actions") == "Configuré el pipeline en GitHub Actions"
+    assert _fix_verbs("Active MFA y depuré credenciales") == "Activé MFA y depuré credenciales"
+    assert _fix_verbs("Obtuve la certificación") == "Obtuve la certificación"  # irregular: sin tilde
+    assert _fix_verbs("Hice el inventario") == "Hice el inventario"
+    assert _fix_verbs("Durante el incidente contuve la intrusión") == "Durante el incidente contuve la intrusión"
+    assert _fix_verbs("Wrote 139 test files", "en") == "Wrote 139 test files"  # en inglés no se toca
