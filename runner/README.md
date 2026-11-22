@@ -142,6 +142,33 @@ análisis de la app.
 Si al empezar una vuelta el navegador del bot está abierto (otra vuelta, o una ventana que abriste con
 `entrar`), el bot espera hasta 30 minutos a que se cierre en vez de fallar.
 
+## Portales de empresa en lote (Bancolombia)
+
+Bancolombia usa SAP SuccessFactors: para entrar pide correo, contraseña y captcha, sin «mantener la sesión», y la
+sesión dura poco. Por eso se postula en lote: el bot prepara las ofertas que encajan (análisis y CV), te avisa por
+Telegram y, cuando corres
+
+```bash
+python -m runner lote bancolombia            # --prueba: llena todo sin pulsar «Aplicar»
+```
+
+abre su ventana en el acceso. Entras tú (contraseña y captcha) **sin cerrarla**, y el bot postula a cada pendiente:
+cambia el currículum por el CV de esa vacante, responde las preguntas del puesto (tu banco, `respuestas` del
+`[[vigilar]]` y la regla de experiencia), firma la declaración de conformidad con `firma`, pulsa «Aplicar» y lo
+confirma en «Puestos solicitados (N)». Al final deja tu CV general en el perfil y te manda el resumen.
+
+```toml
+[[vigilar]]
+nombre = "Bancolombia"
+sitio = "https://empleo.grupobancolombia.com"
+buscar = ["practicante", "software", "junior"]
+postular = true
+acceso = "https://career8.successfactors.com/career?company=…&loginFlowRequired=true&lang=es_ES"
+perfil = "https://career8.successfactors.com/portalcareer?company=…&navBarLevel=MY_PROFILE"
+firma = "Tu nombre completo"   # con esto autorizas aceptar la declaración de conformidad
+respuestas = { "como te enteraste" = "Portal de empleo de Bancolombia" }
+```
+
 ## Vigilar portales de empresas
 
 Algunas empresas publican solo en su propio portal: Bancolombia y Ecopetrol usan SAP SuccessFactors, que pide

@@ -135,3 +135,38 @@ def test_low_scores_are_discarded_and_no_quota_retries_later(tmp_path, monkeypat
     assert cli._prepare_watched(low, state, [SITE]) == 0
     assert low.discarded and "compatibilidad 40 (mínimo 60)" in low.discarded[0][1]["note"]
 
+
+
+def test_a_site_with_postular_needs_its_login_and_profile(tmp_path):
+    from runner import config as cfg
+
+    base = '[[vigilar]]\nnombre = "Bancolombia"\nsitio = "https://empleo.grupobancolombia.com"\nbuscar = ["software"]\n'
+    path = tmp_path / "config.toml"
+    path.write_text(base + "postular = true\n", encoding="utf-8")
+    with pytest.raises(cfg.ConfigError):
+        watch.load_sites(path)
+    path.write_text(base + 'postular = true\nacceso = "https://career8.successfactors.com/career?company=X"\n'
+                    'perfil = "https://career8.successfactors.com/portalcareer?company=X&navBarLevel=MY_PROFILE"\n'
+                    'firma = "Camilo Andres Maestre Iglesias"\n[vigilar.respuestas]\n"como te enteraste" = "Portal de empleo"\n',
+                    encoding="utf-8")
+    (site,) = watch.load_sites(path)
+    assert site.apply and site.signature.startswith("Camilo") and site.answers == {"como te enteraste": "Portal de empleo"}
+
+
+def test_offers_of_a_postular_site_wait_for_the_batch_with_their_cv(tmp_path, monkeypatch):
+    from dataclasses import replace
+
+    from runner import telegram
+
+    cli, state = watched_state(tmp_path, monkeypatch)
+    told = []
+    monkeypatch.setattr(telegram, "add_manual", lambda item: pytest.fail("no debía ir como manual"))
+    monkeypatch.setattr(telegram, "notify", lambda text: told.append(text) or True)
+    site = replace(SITE, apply=True, login_url="https://login", profile_url="https://perfil", signature="Camilo")
+    assert cli._prepare_watched(FakeApi(score=75), state, [site]) == 0
+    rec = state.data["vigiladas"]["Bancolombia:1451777800"]
+    assert rec["estado"] == "preparada" and rec["cv"].endswith(".pdf") and rec["cv_id"] == 9
+    assert told and "python -m runner lote bancolombia" in told[0]
+    assert [k for k, _ in cli._batch_pending(state, site)] == ["Bancolombia:1451777800"]
+    rec["estado"] = "enviada"
+    assert cli._batch_pending(state, site) == []  # nunca dos veces

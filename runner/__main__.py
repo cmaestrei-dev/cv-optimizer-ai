@@ -8,6 +8,7 @@
     python -m runner postular        postula a las preparadas con «Solicitud sencilla» (--prueba: sin enviar)
     python -m runner diario          una vuelta completa: buscar y luego postular (la que corre la programación)
     python -m runner programar       lo programa cada día (temporizador de systemd del usuario; --quitar lo quita)
+    python -m runner lote bancolombia postula a las ofertas preparadas de un portal de empresa (entras tú; él postula)
 """
 
 import argparse
@@ -642,6 +643,7 @@ def _prepare_watched(api: Api, state: State, sites, *, limit: int = WATCH_PER_RO
     from runner import telegram, watch
 
     by_name, handled, sent = {s.name: s for s in sites}, 0, 0
+    for_batch: dict[str, int] = {}
     for key, rec in state.data.get("vigiladas", {}).items():
         site = by_name.get(key.split(":", 1)[0])
         if not site or not rec.get("encaja") or "app" in rec or rec.get("listo"):
@@ -681,8 +683,14 @@ def _prepare_watched(api: Api, state: State, sites, *, limit: int = WATCH_PER_RO
         try:
             cv = api.make_cv(vacancy.id)
             cv_path = str(api.download_cv(cv["id"], cfg.DATA_DIR / "cvs" / str(vacancy.id) / cv["filename"]))
+            rec["cv"], rec["cv_id"] = cv_path, cv["id"]
         except ApiError as e:
             print(f"        CV no generado: {e.detail}")
+        if site.apply:  # la postula el lote: `python -m runner lote <sitio>` (la persona entra; el bot postula)
+            rec["estado"] = "preparada"
+            for_batch[site.name] = for_batch.get(site.name, 0) + 1
+            print(f"  ✓ {vacancy.score:>3}  {vacancy.role} — {site.name}: CV listo, pendiente para el lote")
+            continue
         note = f"Postúlate en el portal de {site.name}: pide iniciar sesión (con captcha), así que el bot no puede."
         if info["closes"]:
             note += f" Cierra el {info['closes']:%d/%m/%Y}."
@@ -691,6 +699,9 @@ def _prepare_watched(api: Api, state: State, sites, *, limit: int = WATCH_PER_RO
         telegram.add_manual(item)
         sent += 1
         print(f"  ✓ {vacancy.score:>3}  {item['titulo']} — {site.name}: CV listo, enviado a Telegram")
+    for name, count in for_batch.items():
+        telegram.notify(f"{count} oferta(s) nueva(s) de {name} lista(s) para postular, cada una con su CV. En tu computador: "
+                        f"python -m runner lote {name.lower()} — entras tú (contraseña y captcha) y el bot postula.")
     return sent
 
 
@@ -705,6 +716,113 @@ def cmd_vigilar(_args) -> int:
         telegram.notify(watch.notice(new))
     else:
         print("Sin vacantes nuevas que encajen en los portales vigilados.")
+    return 0
+
+
+def _batch_pending(state: State, site) -> list[tuple[str, dict]]:
+    """Las ofertas de un portal con «postular» que la app ya analizó, encajan y aún no se enviaron."""
+    from runner import watch
+
+    out = []
+    for key, rec in state.data.get("vigiladas", {}).items():
+        if not key.startswith(site.name + ":") or "app" not in rec or rec.get("listo"):
+            continue
+        if rec.get("estado") in ("enviada", "ya_postulada", "descartada"):
+            continue
+        if (rec.get("puntaje") or 0) < site.min_score or not watch.matches(site, rec.get("cargo", "")):
+            continue
+        out.append((key, rec))
+    return out
+
+
+def cmd_lote(args) -> int:
+    """Postula a las ofertas preparadas de un portal de empresa (SuccessFactors) con la sesión que abre la persona:
+    ella entra en la ventana del bot (contraseña y captcha) y el bot postula enseguida a todas, cada una con su CV."""
+    from playwright.sync_api import sync_playwright
+
+    from runner import browser, telegram, watch
+    from runner import successfactors_apply as sf
+
+    conf = cfg.load()
+    api = Api(conf.api, conf.token)
+    site = next((s for s in watch.load_sites() if s.name.lower() == args.sitio.lower()), None)
+    if site is None or not site.apply:
+        print(f"No hay un [[vigilar]] «{args.sitio}» con postular = true en la configuración.")
+        return 2
+    submit = conf.mode == "auto" and not args.prueba
+    if submit and not site.signature:
+        print(f"Falta «firma» en el [[vigilar]] de {site.name}: el nombre completo con el que aceptas la declaración.")
+        return 2
+    state = State(cfg.DATA_DIR / "estado.json")
+    pending = _batch_pending(state, site)[: args.max or None]
+    if not pending:
+        print(f"No hay ofertas de {site.name} pendientes.")
+        return 0
+    for _key, rec in pending:  # las preparadas antes de este modo no guardaban su CV
+        if rec.get("cv") and Path(rec["cv"]).is_file() and rec.get("cv_id"):
+            continue
+        try:
+            cvs = api.get(f"/applications/{rec['app']}").get("cvs") or []
+            cv = cvs[-1] if cvs else api.make_cv(rec["app"])
+            rec["cv"] = str(api.download_cv(cv["id"], cfg.DATA_DIR / "cvs" / str(rec["app"]) / cv["filename"]))
+            rec["cv_id"] = cv["id"]
+        except ApiError as e:
+            print(f"  {rec.get('cargo', '')}: sin CV ({e.detail})")
+    state.save()
+    pending = [(k, r) for k, r in pending if r.get("cv")]
+    print(("Modo AUTOMÁTICO: se envían." if submit else "Modo PRUEBA: se llena todo y no se envía.")
+          + f" {len(pending)} oferta(s) de {site.name}:")
+    for _key, rec in pending:
+        print(f"  · {rec.get('puntaje')}  {rec.get('cargo', '')}")
+    general = conf.general_cvs.get("computrabajo", "")
+    results = []
+    with sync_playwright() as p:
+        try:
+            context = browser.open_context(p)
+        except browser.BrowserUnavailableError as e:
+            print(e)
+            return 1
+        page = context.pages[0] if context.pages else context.new_page()
+        page.set_default_timeout(60_000)
+        try:
+            print(f"\nEntra a {site.name} en la ventana del bot (correo, contraseña y captcha). No la cierres: sigo solo.")
+            if not sf.wait_login(page, site.login_url):
+                print("No entraste en 15 minutos: no se postuló nada.")
+                return 1
+            for _key, rec in pending:
+                print(f"\n· {rec.get('cargo', '')}  (compatibilidad {rec.get('puntaje')})")
+                answerer = _answerer(api, conf, rec["app"], units=True)
+                result = sf.apply(page, rec["url"], Path(rec["cv"]), answerer, submit=submit, full_name=site.signature,
+                                  overrides=site.answers, profile_url=site.profile_url)
+                print(f"  → {result.status}{': ' + result.detail if result.detail else ''}")
+                if result.unanswered:
+                    print("    Sin respuesta:", "; ".join(result.unanswered[:4]))
+                results.append((rec.get("cargo", ""), result.status))
+                if result.status == "enviada":
+                    try:
+                        api.post(f"/applications/{rec['app']}/sent", {"cv_id": rec["cv_id"], "platform": "Página de la empresa"})
+                    except ApiError as e:
+                        print(f"    Enviada en {site.name}, pero la app no la registró: {e.detail}")
+                if result.status in ("enviada", "ya_postulada", "saltada"):
+                    rec["estado"] = result.status
+                    if result.unanswered:
+                        rec["preguntas"] = result.unanswered[:6]
+                state.save()
+                if result.status == "sin_sesion":
+                    print("La sesión venció: corre el lote otra vez y entra.")
+                    break
+            if submit and general and any(s == "enviada" for _, s in results):
+                restored = sf.restore_cv(page, site.profile_url, Path(general))
+                print("CV general de vuelta en tu perfil." if restored else "No pude dejar el CV general en tu perfil: revísalo tú.")
+        finally:
+            state.save()
+            context.close()
+    sent = sum(1 for _, s in results if s == "enviada")
+    summary = f"Lote de {site.name}: {sent} enviada(s) de {len(results)}." + "".join(
+        f"\n· {cargo[:60]}: {status}" for cargo, status in results)
+    print("\n" + summary)
+    if submit:
+        telegram.notify(summary)
     return 0
 
 
@@ -824,6 +942,11 @@ def main(argv: list[str] | None = None) -> int:
     buscar.add_argument("--max", type=int, default=0, help="preparar como mucho N vacantes en esta vuelta")
     buscar.add_argument("--portal", choices=list(cfg.PORTALS), help="solo este portal")
     buscar.set_defaults(fn=cmd_buscar)
+    lote = sub.add_parser("lote", help="postular a las ofertas preparadas de un portal de empresa (entras tú; el bot postula)")
+    lote.add_argument("sitio", help="el «nombre» del [[vigilar]] (p. ej. bancolombia)")
+    lote.add_argument("--prueba", action="store_true", help="llenar todo sin pulsar «Aplicar»")
+    lote.add_argument("--max", type=int, default=0, help="como mucho N ofertas")
+    lote.set_defaults(fn=cmd_lote)
     postular = sub.add_parser("postular")
     postular.add_argument("--prueba", action="store_true", help="llegar a la revisión y descartar, aunque el modo sea auto")
     postular.add_argument("--max", type=int, default=0, help="como mucho N vacantes en esta vuelta")

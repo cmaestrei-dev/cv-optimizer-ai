@@ -39,6 +39,11 @@ class Site:
     include: list[str] = field(default_factory=lambda: list(DEFAULT_INCLUDE))
     exclude: list[str] = field(default_factory=lambda: list(DEFAULT_EXCLUDE))
     min_score: int = 60  # compatibilidad mínima para hacerle el CV y mandarla a la persona
+    apply: bool = False  # postular con `python -m runner lote <nombre>` (la persona entra; el bot postula)
+    login_url: str = ""  # el acceso del portal (career8…loginFlowRequired=true)
+    profile_url: str = ""  # el perfil del candidato («Puestos solicitados (N)»)
+    signature: str = ""  # nombre completo para aceptar la declaración de conformidad (autorizado por la persona)
+    answers: dict[str, str] = field(default_factory=dict)  # respuestas propias del portal (patrón → opción)
 
 
 def _norm(text: str) -> str:
@@ -62,7 +67,12 @@ def load_sites(path: Path | None = None) -> list[Site]:
         sites.append(Site(name=str(item.get("nombre") or base), base=base, terms=terms,
                           include=[str(w).lower() for w in item.get("incluir", DEFAULT_INCLUDE)],
                           exclude=[str(w).lower() for w in item.get("excluir", DEFAULT_EXCLUDE)],
-                          min_score=int(item.get("compatibilidad_minima", 60))))
+                          min_score=int(item.get("compatibilidad_minima", 60)), apply=bool(item.get("postular", False)),
+                          login_url=str(item.get("acceso", "")).strip(), profile_url=str(item.get("perfil", "")).strip(),
+                          signature=str(item.get("firma", "")).strip(),
+                          answers={str(k): str(v) for k, v in (item.get("respuestas") or {}).items()}))
+        if sites[-1].apply and not (sites[-1].login_url.startswith("https://") and sites[-1].profile_url.startswith("https://")):
+            raise cfg.ConfigError(f"[[vigilar]] «{sites[-1].name}» con postular = true necesita «acceso» y «perfil» (https://…).")
     return sites
 
 
