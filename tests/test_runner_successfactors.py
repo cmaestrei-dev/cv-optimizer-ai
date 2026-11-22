@@ -28,14 +28,18 @@ def radio(qid: int, label: str, options: list[str]) -> str:
 class FakeSF:
     def __init__(self, *, logged: bool = True):
         self.logged, self.applied, self.posted = logged, 1, []
+        self.profile_cv, self.saved = "Camilo_Maestre_Backend_Junior.pdf", []  # subir el CV en el formulario lo cambia también aquí
 
     def _form(self) -> str:
-        # Como el real: los valores cuentan cuando el formulario los recibe (change o clic), subir el CV redibuja y
-        # borra lo respondido, y «Detalles» depende de «¿Cómo supo de este puesto?».
+        # Como el real: los valores cuentan cuando el formulario los recibe (change o clic), subir el CV o elegir en
+        # una lista redibuja (lo respondido se pierde y los campos del perfil se ven vacíos un momento), y «Detalles»
+        # depende de «¿Cómo supo de este puesto?».
         return f"""<html><body><a>Salir</a><span>Ampliar todas las secciones</span>
-          <div>Mis documentos <span id="cv-name">CV_viejo.pdf</span>
-            <span id="41:_attachIcon" onclick="document.getElementById('f').style.display='block'">✎</span>
-            <input type="file" id="f" style="display:none" onchange="uploaded(this)"></div>
+          <div>Mis documentos * Currículum Descargar documento <span id="cv-name">CV_viejo.pdf</span> Última modificación: 01/04/2026
+            <span id="41:_attachIcon" onclick="document.getElementById('42:_file').style.display='block'">✎</span>
+            <input type="file" id="42:_file" style="display:none" onchange="uploaded(this)"></div>
+          <div><label for="87:_input" class="rcmFormFieldLabel"><span class="requiredField">*</span>&nbsp;País de nacimiento</label>
+            <input id="87:_input" role="combobox" value="Colombia" onkeydown="menu(this, ['Colombia', 'Venezuela'])"></div>
           <div><h3>Información específica del puesto</h3>
             <label for="800:_input" class="rcmFormFieldLabel"><span class="requiredField">*</span>&nbsp;¿Cómo supo de este puesto?</label>
             <input id="800:_input" role="combobox" onkeydown="menu(this, ['Otros Portales de Empleo', 'Portal de Empleo Externo'])">
@@ -66,12 +70,17 @@ class FakeSF:
             function menu(input, items) {{
               const ul = document.getElementById('menu'); ul.innerHTML = '';
               for (const it of items) {{ const li = document.createElement('li'); li.className = 'globalMenuItem'; li.innerText = it;
-                li.onclick = () => {{ input.value = it; model[input.id] = it; ul.innerHTML = ''; }}; ul.appendChild(li); }} }}
+                li.onclick = () => {{ input.value = it; model[input.id] = it; ul.innerHTML = ''; redraw(); }}; ul.appendChild(li); }} }}
+            function redraw() {{  // un campo del perfil se ve vacío mientras se redibuja (aquí: sus dos primeras lecturas)
+              let reads = 0;
+              Object.defineProperty(document.getElementById('87:_input'), 'value',
+                                    {{configurable: true, get: () => ++reads > 2 ? 'Colombia' : '', set: () => {{}}}}); }}
             function uploaded(f) {{
               document.getElementById('cv-name').innerText = f.files[0].name;
               for (const k of Object.keys(model)) delete model[k];  // se redibuja: lo respondido se pierde
               document.querySelectorAll('[role=radio]').forEach(r => r.setAttribute('aria-checked', 'false'));
-              document.querySelectorAll('textarea, input[type=text], input[role=combobox]').forEach(e => e.value = ''); }}
+              document.querySelectorAll('textarea, input[type=text], input[role=combobox]').forEach(e => e.value = '');
+              redraw(); }}
             async function send() {{
               await fetch('/apply', {{method: 'POST', body: JSON.stringify({{model, cv: document.getElementById('cv-name').innerText}})}});
               document.body.insertAdjacentHTML('beforeend', '<p>Gracias por postularte</p>'); }}
@@ -83,8 +92,21 @@ class FakeSF:
             self.posted.append(json.loads(request.post_data))
             self.applied += 1
             return route.fulfill(status=200, content_type="application/json", body="{}")
-        if "navBarLevel=MY_PROFILE" in request.url:
-            body = f"<html><body><a>Salir</a> Puestos solicitados ({self.applied})</body></html>"
+        if url.path == "/save":
+            self.profile_cv = request.post_data
+            self.saved.append(self.profile_cv)
+            return route.fulfill(status=200, content_type="application/json", body="{}")
+        if "navBarLevel=MY_PROFILE" in request.url:  # «Mis documentos» carga cerrada, como en el real
+            body = f"""<html><body><a>Salir</a> Puestos solicitados ({self.applied})
+              <span onclick="document.getElementById('docs').style.display='block'">Ampliar todas las secciones</span>
+              <div id="docs" style="display:none">Mis documentos * Currículum Descargar documento <span id="cv-name">{self.profile_cv}</span>
+                Última modificación: 22/11/2026
+                <span id="41:_attachIcon" onclick="document.getElementById('42:_file').style.display='block'">✎</span>
+                <input type="file" id="42:_file" style="display:none" onchange="document.getElementById('cv-name').innerText = this.files[0].name">
+                <span class="rcmSaveButton" onclick="save()">Guardar</span></div><p id="msg"></p>
+              <script>async function save() {{
+                await fetch('/save', {{method: 'POST', body: document.getElementById('cv-name').innerText}});
+                document.getElementById('msg').innerText = 'Perfil del candidato guardado correctamente.'; }}</script></body></html>"""
         elif url.path.startswith("/bancolombia/job/"):
             body = """<html><body><button onclick="document.getElementById('m').style.display='block'">Aplicar ▾</button>
               <div id="m" style="display:none"><a href="https://career8.successfactors.com/portalcareer?form=1">Enviar candidatura ahora</a></div></body></html>"""
@@ -111,10 +133,15 @@ def fast(monkeypatch):
     monkeypatch.setattr(sf.time, "sleep", lambda s: None)
 
 
-def run(chromium, fake, tmp_path, *, submit=True, answers=None):
+def open_page(chromium, fake):
     page = chromium.new_page()
     page.route("**/*", lambda route, request: route.abort())  # nada sale a la red
     page.route(re.compile(r"https://(empleo\.grupobancolombia\.com|career8\.successfactors\.com)/.*"), fake.handle)
+    return page
+
+
+def run(chromium, fake, tmp_path, *, submit=True, answers=None):
+    page = open_page(chromium, fake)
     cv = tmp_path / "Camilo_Maestre_Backend_Junior.pdf"
     cv.write_bytes(b"%PDF-1.4")
     known = {"¿Tienes experiencia con Kubernetes?": "Si."} if answers is None else answers
@@ -138,7 +165,7 @@ def test_applies_with_this_vacancys_cv_and_the_bank(chromium, tmp_path):
         "800:_input": "Portal de Empleo Externo", "810:_input": "empleo.grupobancolombia.com",  # lista en cascada
         "700": "No tengo familiares en Bancolombia", "710": "Portal de empleo de Bancolombia: Apliqué directamente.",
         "720": "Si.", "730:": "2000000", "740:": "5-6 a 10 semestre carrera universitaria",
-        "firma": "Camilo Andres Maestre Iglesias"}  # todo confirmado después de subir el CV
+        "firma": "Camilo Andres Maestre Iglesias"}  # todo confirmado después de subir el CV; el país del perfil, intacto
     assert sent["cv"] == "Camilo_Maestre_Backend_Junior.pdf"
 
 
@@ -148,3 +175,16 @@ def test_dry_run_unanswered_and_no_session_never_send(chromium, tmp_path):
     skipped = run(chromium, fake, tmp_path, answers={})  # nadie sabe lo de Kubernetes: no se envía
     assert skipped.status == "saltada" and skipped.unanswered == ["¿Tienes experiencia con Kubernetes?"] and fake.posted == []
     assert run(chromium, FakeSF(logged=False), tmp_path).status == "sin_sesion"
+
+
+def test_the_general_cv_goes_back_to_the_profile(chromium, tmp_path):
+    fake = FakeSF()
+    general = tmp_path / "Camilo_Maestre_Desarrollador_de_Software_Full_Stack.pdf"
+    general.write_bytes(b"%PDF-1.4")
+    page = open_page(chromium, fake)
+    try:
+        assert sf.restore_cv(page, PROFILE, general)  # abre «Mis documentos», cambia el CV y guarda
+        assert fake.profile_cv == general.name and fake.saved == [general.name]
+        assert sf.restore_cv(page, PROFILE, general) and fake.saved == [general.name]  # ya estaba: no guarda otra vez
+    finally:
+        page.close()

@@ -387,6 +387,9 @@ Entregas:
   - Le llega al dueño por Telegram con el PDF, lista para postular (máximo 5 por vuelta).
   - Postular solo no es posible: el inicio de sesión de Bancolombia pide correo, contraseña y captcha, y el portal muestra un aviso de mantenimiento («Por el momento no podrás adjuntar tu hoja de vida»).
   - `python -m runner entrar bancolombia` deja la cuenta en el navegador del bot. Si la sesión resulta durar días, se puede postular solo; eso se mide después de que el dueño entre.
+- [x] Bancolombia «en lote» (2026-11-22, ver la decisión): `python -m runner lote bancolombia [--prueba]` abre el acceso, espera a que el dueño entre y postula a todo lo preparado con su CV; al final deja en el perfil el CV general.
+  - El primer intento real no envió nada: el portal pidió «¿Cómo supo de este puesto?», «Detalles» y la declaración. Ahora va primero el CV (subirlo redibuja el formulario y borra lo respondido), luego una pregunta a la vez (las listas en cascada dependen de la anterior), cada valor confirmado con «change» y Tab, y solo se envía si no queda nada obligatorio vacío.
+  - En el modo prueba, campos del perfil ya llenos («País de nacimiento», «Nacionalidad») se veían vacíos un momento tras cada redibujo: el bot espera a que el formulario se quede quieto y los vuelve a mirar antes de responderlos. «Mis documentos» del perfil carga cerrada: se abre antes de devolver el CV general.
 
 **elempleo (Fase 8, 2026-11-21).** Pedido del dueño («ya entré a elempleo, continúa y probablemente también debas modificar el perfil»).
 - [x] Hoja de vida del dueño igual a LinkedIn: descripción, experiencias (El Arte de Nicolás, Equimat, Karta; se quitó una freelance que no estaba), estudios formales (UdeC y UNAB), 12 cursos complementarios, 18 habilidades técnicas, el CV general como adjunto (en lugar de uno viejo de «Auxiliar de recursos educativos») y GitHub.
@@ -525,7 +528,7 @@ Cambios:
 ## Próximo paso
 
 1. ~~(dueño) Renovar la contraseña de aplicación del buzón de alertas~~: hecho el 2026-11-21 (versión 2 del secreto, revisión 00015). La app recibió 13 alertas de LinkedIn acumuladas; analiza 40 vacantes por día y las demás esperan. Ver el primer envío de LinkedIn en la vuelta de las 9:17 del 22-11. Pendiente: el lector de alertas de Computrabajo no saca vacantes de sus correos reales (34 alertas con 0 vacantes).
-2. **(dueño)** Crear su cuenta en el portal de Bancolombia con `python -m runner entrar bancolombia`. Mientras tanto, las ofertas que encajan le llegan por Telegram con su CV. Con la cuenta, medir cuánto dura la sesión: solo si dura días se puede postular solo, porque el inicio de sesión tiene captcha.
+2. **(dueño)** Bancolombia: correr `python -m runner lote bancolombia --prueba`, entrar en la ventana del bot y, si las dos ofertas preparadas salen «revisada», el lote real (`python -m runner lote bancolombia`). La de Backend Junior cierra el 24-11. Cada oferta nueva que encaja avisa por Telegram con ese comando.
 3. Revisar `registro.log` tras las vueltas: el primer envío real a elempleo (20 preparadas el 2026-11-21) y las opciones de las preguntas que quedan sin respuesta (ahora se anotan), para ajustar el banco.
 4. ~~Resumen del CV honesto y natural~~: hecho el 2026-11-22 (ver la decisión). Revisar en los CV de las próximas vueltas que suene bien con el perfil real del dueño.
 5. Después: LinkedIn sin «Solicitud sencilla» (medir adónde llevan), Get on Board y la vista web de lo que hizo el bot.
