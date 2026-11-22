@@ -414,6 +414,7 @@ class AlertsOut(BaseModel):
     ignored_recently: int = Field(description="Correos que no son alertas llegados en los últimos días (Gmail reenvía de más)")
     gmail_filter: str = Field(description="Búsqueda para el filtro de Gmail que reenvía solo las alertas")
     daily_limit: int
+    mailbox_problem: str = Field("", description="Si la última revisión no pudo abrir el buzón de la app, por qué")
 
 
 class AlertsCheckOut(BaseModel):

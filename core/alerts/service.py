@@ -27,7 +27,7 @@ from sqlalchemy.exc import IntegrityError
 
 from core import discovery
 from core.alerts import parsing
-from core.alerts.mailbox import open_mailbox
+from core.alerts.mailbox import MailboxError, open_mailbox
 from core.alerts.models import AlertInbox
 from core.db import session_scope
 from core.errors import UserInputError
@@ -150,6 +150,9 @@ def activate(username: str, *, rotate: bool = False) -> AlertStatus:
 
 _lock = threading.Lock()
 _last_check = float("-inf")
+_mailbox_problem = ""  # por qué falló la última revisión (p. ej. Gmail revocó la contraseña de aplicación)
+MAILBOX_PROBLEM = ("La app no puede abrir el buzón de alertas (¿se revocó su contraseña de aplicación de Gmail?). "
+                   "Las alertas reenviadas esperan allá hasta que se arregle.")
 _failures: dict[str, int] = {}  # huella del correo → intentos fallidos (en memoria: basta con un proceso)
 
 
@@ -158,7 +161,7 @@ def check(*, force: bool = False, opener: Callable[[], AbstractContextManager] |
 
     Un correo que falla (p. ej. la base no responde) se queda para la próxima revisión, sin frenar a los
     demás; tras MAX_FAILURES intentos se descarta. Varios fallos seguidos detienen la revisión."""
-    global _last_check
+    global _last_check, _mailbox_problem
     if not enabled() or not _lock.acquire(blocking=False):
         return CheckReport(checked=False)
     try:
@@ -167,22 +170,32 @@ def check(*, force: bool = False, opener: Callable[[], AbstractContextManager] |
         _last_check = time.monotonic()
         report = CheckReport(checked=True)
         host = os.environ.get("ALERTS_IMAP_HOST", "").strip() or "imap.gmail.com"
-        with (opener or (lambda: open_mailbox(mailbox_address(), _password(), host)))() as box:
-            in_a_row = 0
-            for uid, raw in box.fetch(MAX_MESSAGES):
-                report.messages += 1
-                if not _process(raw, report):
-                    in_a_row += 1
-                    if in_a_row >= 3:
-                        break
-                    continue
+        try:
+            with (opener or (lambda: open_mailbox(mailbox_address(), _password(), host)))() as box:
                 in_a_row = 0
-                box.discard(uid)
-            box.empty_trash()
+                for uid, raw in box.fetch(MAX_MESSAGES):
+                    report.messages += 1
+                    if not _process(raw, report):
+                        in_a_row += 1
+                        if in_a_row >= 3:
+                            break
+                        continue
+                    in_a_row = 0
+                    box.discard(uid)
+                box.empty_trash()
+        except MailboxError:
+            _mailbox_problem = MAILBOX_PROBLEM
+            raise
+        _mailbox_problem = ""
         _drain_waiting(report)
         return report
     finally:
         _lock.release()
+
+
+def mailbox_problem() -> str:
+    """Vacío si la última revisión abrió el buzón; si no, qué pasa (en memoria: basta con un proceso)."""
+    return _mailbox_problem
 
 
 def _process(raw: bytes, report: CheckReport) -> bool:

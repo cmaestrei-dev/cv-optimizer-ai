@@ -120,6 +120,11 @@ export function AlertsCard() {
       ) : (
         <p className="muted">Aún no llega ninguna alerta. Sigue estos pasos (una sola vez):</p>
       )}
+      {data.mailbox_problem && (
+        <Notice kind="warn">
+          <p>{data.mailbox_problem}</p>
+        </Notice>
+      )}
       {data.ignored_recently > 0 && (
         <Notice kind="warn">
           <p>

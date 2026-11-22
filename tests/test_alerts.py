@@ -343,6 +343,25 @@ class TestAPI:
         assert [(a["url"], a["status"]) for a in inbox] == [("https://www.linkedin.com/jobs/view/4012345678", "por_revisar")]
         assert inbox[0]["match_score"] is not None and client.get("/alerts", headers=h).json()["analyzing"] == 0
 
+    def test_a_mailbox_that_does_not_open_is_reported(self, client, mailbox_env, monkeypatch):
+        # 2026-11-21: Gmail revocó la contraseña de aplicación del buzón y por una semana nadie se enteró.
+        from core.alerts.mailbox import MailboxError
+        from tests.test_api import _h
+
+        h = _h("ana")
+        client.post("/alerts", headers=h)
+
+        def refused(address, password, host):
+            raise MailboxError("No se pudo abrir el buzón de alertas")
+
+        monkeypatch.setattr(alerts, "open_mailbox", refused)
+        out = client.post("/alerts/check", headers=h).json()
+        assert "contraseña de aplicación" in out["mailbox_problem"]
+        assert client.get("/alerts", headers=h).json()["mailbox_problem"] == out["mailbox_problem"]
+        monkeypatch.setattr(alerts, "open_mailbox", lambda address, password, host: FakeMailbox([]).open())
+        monkeypatch.setattr(alerts, "_last_check", float("-inf"))
+        assert client.post("/alerts/check", headers=h).json()["mailbox_problem"] == ""  # ya abre: se quita el aviso
+
     def test_disabled_server(self, client):
         from tests.test_api import _h
 

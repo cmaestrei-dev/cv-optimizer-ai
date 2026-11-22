@@ -2790,6 +2790,12 @@
      "daily_limit": {
       "type": "integer",
       "title": "Daily Limit"
+     },
+     "mailbox_problem": {
+      "type": "string",
+      "title": "Mailbox Problem",
+      "description": "Si la última revisión no pudo abrir el buzón de la app, por qué",
+      "default": ""
      }
     },
     "type": "object",

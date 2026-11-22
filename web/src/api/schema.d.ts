@@ -996,6 +996,12 @@ export interface components {
             gmail_filter: string;
             /** Daily Limit */
             daily_limit: number;
+            /**
+             * Mailbox Problem
+             * @description Si la última revisión no pudo abrir el buzón de la app, por qué
+             * @default
+             */
+            mailbox_problem: string;
         };
         /** AnalysisOut */
         AnalysisOut: {
