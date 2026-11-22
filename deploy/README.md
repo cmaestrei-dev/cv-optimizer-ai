@@ -73,6 +73,14 @@ Las alertas de empleo que la persona reenvía desde su Gmail llegan solas a la b
    (`alerts-cron-token`) y crea una tarea de Cloud Scheduler que revisa el buzón cada día a las 7:00
    (hora de Bogotá). También se revisa al abrir la bandeja.
 
+Si la Bandeja (o el bot por Telegram) avisa que **la app no puede abrir el buzón**, Google revocó la contraseña
+de aplicación (pasa, p. ej., al cambiar la contraseña de esa cuenta). Crea otra en myaccount.google.com/apppasswords
+con la cuenta del buzón y guárdala como versión nueva; el servicio la toma al reiniciarse:
+```bash
+read -rs P && printf '%s' "$P" | tr -cd 'a-zA-Z' | gcloud secrets versions add alerts-mailbox-password --data-file=- && unset P
+gcloud run services update cv-optimizer --region us-east1 --update-secrets ALERTS_MAILBOX_PASSWORD=alerts-mailbox-password:latest
+```
+
 Cada persona activa sus alertas en la Bandeja: la app le da su dirección (`buzon+código@gmail.com`) y los
 pasos para el reenvío y el filtro de Gmail. Solo se aceptan correos firmados (DKIM) por LinkedIn,
 Computrabajo, elempleo y Magneto; los correos se mandan a la papelera apenas se leen.

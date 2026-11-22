@@ -27,7 +27,7 @@ def _out(username: str, state: alerts.AlertStatus) -> AlertsOut:
         received_count=state.received_count, last_summary=state.last_summary, waiting=state.waiting,
         ignored_recently=state.ignored_recently,
         analyzing=jobs.count_active(username, "alerta") if state.address else 0,
-        gmail_filter=GMAIL_FILTER, daily_limit=alerts.daily_links(),
+        gmail_filter=GMAIL_FILTER, daily_limit=alerts.daily_links(), mailbox_problem=alerts.mailbox_problem(),
     )
 
 

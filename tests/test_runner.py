@@ -581,3 +581,15 @@ def test_without_ai_quota_a_vacancy_with_questions_waits_for_the_next_round(tmp_
     estados = {k: v["estado"] for k, v in state.data["vistas"].items()}
     assert estados == {"mg:1": "preparada", "mg:2": "preparada", "mg:3": "enviada"}
     assert calls.count("/applications/1/screening") == 1  # tras el primer «cupo agotado» no se vuelve a preguntar
+
+
+def test_a_broken_alert_mailbox_reaches_telegram(monkeypatch):
+    from runner import telegram
+
+    told = []
+    monkeypatch.setattr(telegram, "notify", lambda text: told.append(text) or True)
+    api = SimpleNamespace(post=lambda path, body: {"enabled": True, "address": "x", "analyzing": 0,
+                                                  "mailbox_problem": "La app no puede abrir el buzón de alertas."})
+    cli._refresh_alerts(api)
+    assert told and "buzón de alertas" in told[0]
+

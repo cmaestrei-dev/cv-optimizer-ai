@@ -117,6 +117,12 @@ def _refresh_alerts(api: Api, *, wait_seconds: int = 300, poll_seconds: int = 15
         status = api.post("/alerts/check", {})
         if not status.get("enabled") or not status.get("address"):
             return
+        if problem := status.get("mailbox_problem"):
+            from runner import telegram
+
+            print(f"Alertas por correo: {problem}")
+            telegram.notify(f"⚠ Alertas de LinkedIn: {problem} Renueva la contraseña de aplicación (deploy/README.md).")
+            return
         deadline = _time.monotonic() + wait_seconds
         if status.get("analyzing"):
             print(f"Alertas por correo: {status['analyzing']} en análisis; espero a que terminen…")
