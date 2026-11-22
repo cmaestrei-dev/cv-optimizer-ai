@@ -64,3 +64,17 @@ def test_yes_no_options_with_more_words():
     assert answers.pick_option("No", options) == options[1]
     assert answers.pick_option("No, vivo en Cartagena de Indias y puedo trasladarme.", ["Si", "No"]) == "No"
     assert answers.pick_option("Sí, vivo en Cartagena.", ["Si", "No"]) == "Si"
+
+
+def test_options_match_by_word_stem():
+    levels = ["Bachiller", "Técnico", "Universitaria", "Posgrado"]
+    assert answers.pick_option("Universitario en curso", levels) == "Universitaria"
+    assert answers.pick_option("Algo que no se parece", levels) is None
+
+
+def test_favorable_option_for_experience_questions():
+    assert answers.favorable_option(["No", "Sí, más de un año"]) == "Sí, más de un año"
+    assert answers.favorable_option(["Ninguno", "Básico", "Intermedio", "Avanzado"]) == "Intermedio"
+    assert answers.favorable_option(["Ninguno", "Básico", "Avanzado"]) == "Avanzado"
+    assert answers.favorable_option(["No tengo", "Ninguna"]) is None
+    assert answers.negative("No, nunca") and not answers.negative("Nociones básicas")

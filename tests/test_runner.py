@@ -457,13 +457,27 @@ class TestAnswerer:
     def test_si_says_yes_and_a_junior_number_of_years(self):
         out = self._answer("si", {"¿Cuántos años de experiencia tienes con Python?": "3 años",
                                   "¿Tienes experiencia con Microsoft Azure?": "No"})
-        assert out["¿Tienes experiencia con Microsoft Azure?"] == "Sí"  # aunque el perfil no lo muestre
+        assert out["¿Tienes experiencia con Microsoft Azure?"] == "SI"  # la opción afirmativa, aunque el perfil no lo muestre
         assert out["¿Cuántos años de experiencia tienes con Kubernetes?"] == "2"
         assert out["¿Cuántos años de experiencia tienes con Python?"] == "3"  # el perfil muestra más: se usa eso
         assert out["¿Qué experiencia tienes con Terraform?"].startswith("Sí, tengo experiencia")
         assert out["¿Cuántos meses de experiencia tienes en soporte?"] == "24"
         assert "¿Requieres patrocinio de visa?" not in out  # no es de experiencia: sin respuesta, se salta
         assert out["¿Cuál es tu aspiración salarial?"] == "3000000"
+
+    def test_si_picks_a_favorable_option_when_si_does_not_fit(self):
+        # 2026-11-21: «¿Cuál es tu nivel de experiencia con React…?» (Básico/Intermedio/Avanzado) quedaba sin respuesta.
+        from runner.linkedin import Question
+
+        api = SimpleNamespace(post=lambda path, body: [
+            {"question": q, "answer": "Avanzado" if "React" in q else "", "needs_you": "React" not in q} for q in body["questions"]])
+        conf = cfg.Config(api="https://x", token="t", no_evidence="si")
+        levels = ["Ninguno", "Básico", "Intermedio", "Avanzado"]
+        qs = [Question("radio", "¿Cuál es tu nivel de experiencia con React?", True, "", levels, []),
+              Question("radio", "¿Cuál es tu nivel de experiencia con Azure?", True, "", levels, [])]
+        out = cli._answerer(api, conf, 1)(qs)
+        assert out == {"¿Cuál es tu nivel de experiencia con React?": "Avanzado",  # lo que dice el perfil
+                       "¿Cuál es tu nivel de experiencia con Azure?": "Intermedio"}
 
     def test_open_years_questions_carry_the_unit_on_computrabajo(self):
         out = self._answer("si", {}, units=True)
