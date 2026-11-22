@@ -30,6 +30,7 @@ Answerer = Callable[[list[Question]], dict[str, str]]
 SECTION = "Información específica del puesto"  # aparece cuando el formulario terminó de cargar
 APPLIED = re.compile(r"Puestos solicitados\s*\((\d+)\)")
 ALREADY = re.compile(r"ya (ha|has) (solicitado|aplicado|postulado)|already applied", re.I)
+CURRENT_CV = re.compile(r"Curr[ií]culum\s+Descargar documento\s+(\S.*?\.(?:pdf|docx?|txt|rtf))\b", re.I)
 
 # Las preguntas obligatorias del formulario (las del puesto, `rcmFormQuestionLabel`, y las de la sección
 # «Información específica del puesto», `rcmFormFieldLabel`), con su tipo, opciones y valor actual, en orden.
@@ -37,7 +38,8 @@ _QUESTIONS = """() => {
   const clean = t => (t || '').replace(/\\u00a0/g, ' ').replace(/\\s+/g, ' ').replace(/^\\*\\s*/, '').trim();
   return [...document.querySelectorAll('label.rcmFormQuestionLabel, label.rcmFormFieldLabel')].filter(l => l.offsetParent !== null).map(l => {
     const el = document.getElementById(l.htmlFor);
-    const q = {label: clean(l.innerText), required: !!l.querySelector('.requiredField'), id: l.htmlFor, kind: 'otro', options: [], value: ''};
+    const q = {label: clean(l.innerText), required: !!l.querySelector('.requiredField'), id: l.htmlFor, kind: 'otro', options: [], value: '',
+               job: l.classList.contains('rcmFormQuestionLabel')};
     if (!el) return q;
     if (el.getAttribute('role') === 'radiogroup') {
       q.kind = 'radio';
@@ -50,7 +52,10 @@ _QUESTIONS = """() => {
     } else if (el.tagName === 'SELECT') {
       q.kind = 'select';
       q.options = [...el.options].map(o => [clean(o.text), o.value]);
-      q.value = el.selectedIndex >= 0 && el.dataset.cvoTouched ? clean(el.options[el.selectedIndex].text) : '';
+      // Las listas del puesto vienen con la primera opción marcada («1-Bachiller»): se responden siempre. Las del
+      // perfil («Sexo») se respetan.
+      const shown = el.selectedIndex >= 0 ? clean(el.options[el.selectedIndex].text) : '';
+      q.value = q.job && !el.dataset.cvoTouched ? '' : (/^sin selecci/i.test(shown) ? '' : shown);
     } else if (el.tagName === 'TEXTAREA') { q.kind = 'textarea'; q.value = el.value;
     } else if (el.tagName === 'INPUT') { q.kind = el.getAttribute('role') === 'combobox' || /_input$/.test(el.id) ? 'lista' : 'texto'; q.value = el.value; }
     return q; });
@@ -102,11 +107,22 @@ def _open_form(page, offer_url: str) -> str:
             break
     else:
         return "no abrió el formulario de postulación"
+    _expand(page)
+    return ""
+
+
+def _expand(page) -> None:
+    """Abre todas las secciones (cerradas, sus campos y el lápiz del currículum no se ven)."""
     expand = page.get_by_text("Ampliar todas las secciones")
     if expand.count():
         expand.first.click()
         time.sleep(3)
-    return ""
+
+
+def _current_cv(page) -> str:
+    """El nombre del currículum que tiene ahora el formulario o el perfil («Currículum Descargar documento X»)."""
+    match = CURRENT_CV.search(re.sub(r"\s+", " ", page.inner_text("body")))
+    return match.group(1).strip() if match else ""
 
 
 def _list_options(page, field_id: str) -> list[str]:
@@ -147,12 +163,16 @@ def _replace_cv(page, cv_pdf: Path) -> bool:
     if not icon.count():
         return False
     icon.first.scroll_into_view_if_needed()
+    icon_id = icon.first.get_attribute("id") or ""
     icon.first.click()
     time.sleep(1.5)
-    page.locator("input[type=file]").first.set_input_files(str(cv_pdf))
+    match = re.match(r"(\d+):_attachIcon$", icon_id)  # su campo de archivo es el siguiente: «41:_attachIcon» → «42:_file»
+    own = page.locator(f"[id='{int(match.group(1)) + 1}:_file']") if match else None
+    (own if own is not None and own.count() else page.locator("input[type=file]").first).set_input_files(str(cv_pdf))
     for _ in range(15):
         time.sleep(1)
-        if cv_pdf.name in page.inner_text("body"):
+        shown = _current_cv(page)
+        if shown == cv_pdf.name or (not shown and cv_pdf.name in page.inner_text("body")):
             return True
     return False
 
@@ -182,8 +202,22 @@ def _type(page, field_id: str, value: str) -> None:
     box.press("Tab")
 
 
+def _settle(page, *, rounds: int = 8, pause: float = 2) -> None:
+    """Subir el CV o elegir en una lista redibuja el formulario y por unos segundos campos del perfil ya llenos se ven
+    vacíos (pasó con «País de nacimiento» y «Nacionalidad»): se espera a que los obligatorios vacíos dejen de cambiar."""
+    last = None
+    for _ in range(rounds):
+        time.sleep(pause)
+        now = [q["label"] for q in _pending(page)]
+        if now == last:
+            return
+        last = now
+
+
 def _pending(page) -> list[dict]:
-    return [q for q in page.evaluate(_QUESTIONS) if q["required"] and not q["value"].strip()]
+    """Obligatorias y vacías. Las etiquetas sin control (o de un tipo que no se maneja, como las fechas) se omiten:
+    el perfil ya las trae llenas y el portal avisa si falta algo."""
+    return [q for q in page.evaluate(_QUESTIONS) if q["required"] and q["id"] and q["kind"] != "otro" and not q["value"].strip()]
 
 
 def apply(page, offer_url: str, cv_pdf: Path, answerer: Answerer, *, submit: bool, full_name: str,
@@ -203,7 +237,7 @@ def apply(page, offer_url: str, cv_pdf: Path, answerer: Answerer, *, submit: boo
         return ApplyResult("ya_postulada")
     if not _replace_cv(page, cv_pdf):
         return ApplyResult("saltada", "No quedó adjunto el CV de esta vacante (no se envía con otro)")
-    time.sleep(2)
+    _settle(page)
     missing: list[str] = []
     asked: set[str] = set()
     for _ in range(40):  # una pregunta a la vez: la siguiente lista puede depender de la anterior
@@ -211,6 +245,10 @@ def apply(page, offer_url: str, cv_pdf: Path, answerer: Answerer, *, submit: boo
         if not todo:
             break
         q = todo[0]
+        if not q["job"]:  # un campo del perfil vacío puede ser el redibujo: se mira otra vez antes de responderlo
+            _settle(page, rounds=3)
+            if all(p["label"] != q["label"] for p in _pending(page)):
+                continue
         asked.add(q["label"])
         if q["kind"] == "lista":
             q["options"] = [[o, o] for o in _list_options(page, q["id"])]
@@ -226,7 +264,7 @@ def apply(page, offer_url: str, cv_pdf: Path, answerer: Answerer, *, submit: boo
             _type(page, q["id"], value[:1000])
         else:
             missing.append(question.label)
-        time.sleep(0.5)
+        _settle(page, rounds=3, pause=1)
     if missing:
         return ApplyResult("saltada", "Preguntas del puesto sin respuesta en tu banco ni en tu perfil", unanswered=missing)
     if not _sign(page, full_name):
@@ -258,11 +296,17 @@ def restore_cv(page, profile_url: str, cv_pdf: Path) -> bool:
     """Deja en el perfil el CV general (después de un lote cada postulación ya llevó el suyo)."""
     page.goto(profile_url, wait_until="domcontentloaded")
     time.sleep(5)
+    _expand(page)
+    if _current_cv(page) == cv_pdf.name:
+        return True
     if not _replace_cv(page, cv_pdf):
         return False
     save = page.locator("span.rcmSaveButton:visible, [id$='_saveBtn']:visible")
     if not save.count():
         return False
     save.first.click()
-    time.sleep(6)
-    return "guardado correctamente" in page.inner_text("body")
+    for _ in range(15):
+        time.sleep(1)
+        if "guardado correctamente" in page.inner_text("body"):
+            return True
+    return False
