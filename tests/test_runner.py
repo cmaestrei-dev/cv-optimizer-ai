@@ -623,3 +623,24 @@ def test_titles_without_an_included_word_are_not_analyzed(tmp_path, monkeypatch)
     assert cli._not_included("Practicante de ciencias económicas", conf)  # «ti» no cuenta dentro de «practicante»
     assert cli._not_included("Editor audiovisual", conf)
     assert cli._not_included("Editor audiovisual", cfg.Config(api="https://x", token="t")) == ""  # sin [incluir], todo pasa
+
+
+def test_linkedin_jobs_without_easy_apply_go_to_telegram_with_their_cv(tmp_path, monkeypatch):
+    from runner import linkedin, telegram
+    from runner.linkedin import ApplyResult
+
+    sent = []
+    monkeypatch.setattr(telegram, "add_manual", lambda item: sent.append(item) or True)
+    monkeypatch.setattr(linkedin, "apply", lambda *a, **k: ApplyResult("externa", "Sin «Solicitud sencilla»"))
+    monkeypatch.setattr("time.sleep", lambda s: None)
+    cv = tmp_path / "cv.pdf"
+    cv.write_bytes(b"%PDF-1.4")
+    state = State(tmp_path / "estado.json")
+    state.mark("111", "preparada", portal="linkedin", app=7, url="https://www.linkedin.com/jobs/view/111", cv=str(cv), cv_id=3, puntaje=72)
+    state.mark("222", "preparada", portal="linkedin", app=8, url="https://www.linkedin.com/jobs/view/222", cv=str(cv), cv_id=4, puntaje=40)
+    api = SimpleNamespace(get=lambda path: {"role": "Desarrollador Python", "company": "Acme"}, post=lambda path, body: [])
+    conf = cfg.Config(api="https://x", token="t", pause_seconds=(30, 30))
+    cli._apply_portal(None, "linkedin", cli._pending(state, "linkedin"), conf=conf, api=api, state=state, submit=True, limit=0)
+    assert [i["url"] for i in sent] == ["https://www.linkedin.com/jobs/view/111"]  # la de 40 no se manda
+    assert sent[0]["cv"] == str(cv) and "sitio de la empresa" in sent[0]["nota"]
+    assert state.data["vistas"]["111"]["estado"] == "externa"

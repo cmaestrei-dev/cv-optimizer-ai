@@ -96,7 +96,8 @@ años, formación), 3 a 5 habilidades que la vacante pide y un logro concreto co
 con el cargo de la vacante, no listes todas las habilidades, no copies frases de la vacante ni uses relleno."""
 
 _FILLER = ("apasionad", "proactiv", "orientado a resultados", "orientada a resultados", "altamente motivad",
-           "solidos conocimientos", "amplia experiencia", "passionate", "results-driven", "highly motivated")
+           "solidos conocimientos", "amplia experiencia", "passionate", "results-driven", "highly motivated",
+           "experto", "experta", "domino ", "expert ")  # «experto» exagera para un perfil junior (pasó el 2026-11-22)
 _MIN_WORDS, _MAX_LISTED = 25, 7
 
 
