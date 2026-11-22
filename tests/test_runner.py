@@ -644,3 +644,18 @@ def test_linkedin_jobs_without_easy_apply_go_to_telegram_with_their_cv(tmp_path,
     assert [i["url"] for i in sent] == ["https://www.linkedin.com/jobs/view/111"]  # la de 40 no se manda
     assert sent[0]["cv"] == str(cv) and "sitio de la empresa" in sent[0]["nota"]
     assert state.data["vistas"]["111"]["estado"] == "externa"
+
+
+def test_vacancies_in_other_languages_are_skipped_unless_in_the_home_country(tmp_path):
+    vacancies = {
+        1: {"vacancy": {"language": "en", "location": "Fort Worth, Texas, Estados Unidos"}, "vacancy_text": "Data Analyst"},
+        2: {"vacancy": {"language": "en", "location": "Área metropolitana de Medellín, Colombia"}, "vacancy_text": "x"},
+        3: {"vacancy": {"language": "de", "location": "Bonn, Alemania"}, "vacancy_text": "Junior Experte"},
+        4: {"vacancy": {"language": "es", "location": "Madrid, España"}, "vacancy_text": "Desarrollador"},
+        5: {"vacancy": {"language": "en", "location": ""}, "vacancy_text": "Python Backend Engineer\nBairesDev Colombia"},
+    }
+    api = SimpleNamespace(get=lambda path: vacancies[int(path.rsplit("/", 1)[1])])
+    conf = cfg.Config(api="https://x", token="t", languages=["es"], home_country="Colombia")
+    assert cli._foreign(api, conf, 1) and cli._foreign(api, conf, 3)
+    assert not cli._foreign(api, conf, 2) and not cli._foreign(api, conf, 4) and not cli._foreign(api, conf, 5)
+    assert cli._foreign(api, cfg.Config(api="https://x", token="t"), 1) == ""  # sin solo_idiomas no se omite nada

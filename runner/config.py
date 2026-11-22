@@ -57,6 +57,8 @@ compatibilidad_minima = 60   # en elempleo, «dias» es 1 (hoy y ayer), 7, 15 o 
 [excluir]
 palabras = ["senior", "lead"]   # palabras completas del cargo que no te interesan
 empresas = []
+# solo_idiomas = ["es"]   # omite las vacantes escritas en otros idiomas…
+# salvo_pais = "Colombia" # …salvo las de este país (antes de hacer el CV)
 
 # Opcional: solo se analizan (con IA) las vacantes cuyo cargo tiene alguna de estas palabras. Una palabra corta
 # («ti», «qa») cuenta completa; una larga, al comienzo de una palabra («desarroll» → «desarrollador»).
@@ -106,6 +108,8 @@ class Config:
     exclude_words: list[str] = field(default_factory=list)
     exclude_companies: list[str] = field(default_factory=list)
     include_words: list[str] = field(default_factory=list)  # si hay, el cargo debe tener alguna (antes de gastar IA)
+    languages: list[str] = field(default_factory=list)  # idiomas de vacante aceptados («es»); vacío = todos
+    home_country: str = ""  # en este país se acepta cualquier idioma (p. ej. una vacante en inglés en Colombia)
     answers: dict[str, str] = field(default_factory=dict)  # banco: «patrón|patrón» → respuesta
     no_evidence: str = "saltar"  # experiencia que el perfil no muestra: "saltar" la vacante, "cero" o "si"
     default_years: int = 2  # con "si": años que se responden si el perfil no muestra más
@@ -226,6 +230,8 @@ def load(path: Path = CONFIG_FILE) -> Config:
         exclude_words=[str(w).lower() for w in exclude.get("palabras", [])],
         exclude_companies=[str(c).lower() for c in exclude.get("empresas", [])],
         include_words=[str(w).strip().lower() for w in include.get("palabras", []) if str(w).strip()],
+        languages=[str(x).strip().lower()[:2] for x in exclude.get("solo_idiomas", []) if str(x).strip()],
+        home_country=str(exclude.get("salvo_pais", "")).strip(),
         answers={**{str(k): str(v) for k, v in raw.get("respuestas", {}).items()}, **_extra_answers()},
         no_evidence=no_evidence.replace("sí", "si"), default_years=default_years, pause_seconds=(int(pause[0]), int(pause[1])),
         portal_caps=portal_caps, min_scores=min_scores, general_cvs=general_cvs,

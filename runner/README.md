@@ -130,6 +130,13 @@ cargos con alguna de esas palabras; las demás se omiten sin gastar nada. Las pa
 completas, y las largas, al comienzo de una palabra («desarroll» → «desarrollador»). Sin `[incluir]`, se analiza
 todo. Las vacantes de la bandeja (alertas por correo) no pasan por este filtro: ya vienen analizadas.
 
+## Vacantes en otros idiomas
+
+Con `solo_idiomas = ["es"]` y `salvo_pais = "Colombia"` en `[excluir]`, el bot omite (antes de hacer el CV) las
+vacantes escritas en otro idioma, salvo las de ese país: una oferta en inglés de Estados Unidos o en alemán de
+Alemania se descarta en la app con el motivo; una en inglés en Medellín sigue. El idioma y el lugar salen del
+análisis de la app.
+
 ## El navegador del bot ocupado
 
 Si al empezar una vuelta el navegador del bot está abierto (otra vuelta, o una ventana que abriste con
