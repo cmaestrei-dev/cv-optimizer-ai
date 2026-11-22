@@ -811,7 +811,8 @@ def cmd_lote(args) -> int:
                 if result.status == "sin_sesion":
                     print("La sesión venció: corre el lote otra vez y entra.")
                     break
-            if submit and general and any(s == "enviada" for _, s in results):
+            # Subir el CV en el formulario también lo cambia en el perfil (aunque no se envíe): se deja el general.
+            if general and any(s in ("enviada", "revisada") for _, s in results):
                 restored = sf.restore_cv(page, site.profile_url, Path(general))
                 print("CV general de vuelta en tu perfil." if restored else "No pude dejar el CV general en tu perfil: revísalo tú.")
         finally:
