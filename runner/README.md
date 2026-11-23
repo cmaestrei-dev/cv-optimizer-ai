@@ -228,6 +228,10 @@ pais = "Colombia"             # Lever: jobs.lever.co/<cuenta> · SmartRecruiters
 Workday frena si se le pide seguido (HTTP 429), y el límite es por conexión, no por empresa: en cada vuelta el bot
 revisa solo 3 portales de Workday (los que llevan más tiempo sin revisarse), con pausas largas, y si uno frena espera
 a la próxima vuelta. En casi todos estos portales el bot no postula (piden cuenta o tienen captcha): te llegan por Telegram con su CV.
+**Gupy** (Stefanini) también, con tu sesión: entra una vez con `python -m runner entrar gupy` (un Chrome normal: su
+acceso tiene el captcha de Cloudflare, que no deja pasar la ventana que maneja el bot), completa tu hoja de vida de
+Gupy y pon `postular = true` en su `[[vigilar]]`. Gupy envía esa hoja de vida (no un PDF por vacante); el bot responde
+la información adicional y las preguntas de la empresa, y pulsa «Finalizar candidatura». Si pierde la sesión, te avisa.
 **Teamtailor sí**: su formulario no pide cuenta ni captcha. Con `postular = true` en su `[[vigilar]]`, en cada vuelta el bot
 postula solo a las que llegan a la compatibilidad mínima (hasta 10 por vuelta): responde las preguntas de la empresa con
 tu banco y tu perfil, usa tu nombre, correo y teléfono del perfil de la app, sube el CV de esa vacante y marca solo el
