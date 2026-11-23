@@ -660,7 +660,10 @@ def _prepare_watched(api: Api, state: State, sites, *, limit: int = WATCH_PER_RO
     by_name, handled, sent = {s.name: s for s in sites}, 0, 0
     for_batch: dict[str, int] = {}
     blocked: set[str] = set()  # portales que frenaron en esta vuelta: sus ofertas esperan y no gastan cupo
-    for key, rec in state.data.get("vigiladas", {}).items():
+    # Primero las de los portales donde el bot postula (rinden más que las que van a Telegram para que postule la persona)
+    queue = sorted(state.data.get("vigiladas", {}).items(),
+                   key=lambda kv: not getattr(by_name.get(kv[0].split(":", 1)[0]), "apply", False))
+    for key, rec in queue:
         site = by_name.get(key.split(":", 1)[0])
         if not site or not rec.get("encaja") or "app" in rec or rec.get("listo") or site.name in blocked:
             continue
