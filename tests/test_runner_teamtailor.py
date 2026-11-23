@@ -18,11 +18,13 @@ CONTACT = {"full_name": "Camilo Maestre", "email": "camilo@example.com", "phone"
 
 
 class FakeTeamtailor:
-    def __init__(self):
+    def __init__(self, *, verify_email: bool = False):
         self.posted: list[dict] = []
+        self.verify_email = verify_email
 
-    @staticmethod
-    def _form() -> str:
+    def _form(self) -> str:
+        done = ("history.pushState({}, '', '/jobs/8777639/applications/email_verification_needed');" if self.verify_email
+                else "document.body.innerHTML = '<h1>¡Gracias por tu postulación!</h1>';")
         return """<html><body>
 <form id="job-application-form" action="/jobs/8777639/applications" method="post">
  <div class="question" data-question-mandatory="true"><label for="q0">¿Dónde vives actualmente (ciudad y barrio)?<sup>*</sup></label>
@@ -70,8 +72,8 @@ class FakeTeamtailor:
    ev.preventDefault();
    const data = Object.fromEntries(new FormData(ev.target)); data.cv = document.getElementById('cv-name').innerText;
    await fetch('/submit', {method: 'POST', body: JSON.stringify(data)});
-   document.body.innerHTML = '<h1>¡Gracias por tu postulación!</h1>'; });
-</script></body></html>"""
+   DONE; });
+</script></body></html>""".replace("DONE", done)
 
     def handle(self, route, request):
         url = urlparse(request.url)
@@ -168,3 +170,10 @@ def test_a_required_location_without_a_city_is_not_sent(chromium, tmp_path, monk
     monkeypatch.setitem(CONTACT, "city", "")
     result = run(chromium, fake, tmp_path)
     assert result.status == "saltada" and "ubicación" in result.detail and fake.posted == []
+
+
+def test_a_portal_that_asks_to_confirm_by_email_hands_it_over(chromium, tmp_path):
+    # Caso real (Bluetab, 2026-11-22): tras enviar, el portal lleva a «…/applications/email_verification_needed».
+    fake = FakeTeamtailor(verify_email=True)
+    result = run(chromium, fake, tmp_path)
+    assert result.status == "enviada" and "correo" in result.follow_up and len(fake.posted) == 1

@@ -807,6 +807,8 @@ def _auto_apply_watched(api: Api, conf: cfg.Config, state: State, sites, *, subm
                     rec["estado"] = "enviada"
                     state.count(_key("enviadas", "empresas"))
                     sent += 1
+                    if result.follow_up:  # p. ej. confirmar la postulación desde el correo
+                        _hand_over(api, rec, site.name, result.follow_up)
                 elif result.status == "verificacion":
                     rec["estado"] = "verificacion"
                     stopped.add(site.name)  # no insistir en ese portal en esta vuelta
