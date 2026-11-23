@@ -442,6 +442,7 @@ class TestAnswerer:
         ("text", "¿Cuántos meses de experiencia tienes en soporte?", [], True),
         ("radio", "¿Requieres patrocinio de visa?", ["Sí", "No"], False),
         ("text", "¿Cuál es tu aspiración salarial?", [], True),
+        ("text", "¿Cuál es tu nivel de experiencia desarrollando soluciones con LLM?", [], True),  # número sin escala
     ]
 
     def _answer(self, mode: str, replies: dict[str, str], *, units: bool = False):
@@ -464,6 +465,7 @@ class TestAnswerer:
         assert out["¿Cuántos meses de experiencia tienes en soporte?"] == "24"
         assert "¿Requieres patrocinio de visa?" not in out  # no es de experiencia: sin respuesta, se salta
         assert out["¿Cuál es tu aspiración salarial?"] == "3000000"
+        assert out["¿Cuál es tu nivel de experiencia desarrollando soluciones con LLM?"] == "2"  # campo numérico: años
 
     def test_the_salary_follows_the_published_range_and_internships_get_no_number(self):
         from runner.linkedin import Question
