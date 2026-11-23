@@ -382,14 +382,19 @@ def _answerer(api: Api, conf: cfg.Config, application_id: int, *, units: bool = 
     return answer
 
 
-def _retry_answered(state: State, conf: cfg.Config) -> int:
-    """Las vacantes saltadas por preguntas que ahora sí tienen respuesta en el banco vuelven a «preparada»."""
+def _answerable(q: str, conf: cfg.Config, extra: dict | None = None) -> bool:
+    """¿El banco (o la regla de experiencia) ya responde esta pregunta?"""
     from runner import answers
 
+    if answers.bank_answer(q, {**conf.answers, **(extra or {})}) is not None:
+        return True
+    return conf.no_evidence == "si" and (answers.asks_experience(q) or answers.is_years(q))
+
+
+def _retry_answered(state: State, conf: cfg.Config) -> int:
+    """Las vacantes saltadas por preguntas que ahora sí tienen respuesta en el banco vuelven a «preparada»."""
     def answerable(q: str) -> bool:
-        if answers.bank_answer(q, conf.answers) is not None:
-            return True
-        return conf.no_evidence == "si" and (answers.asks_experience(q) or answers.is_years(q))
+        return _answerable(q, conf)
 
     retried = 0
     for job_id, v in list(state.data["vistas"].items()):
@@ -583,9 +588,19 @@ def cmd_diario(_args) -> int:
         except Exception:  # noqa: BLE001 — vigilar nunca tumba la vuelta
             traceback.print_exc()
             watched = []
+        try:
+            from runner import watch as _watch
+
+            conf = cfg.load()
+            _auto_apply_watched(Api(conf.api, conf.token), conf, State(cfg.DATA_DIR / "estado.json"), _watch.load_sites(),
+                                submit=conf.mode == "auto")
+        except Exception:  # noqa: BLE001 — los portales de empresas nunca tumban la vuelta
+            traceback.print_exc()
         code = cmd_postular(argparse.Namespace(prueba=False, max=0, portal=None))
         state = State(cfg.DATA_DIR / "estado.json")
         notice = f"Hoy: {state.today('enviadas')} enviadas y {state.today('preparadas')} preparadas."
+        if companies := state.today(_key("enviadas", "empresas")):
+            notice += f" Portales de empresas: {companies} enviadas."
         for portal, name in cfg.PORTALS.items():
             if portal == "linkedin":
                 continue
@@ -693,10 +708,12 @@ def _prepare_watched(api: Api, state: State, sites, *, limit: int = WATCH_PER_RO
             rec["cv"], rec["cv_id"] = cv_path, cv["id"]
         except ApiError as e:
             print(f"        CV no generado: {e.detail}")
-        if site.apply:  # la postula el lote: `python -m runner lote <sitio>` (la persona entra; el bot postula)
+        if site.apply:  # la postula el bot: solo (Teamtailor) o en el lote con la sesión de la persona (SuccessFactors)
             rec["estado"] = "preparada"
-            for_batch[site.name] = for_batch.get(site.name, 0) + 1
-            print(f"  ✓ {vacancy.score:>3}  {vacancy.role} — {site.name}: CV listo, pendiente para el lote")
+            if site.portal in watch.LOGIN_APPLY:
+                for_batch[site.name] = for_batch.get(site.name, 0) + 1
+            print(f"  ✓ {vacancy.score:>3}  {vacancy.role} — {site.name}: CV listo, "
+                  + ("pendiente para el lote" if site.portal in watch.LOGIN_APPLY else "el bot la postula en esta vuelta"))
             continue
         note = {"workday": f"Postúlate en el portal de {site.name} (Workday): pide tu cuenta en esa empresa; el bot aún no postula ahí.",
                 "eightfold": f"Postúlate en la página de empleos de {site.name}: pide tu cuenta allí; el bot aún no postula ahí.",
@@ -714,6 +731,84 @@ def _prepare_watched(api: Api, state: State, sites, *, limit: int = WATCH_PER_RO
     for name, count in for_batch.items():
         telegram.notify(f"{count} oferta(s) nueva(s) de {name} lista(s) para postular, cada una con su CV. En tu computador: "
                         f"python -m runner lote {name.lower()} — entras tú (contraseña y captcha) y el bot postula.")
+    return sent
+
+
+AUTO_APPLY_PER_ROUND = 10  # postulaciones por vuelta en portales de empresas sin cuenta (Teamtailor)
+
+
+def _auto_apply_watched(api: Api, conf: cfg.Config, state: State, sites, *, submit: bool,
+                        limit: int = AUTO_APPLY_PER_ROUND) -> int:
+    """Postula sola a las ofertas preparadas de los portales de empresas sin cuenta (`postular = true`, Teamtailor),
+    cada una con su CV. Las que quedan con preguntas sin respuesta esperan a que la persona las responda (Telegram)."""
+    import random
+    import time as _time
+
+    from playwright.sync_api import sync_playwright
+
+    from runner import browser, teamtailor_apply, watch
+
+    todo = []
+    for site in sites:
+        if not site.apply or site.portal not in watch.AUTO_APPLY:
+            continue
+        for key, rec in _batch_pending(state, site):
+            if not rec.get("cv") or not Path(rec["cv"]).is_file() or not rec.get("cv_id"):
+                continue
+            if rec.get("estado") in ("error", "verificacion"):
+                continue
+            if rec.get("estado") == "saltada" and not all(_answerable(q, conf, site.answers) for q in rec.get("preguntas") or []):
+                continue  # sigue esperando respuestas
+            todo.append((site, key, rec))
+    todo = todo[: limit or None]
+    if not todo:
+        return 0
+    contact = (api.get("/profile") or {}).get("contact") or {}
+    if not (contact.get("full_name") and contact.get("email") and contact.get("phone")):
+        print("Falta tu nombre, correo o teléfono en el perfil de la app: no postulo en portales de empresas.")
+        return 0
+    print(("\nPortales de empresas (se envían):" if submit else "\nPortales de empresas (modo prueba):") + f" {len(todo)} oferta(s)")
+    sent, quota, stopped = 0, {}, set()
+    with sync_playwright() as p:
+        try:
+            context = browser.open_context(p)
+        except browser.BrowserUnavailableError as e:
+            print(e)
+            return 0
+        page = context.pages[0] if context.pages else context.new_page()
+        page.set_default_timeout(60_000)
+        try:
+            for n, (site, _job_key, rec) in enumerate(todo):
+                if site.name in stopped:
+                    continue
+                print(f"\n· {site.name}: {rec.get('cargo', '')}  (compatibilidad {rec.get('puntaje')})")
+                answerer = _answerer(api, conf, rec["app"], units=True, quota=quota)
+                result = teamtailor_apply.apply(page, rec["url"], Path(rec["cv"]), answerer, submit=submit, contact=contact,
+                                                overrides=site.answers)
+                print(f"  → {result.status}{': ' + result.detail if result.detail else ''}")
+                if result.unanswered:
+                    print("    Sin respuesta (respóndelas por Telegram: /preguntas):", "; ".join(result.unanswered[:4]))
+                if result.status == "enviada":
+                    try:
+                        api.post(f"/applications/{rec['app']}/sent", {"cv_id": rec["cv_id"], "platform": site.name})
+                    except ApiError as e:
+                        print(f"    Enviada en {site.name}, pero la app no la registró: {e.detail}")
+                    rec["estado"] = "enviada"
+                    state.count(_key("enviadas", "empresas"))
+                    sent += 1
+                elif result.status == "verificacion":
+                    rec["estado"] = "verificacion"
+                    stopped.add(site.name)  # no insistir en ese portal en esta vuelta
+                    _hand_over(api, {**rec, "url": rec["url"]}, site.name, result.detail)
+                elif result.status in ("saltada", "ya_postulada", "error"):
+                    rec["estado"] = result.status
+                    rec["preguntas"], rec["detalle"] = result.unanswered[:6], result.detail[:200]
+                state.save()
+                if n < len(todo) - 1:
+                    _time.sleep(random.uniform(20, 40) if result.status == "enviada" else random.uniform(3, 8))
+        finally:
+            state.save()
+            context.close()
     return sent
 
 
@@ -762,6 +857,11 @@ def cmd_lote(args) -> int:
         print(f"No hay un [[vigilar]] «{args.sitio}» con postular = true en la configuración.")
         return 2
     submit = conf.mode == "auto" and not args.prueba
+    if site.portal in watch.AUTO_APPLY:  # sin cuenta: el bot postula solo (también en cada vuelta)
+        state = State(cfg.DATA_DIR / "estado.json")
+        sent = _auto_apply_watched(api, conf, state, [site], submit=submit, limit=args.max or 50)
+        print(f"\n{site.name}: {sent} enviada(s).")
+        return 0
     if submit and not site.signature:
         print(f"Falta «firma» en el [[vigilar]] de {site.name}: el nombre completo con el que aceptas la declaración.")
         return 2
