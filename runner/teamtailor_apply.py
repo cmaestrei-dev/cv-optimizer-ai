@@ -51,11 +51,12 @@ _INVALID = """() => [...document.querySelectorAll('#job-application-form input, 
               return ((head || own) ? (head || own).innerText : (e.name || e.id)).replace(/\\*|Obligatorio/g, '').replace(/\\s+/g, ' ').trim(); })"""
 
 
-# Campos fuera de las preguntas cuya etiqueta dice «Obligatorio» y siguen vacíos (el servidor los rechazaría).
+# Campos fuera de las preguntas cuya etiqueta dice «Obligatorio» y siguen vacíos (el servidor los rechazaría). El CV no:
+# Teamtailor lo sube al elegirlo y vacía el campo de archivo (se comprueba aparte, por el nombre en el formulario).
 _REQUIRED_EMPTY = """() => [...document.querySelectorAll('#job-application-form label')]
   .filter(l => /Obligatorio|Required/i.test(l.innerText) && !l.closest('div.question') && l.htmlFor)
   .map(l => [l.innerText.replace(/\\*|Obligatorio|Required/gi, '').replace(/\\s+/g, ' ').trim(), document.getElementById(l.htmlFor)])
-  .filter(([, e]) => e && (e.type === 'file' ? !e.files.length : e.type === 'checkbox' ? !e.checked : !String(e.value || '').trim()))
+  .filter(([, e]) => e && e.type !== 'file' && (e.type === 'checkbox' ? !e.checked : !String(e.value || '').trim()))
   .map(([label]) => label)"""
 
 

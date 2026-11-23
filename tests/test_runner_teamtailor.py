@@ -50,7 +50,8 @@ class FakeTeamtailor:
  <label for="candidate_location">Dirección* Obligatorio</label>
  <input type="text" id="candidate_location" name="candidate[location][query]" oninput="suggest(this)">
  <input type="hidden" id="loc_city" name="candidate[location][city]"><ul id="suggestions"></ul>
- <input type="file" id="candidate_resume_remote_url" required onchange="document.getElementById('cv-name').innerText = this.files[0].name"><span id="cv-name"></span>
+ <label for="candidate_resume_remote_url">Subir currículum* Obligatorio</label>
+ <input type="file" id="candidate_resume_remote_url" onchange="document.getElementById('cv-name').innerText = this.files[0].name; this.value = ''"><span id="cv-name"></span>
  <input type="checkbox" id="candidate_consent_given" name="candidate[consent_given]" value="1" required>
  <input type="checkbox" id="candidate_consent_given_future_jobs" name="candidate[consent_given_future_jobs]" value="1">
  <input type="submit" name="commit" value="Enviar">
