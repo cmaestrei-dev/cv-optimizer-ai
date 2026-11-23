@@ -1,5 +1,6 @@
-"""Vigilar portales de empleo de empresas en sistemas con API pública de ofertas (sin sesión): Recruitee, Greenhouse,
-Lever, Ashby y SmartRecruiters. Un mismo módulo sirve para todas las empresas que usan cada sistema.
+"""Vigilar portales de empleo de empresas en sistemas con lista pública de ofertas (sin sesión): Recruitee, Greenhouse,
+Lever, Ashby, SmartRecruiters, Teamtailor, Buk y Gupy, más Muévete (Grupo Falabella). Un mismo módulo sirve para
+todas las empresas de cada sistema.
 
 Verificado (2026-11-22), con la empresa de ejemplo:
 - Recruitee (Bold): `GET <sitio>/api/offers/` → `offers` (id, title, careers_url, country_code, locations,
@@ -12,23 +13,36 @@ Verificado (2026-11-22), con la empresa de ejemplo:
   secondaryLocations, address.postalAddress.addressCountry, jobUrl, descriptionHtml, publishedAt).
 - SmartRecruiters (Experian): `GET api.smartrecruiters.com/v1/companies/<cuenta>/postings?country=co` → `content`
   (id, name, location, releasedDate); `…/postings/<id>` trae jobAd.sections (HTML) y postingUrl.
+- Teamtailor (Periferia IT, Alegra, Siigo, Bluetab): `GET <sitio>/jobs.rss` → `<item>` con title, link, pubDate,
+  description (HTML escapado) y `tt:locations` (`tt:city`, `tt:country`); el canal trae el nombre de la empresa.
+- Buk (Nequi, Ceiba, LINQ): `<sitio>/trabaja-con-nosotros` lista tarjetas (`<b class="fw-700…">cargo</b>` y el enlace
+  `<sitio>/s/<código>`); el enlace lleva a la oferta, que trae schema.org JobPosting en JSON-LD (descripción,
+  datePosted, addressLocality, addressCountry y la empresa). La lista no dice el país: cada portal es de una empresa.
+- Gupy (Stefanini): `<sitio>/` trae `__NEXT_DATA__` con `jobs` (id, title, workplace.address.country: «Colômbia»);
+  `<sitio>/jobs/<id>` trae `job` (description, responsibilities, prerequisites, publishedAt, registerEndDate).
+- Muévete (Grupo Falabella: banco, tiendas, seguros): `GET <sitio>` (`…/bff-sgdt-job-offer/api/ofertalaboral/type/
+  external`) trae TODAS las ofertas en una lista (unos 6 MB; offer_id, title, description, requirements, company, city,
+  country, date, url de postulación en AIRA). Se baja una vez por vuelta y se guarda en memoria.
 Postular en esos formularios suele tener captcha o pedir cuenta: el bot no postula; la oferta llega por Telegram.
 """
 
 import html
+import json
 import re
 import urllib.parse
 from collections.abc import Callable
 from datetime import date, datetime
+from email.utils import parsedate_to_datetime
 
 from runner import watch
 
-PORTALS = ("recruitee", "greenhouse", "lever", "ashby", "smartrecruiters")
+PORTALS = ("recruitee", "greenhouse", "lever", "ashby", "smartrecruiters", "teamtailor", "buk", "gupy", "muevete")
 # La página pública de cada sistema para una cuenta (cuando la configuración no trae `sitio`)
 PUBLIC = {"greenhouse": "https://job-boards.greenhouse.io/{}", "lever": "https://jobs.lever.co/{}",
           "ashby": "https://jobs.ashbyhq.com/{}", "smartrecruiters": "https://jobs.smartrecruiters.com/{}"}
 
 GetJson = Callable[[str], dict]
+ACCOUNT_PORTALS = ("greenhouse", "lever", "ashby", "smartrecruiters")
 
 
 def _get(get: GetJson | None) -> GetJson:
@@ -188,9 +202,130 @@ def _smartrecruiters_posting(site, url, get) -> dict:
                  company=(j.get("company") or {}).get("name"))
 
 
+# --- Teamtailor ---
+
+def _tag(block: str, name: str) -> str:
+    match = re.search(rf"<{name}>(.*?)</{name}>", block, re.S)
+    return html.unescape(re.sub(r"^<!\[CDATA\[|\]\]>$", "", match.group(1).strip())) if match else ""
+
+
+def _teamtailor_items(site) -> tuple[str, list[str]]:
+    feed = watch.fetch(f"{site.base}/jobs.rss")
+    channel = feed.split("<item>", 1)[0]
+    return _tag(channel, "title"), re.findall(r"<item>(.*?)</item>", feed, re.S)
+
+
+def _teamtailor_listing(site, get) -> list[tuple[str, str, str]]:
+    out = []
+    for item in _teamtailor_items(site)[1]:
+        countries = re.findall(r"<tt:country>(.*?)</tt:country>", item)
+        if _here(site.country, *countries) and _tag(item, "link"):
+            out.append((_tag(item, "guid") or _tag(item, "link"), _tag(item, "title"), _tag(item, "link")))
+    return out
+
+
+def _teamtailor_posting(site, url, get) -> dict:
+    company, items = _teamtailor_items(site)
+    item = next((i for i in items if _tag(i, "link") == url), "")
+    try:
+        posted = parsedate_to_datetime(_tag(item, "pubDate")).date().isoformat() if item else None
+    except (TypeError, ValueError):
+        posted = None
+    place = ", ".join(p for p in (_tag(item, "tt:city"), _tag(item, "tt:country")) if p)
+    return _info(_tag(item, "title"), place, _tag(item, "description"), posted, company=company)
+
+
+# --- Buk ---
+
+_BUK_CARD = re.compile(r'<b class="fw-700[^"]*">([^<]+)</b>.*?href="(https?://[^"]+/s/([A-Za-z0-9]+))"', re.S)
+
+
+def _buk_listing(site, get) -> list[tuple[str, str, str]]:
+    page = watch.fetch(f"{site.base}/trabaja-con-nosotros")
+    seen, out = set(), []
+    for title, url, code in _BUK_CARD.findall(page):
+        if code not in seen:
+            seen.add(code)
+            out.append((code, html.unescape(title).strip(), url))
+    return out
+
+
+def _json_ld(page: str, kind: str) -> dict:
+    for raw in re.findall(r'<script type="application/ld\+json"[^>]*>(.*?)</script>', page, re.S):
+        try:
+            data = json.loads(raw.strip())
+        except ValueError:
+            continue
+        if isinstance(data, dict) and data.get("@type") == kind:
+            return data
+    return {}
+
+
+def _buk_posting(site, url, get) -> dict:
+    job = _json_ld(watch.fetch(url), "JobPosting")
+    address = ((job.get("jobLocation") or {}).get("address") or {})
+    place = ", ".join(p for p in (address.get("addressLocality"), address.get("addressCountry")) if p)
+    body = str(job.get("description") or "").replace("\n", "<br>")
+    return _info(job.get("title"), place, body, job.get("datePosted"), job.get("validThrough"),
+                 (job.get("hiringOrganization") or {}).get("name"))
+
+
+# --- Gupy ---
+
+def _next_data(page: str) -> dict:
+    match = re.search(r'<script id="__NEXT_DATA__"[^>]*>(.*?)</script>', page, re.S)
+    try:
+        return ((json.loads(match.group(1)) if match else {}).get("props") or {}).get("pageProps") or {}
+    except ValueError:
+        return {}
+
+
+def _gupy_listing(site, get) -> list[tuple[str, str, str]]:
+    out = []
+    for job in _next_data(watch.fetch(f"{site.base}/")).get("jobs") or []:
+        country = (((job.get("workplace") or {}).get("address")) or {}).get("country")
+        if job.get("id") and _here(site.country, country):
+            out.append((str(job["id"]), str(job.get("title") or "").strip(), f"{site.base}/jobs/{job['id']}"))
+    return out
+
+
+def _gupy_posting(site, url, get) -> dict:
+    job = _next_data(watch.fetch(url)).get("job") or {}
+    body = "".join(str(job.get(k) or "") for k in ("description", "responsibilities", "prerequisites", "relevantExperiences"))
+    place = ", ".join(p for p in (job.get("addressCity"), job.get("addressCountry")) if p)
+    company = (job.get("company") or {}).get("name") if isinstance(job.get("company"), dict) else ""
+    return _info(job.get("name"), place, body, job.get("publishedAt"), job.get("registerEndDate") or job.get("expiresAt"),
+                 company or site.name)
+
+
+# --- Muévete (Grupo Falabella) ---
+
+_MUEVETE: dict[str, list[dict]] = {}  # sitio → ofertas de esta vuelta (la lista completa pesa unos 6 MB)
+
+
+def _muevete_offers(site, get) -> list[dict]:
+    if site.base not in _MUEVETE:
+        data = get(site.base)
+        _MUEVETE[site.base] = data if isinstance(data, list) else []
+    return _MUEVETE[site.base]
+
+
+def _muevete_listing(site, get) -> list[tuple[str, str, str]]:
+    _MUEVETE.pop(site.base, None)  # una vuelta nueva: lista nueva
+    return [(str(o["offer_id"]), str(o.get("title") or "").strip(), o["url"]) for o in _muevete_offers(site, get)
+            if o.get("offer_id") and o.get("url") and str(o.get("vigencia", "1")) == "1" and _here(site.country, o.get("country"))]
+
+
+def _muevete_posting(site, url, get) -> dict:
+    o = next((o for o in _muevete_offers(site, get) if o.get("url") == url), None) or {}
+    body = f"{html.escape(str(o.get('description') or ''))}<br>{o.get('requirements') or ''}".replace("\n", "<br>")
+    place = ", ".join(p for p in (o.get("city"), o.get("country")) if p)
+    return _info(o.get("title"), place, body, o.get("date"), company=o.get("requisition_company") or o.get("company"))
+
+
 def listing(site, *, get: GetJson | None = None) -> list[tuple[str, str, str]]:
     """(id, cargo, enlace público) de las ofertas del país en el portal de la empresa."""
-    if site.portal != "recruitee" and not site.account:
+    if site.portal in ACCOUNT_PORTALS and not site.account:
         raise ValueError(f"[[vigilar]] de {site.portal} necesita «cuenta»")
     if site.portal == "smartrecruiters" and not _code(site.country):
         raise ValueError(f"no conozco el código del país «{site.country}»")
