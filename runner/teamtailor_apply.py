@@ -74,6 +74,12 @@ def _choose(page, q: dict, option: str) -> bool:
         if not item.count():
             return False
         item.first.click()
+        time.sleep(0.3)
+        if button.get_attribute("aria-expanded") == "true":  # algunos se quedan abiertos y tapan la pregunta siguiente
+            page.keyboard.press("Escape")
+            time.sleep(0.3)
+            if button.get_attribute("aria-expanded") == "true":
+                button.click()
     else:
         page.evaluate("id => document.getElementById(id).click()", option_id)
     time.sleep(0.4)
