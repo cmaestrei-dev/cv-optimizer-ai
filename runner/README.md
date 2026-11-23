@@ -233,8 +233,9 @@ acceso tiene el captcha de Cloudflare, que no deja pasar la ventana que maneja e
 Gupy y pon `postular = true` en su `[[vigilar]]`. Gupy envía esa hoja de vida (no un PDF por vacante); el bot responde
 la información adicional y las preguntas de la empresa, y pulsa «Finalizar candidatura». Si pierde la sesión, te avisa.
 **AIRA** (Grupo Falabella, `portal = "muevete"`) también, con tu sesión: entra una vez con `python -m runner entrar aira`.
-El bot sube el CV de cada vacante, responde la expectativa salarial y los años de experiencia y deja sin marcar «Guardar
-hoja de vida en mi perfil» y «Recibir alertas». Falabella pide además dos pruebas (personalidad e inteligencia, 25
+El bot sube el CV de cada vacante, responde la expectativa salarial, los años de experiencia y el nivel de conocimiento
+(Ninguno…Experto) y deja sin marcar «Guardar hoja de vida en mi perfil» y «Recibir alertas». Antes de llenar nada
+comprueba que el formulario abierto sea el de esa vacante (AIRA a veces abre la última postulación que se eligió). Falabella pide además dos pruebas (personalidad e inteligencia, 25
 minutos, valen 12 meses): esas las haces tú en «Mis postulaciones» de AIRA.
 **Teamtailor sí**: su formulario no pide cuenta ni captcha. Con `postular = true` en su `[[vigilar]]`, en cada vuelta el bot
 postula solo a las que llegan a la compatibilidad mínima (hasta 10 por vuelta): responde las preguntas de la empresa con
