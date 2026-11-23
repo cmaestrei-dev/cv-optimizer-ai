@@ -51,6 +51,9 @@ class FakeTeamtailor:
  <input type="text" id="candidate_last_name" name="candidate[last_name]" required>
  <input type="email" id="candidate_email" name="candidate[email]" required>
  <input type="tel" id="candidate_phone" name="candidate[phone]" required>
+ <fieldset><legend>Ubicaciones<sup>*</sup>Obligatorio</legend>
+   <input type="checkbox" id="loc_9740" name="candidate[location_ids][]" value="9740"><label for="loc_9740">México </label>
+   <input type="checkbox" id="loc_9642" name="candidate[location_ids][]" value="9642"><label for="loc_9642">Colombia</label></fieldset>
  <label for="cl">Carta de motivación</label><textarea id="cl" name="candidate[job_applications_attributes][0][cover_letter]"></textarea>
  <label for="candidate_location">Dirección* Obligatorio</label>
  <input type="text" id="candidate_location" name="candidate[location][query]" oninput="suggest(this)">
@@ -136,6 +139,7 @@ def test_fills_everything_and_sends_with_this_vacancys_cv(chromium, tmp_path):
     assert sent["cv"] == "Camilo_Maestre_Analista_Soporte_Periferia_IT.pdf"
     assert sent["candidate[job_applications_attributes][0][cover_letter]"].startswith("Hola, me postulo")  # la carta de la app
     assert sent["candidate[location][query]"] == "Cartagena, Colombia" and sent["candidate[location][city]"] == "Cartagena"
+    assert sent["candidate[location_ids][]"] == "9642"  # la sede de su país (Alegra: «Ubicaciones», obligatorio)
 
 
 def test_dry_run_and_unanswered_questions_never_send(chromium, tmp_path):
@@ -174,7 +178,7 @@ def test_a_required_location_without_a_city_is_not_sent(chromium, tmp_path, monk
     fake = FakeTeamtailor()
     monkeypatch.setitem(CONTACT, "city", "")
     result = run(chromium, fake, tmp_path)
-    assert result.status == "saltada" and "ubicación" in result.detail and fake.posted == []
+    assert result.status == "saltada" and ("ubicación" in result.detail or "sede" in result.detail) and fake.posted == []
 
 
 def test_a_portal_that_asks_to_confirm_by_email_hands_it_over(chromium, tmp_path):
