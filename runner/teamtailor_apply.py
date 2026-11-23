@@ -9,6 +9,8 @@ Verificado el 2026-11-22 en una oferta de Periferia IT, llenando sin enviar:
   privacidad (`candidate[consent_given]`), obligatorio para postular. El de «futuras oportunidades» queda sin marcar.
 - Algunos piden la ubicación (`#candidate_location`, «Dirección»): es una ciudad con sugerencias; se escribe la ciudad
   del perfil y se elige la sugerencia de ese país (llena ciudad, país y coordenadas).
+- Algunos piden elegir la sede («Ubicaciones», casillas `candidate[location_ids][]`, obligatorio): se marca la del
+  país o la ciudad del perfil; si no está, no se envía.
 - La «Carta de motivación» (`…[cover_letter]`) puede ser obligatoria sin decirlo (Alegra respondió «No puede estar
   en blanco»): se llena con el mensaje al reclutador que escribe la app, verificado contra el perfil.
 - Antes de enviar, el formulario mismo dice si falta algo (`checkValidity`), y además se revisan los campos cuya
@@ -81,6 +83,22 @@ def _location(page, city: str) -> bool:
         if name.strip().lower() in text.lower() and (not country or country.lower() in text.lower()):
             options.nth(i).click()
             time.sleep(0.8)
+            return True
+    return False
+
+
+def _offices(page, city: str) -> bool:
+    """«Ubicaciones»: marca la sede del país (o la ciudad) del perfil. False si piden elegir y no está."""
+    boxes = page.locator(f"{FORM} input[type=checkbox][name='candidate[location_ids][]']")
+    if not boxes.count() or page.locator(f"{FORM} input[name='candidate[location_ids][]']:checked").count():
+        return True
+    places = [p.strip().lower() for p in city.split(",") if p.strip()]
+    for i in range(boxes.count()):
+        box_id = boxes.nth(i).get_attribute("id") or ""
+        label = page.locator(f"label[for='{box_id}']")
+        text = (label.first.inner_text() if label.count() else "").strip().lower()
+        if text and any(place == text or place in text for place in places):
+            page.evaluate("id => document.getElementById(id).click()", box_id)
             return True
     return False
 
@@ -174,6 +192,8 @@ def apply(page, offer_url: str, cv_pdf: Path, answerer: Answerer, *, submit: boo
         text = (cover() if cover else "").strip()
         if text:
             letter.first.fill(text[:3000])
+    if not _offices(page, contact.get("city", "")):
+        return ApplyResult("saltada", "La empresa pide elegir una sede y tu país no está entre las opciones")
     if not _location(page, contact.get("city", "")):
         return ApplyResult("saltada", "No pude elegir tu ciudad en el campo de ubicación del formulario")
     upload = page.locator(f"{FORM} input[type=file]")
