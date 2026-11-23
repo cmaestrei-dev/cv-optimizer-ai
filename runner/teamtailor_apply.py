@@ -159,7 +159,10 @@ def apply(page, offer_url: str, cv_pdf: Path, answerer: Answerer, *, submit: boo
         text = page.inner_text("body")
         if ALREADY.search(text):
             return ApplyResult("ya_postulada")
-        if DONE.search(text) or "/applications/new" not in page.url:
-            return ApplyResult("enviada", "Confirmada por el portal")
+        if done := DONE.search(text):  # se deja el aviso del portal en el registro, para poder revisarlo
+            around = " ".join(text[max(0, done.start() - 40):done.end() + 80].split())
+            return ApplyResult("enviada", f"Confirmada por el portal: «{around}»")
+        if "/applications/new" not in page.url:
+            return ApplyResult("enviada", f"El portal cambió de página tras enviar ({page.url.split('?')[0][-60:]})")
     errors = [t.strip() for t in page.locator(f"{FORM} .error:visible, {FORM} [role=alert]:visible").all_inner_texts() if t.strip()]
     return ApplyResult("error", "El portal no confirmó el envío" + (": " + "; ".join(errors)[:300] if errors else ": revísalo tú"))

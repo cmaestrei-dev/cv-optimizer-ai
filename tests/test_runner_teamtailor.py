@@ -107,7 +107,7 @@ def run(chromium, fake, tmp_path, *, submit=True, known=None):
 def test_fills_everything_and_sends_with_this_vacancys_cv(chromium, tmp_path):
     fake = FakeTeamtailor()
     result = run(chromium, fake, tmp_path)
-    assert result.status == "enviada", result
+    assert result.status == "enviada" and "Gracias por tu postulación" in result.detail, result
     (sent,) = fake.posted
     assert sent["candidate[answers_attributes][0][text]"] == "Cartagena, Manga"
     assert sent["candidate[answers_attributes][1][choice]"] == "2"  # desplegable: Estudiante Universitario
