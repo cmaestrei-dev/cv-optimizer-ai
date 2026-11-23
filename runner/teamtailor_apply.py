@@ -9,6 +9,8 @@ Verificado el 2026-11-22 en una oferta de Periferia IT, llenando sin enviar:
   privacidad (`candidate[consent_given]`), obligatorio para postular. El de «futuras oportunidades» queda sin marcar.
 - Algunos piden la ubicación (`#candidate_location`, «Dirección»): es una ciudad con sugerencias; se escribe la ciudad
   del perfil y se elige la sugerencia de ese país (llena ciudad, país y coordenadas).
+- La «Carta de motivación» (`…[cover_letter]`) puede ser obligatoria sin decirlo (Alegra respondió «No puede estar
+  en blanco»): se llena con el mensaje al reclutador que escribe la app, verificado contra el perfil.
 - Antes de enviar, el formulario mismo dice si falta algo (`checkValidity`), y además se revisan los campos cuya
   etiqueta dice «Obligatorio» aunque el campo no lo exija (Bluetab rechazó el envío por la ubicación vacía).
 Si aparece una verificación (captcha), el bot se detiene; nunca la resuelve.
@@ -122,7 +124,7 @@ def _choose(page, q: dict, option: str) -> bool:
 
 
 def apply(page, offer_url: str, cv_pdf: Path, answerer: Answerer, *, submit: bool, contact: dict,
-          overrides: dict[str, str]) -> ApplyResult:
+          overrides: dict[str, str], cover: Callable[[], str] | None = None) -> ApplyResult:
     """Postula a una oferta de Teamtailor con el CV de la vacante. `contact`: full_name, email y phone."""
     response = page.goto(application_url(offer_url), wait_until="domcontentloaded")
     time.sleep(3)
@@ -167,6 +169,11 @@ def apply(page, offer_url: str, cv_pdf: Path, answerer: Answerer, *, submit: boo
         if field.count() and value and not field.input_value().strip():
             field.fill(value)
             field.press("Tab")
+    letter = page.locator(f"{FORM} textarea[name*='cover_letter']")
+    if letter.count() and not letter.first.input_value().strip():
+        text = (cover() if cover else "").strip()
+        if text:
+            letter.first.fill(text[:3000])
     if not _location(page, contact.get("city", "")):
         return ApplyResult("saltada", "No pude elegir tu ciudad en el campo de ubicación del formulario")
     upload = page.locator(f"{FORM} input[type=file]")

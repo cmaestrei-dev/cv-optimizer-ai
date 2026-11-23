@@ -760,6 +760,15 @@ def _prepare_watched(api: Api, state: State, sites, *, limit: int = WATCH_PER_RO
     return sent
 
 
+def _cover_letter(api: Api, application_id: int) -> str:
+    """El mensaje al reclutador que escribe la app (verificado contra el perfil); vacío si no se pudo."""
+    try:
+        return (api.post(f"/applications/{application_id}/cover") or {}).get("text", "")
+    except ApiError as e:
+        print(f"        No se pudo escribir la carta: {e.detail}")
+        return ""
+
+
 AUTO_APPLY_PER_ROUND = 10  # postulaciones por vuelta en portales de empresas sin cuenta (Teamtailor)
 
 
@@ -811,7 +820,8 @@ def _auto_apply_watched(api: Api, conf: cfg.Config, state: State, sites, *, subm
                 answerer = _answerer(api, conf, rec["app"], units=True, quota=quota)
                 try:
                     result = teamtailor_apply.apply(page, rec["url"], Path(rec["cv"]), answerer, submit=submit,
-                                                    contact=contact, overrides=site.answers)
+                                                    contact=contact, overrides=site.answers,
+                                                    cover=lambda app=rec["app"]: _cover_letter(api, app))
                 except Exception as e:  # noqa: BLE001 — una oferta rara no tumba las demás
                     result = teamtailor_apply.ApplyResult("error", f"Falló al llenar el formulario: {str(e)[:150]}")
                 print(f"  → {result.status}{': ' + result.detail if result.detail else ''}")
