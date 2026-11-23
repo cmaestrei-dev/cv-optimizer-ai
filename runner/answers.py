@@ -142,6 +142,9 @@ def asks_experience(question: str) -> bool:
 # --- Aspiración salarial según la vacante (decisión del dueño, 2026-11-22) ---
 # «Decídela tú según la vacante y mi experiencia; si es solo para el perfil de la plataforma, 3 millones.»
 SALARY_DEFAULT = 3_000_000
+# Cuando un formulario exige una cifra para una práctica (AIRA de Falabella): el apoyo de sostenimiento usual, cerca de
+# un salario mínimo (decisión delegada por el dueño, 2026-11-23).
+INTERNSHIP_SALARY = 1_750_000
 _EXPECTED = ("aspiracion salarial", "expectativa salarial", "pretension salarial", "salario esperado", "salario deseado",
              "aspiracion economica", "expectativa economica", "cuanto esperas ganar", "cuanto aspiras", "expected salary",
              "salary expectation", "desired salary")

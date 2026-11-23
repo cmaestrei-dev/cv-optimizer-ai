@@ -37,9 +37,11 @@ LOGINS = {
     "gupy": ("gupy.io", None, "https://stefaninilatam.gupy.io/"),
     # Teamtailor de Periferia IT: entra con un enlace que llega al correo (ábrelo en esta misma ventana)
     "periferia": ("periferiaitgroup.com", None, "https://jobs.periferiaitgroup.com/connect/login"),
+    # AIRA (Grupo Falabella): correo y contraseña de AIRA («Ya tengo cuenta»), sin captcha
+    "aira": ("airavirtual.com", None, "https://falabella.airavirtual.com/"),
 }
 NAMES = {"linkedin": "LinkedIn", "computrabajo": "Computrabajo", "magneto": "Magneto", "elempleo": "elempleo",
-         "bancolombia": "Bancolombia", "gupy": "Gupy (Stefanini)", "periferia": "Periferia IT"}
+         "bancolombia": "Bancolombia", "gupy": "Gupy (Stefanini)", "periferia": "Periferia IT", "aira": "AIRA (Falabella)"}
 
 
 def _cookie_names(domain: str, profile: Path = PROFILE_DIR) -> set[str]:
