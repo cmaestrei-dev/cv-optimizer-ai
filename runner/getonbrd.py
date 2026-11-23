@@ -18,8 +18,6 @@ from datetime import date, datetime
 
 from runner import watch
 
-COUNTRY_CODES = {"colombia": "CO", "chile": "CL", "peru": "PE", "mexico": "MX", "argentina": "AR", "uruguay": "UY",
-                 "ecuador": "EC", "venezuela": "VE", "bolivia": "BO", "paraguay": "PY", "costa rica": "CR"}
 TECH = ("programming", "sysadmin", "devops", "qa", "cyber", "data", "mobile", "technical support", "machine learning")
 LEVELS = {1, 2, 3}  # sin experiencia, junior y semi senior (la compatibilidad de la app decide)
 MAX_AGE_DAYS = 30
@@ -29,7 +27,7 @@ GetJson = Callable[[str], dict]
 
 
 def country_code(country: str) -> str:
-    code = COUNTRY_CODES.get(watch._norm(country).strip(), "")
+    code = watch.COUNTRY_CODES.get(watch._norm(country).strip(), "")
     if not code:
         raise ValueError(f"Get on Board: no conozco el país «{country}»")
     return code

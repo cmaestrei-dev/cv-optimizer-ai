@@ -208,8 +208,25 @@ sitio = "https://www.getonbrd.com"
 pais = "Colombia"   # las abiertas al país (también remotas para quien vive allí), del último mes
 ```
 
+Muchas empresas publican en sistemas con una lista pública de ofertas; con la `cuenta` de la empresa en ese sistema
+basta (sale en la dirección de su página de empleos):
+
+```toml
+[[vigilar]]
+nombre = "Bold"
+portal = "recruitee"          # también: greenhouse, lever, ashby, smartrecruiters
+sitio = "https://jobs.bold.co"  # Recruitee: la página de empleos; los demás usan «cuenta»
+pais = "Colombia"
+
+[[vigilar]]
+nombre = "Addi"
+portal = "ashby"
+cuenta = "addi"               # jobs.ashbyhq.com/addi · Greenhouse: job-boards.greenhouse.io/<cuenta> ·
+pais = "Colombia"             # Lever: jobs.lever.co/<cuenta> · SmartRecruiters: jobs.smartrecruiters.com/<cuenta>
+```
+
 Workday frena si se le pide seguido (HTTP 429): el bot hace pausas largas y, si frena, ese portal espera a la
-próxima vuelta. En Workday, Eightfold y Get on Board el bot no postula (cada uno pide su cuenta): te llegan por Telegram con su CV.
+próxima vuelta. En estos portales el bot no postula (piden cuenta o tienen captcha): te llegan por Telegram con su CV.
 De Get on Board toma solo las de tecnología (por su categoría), sin experiencia, junior o semi senior, y descarta las
 de ventas, las bilingües y las que están en inglés sin sede en el país.
 
