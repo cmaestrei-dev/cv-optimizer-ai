@@ -668,7 +668,8 @@ def _prepare_watched(api: Api, state: State, sites, *, limit: int = WATCH_PER_RO
         if not info["text"] or (info["closes"] and info["closes"] < date.today()):
             rec["listo"] = "cerrada" if info["text"] else "sin_texto"
             continue
-        header = f"{info['title'] or rec.get('cargo', '')}\n{site.name}\n{info['place']}\n\n"
+        company = info.get("company") or site.name  # en una bolsa de empleo (Get on Board), la empresa de la oferta
+        header = f"{info['title'] or rec.get('cargo', '')}\n{company}\n{info['place']}\n\n"
         try:
             vacancy = api.add_vacancy(text=header + info["text"], url=rec["url"], posted=info["posted"])
         except ApiError as e:
@@ -699,11 +700,12 @@ def _prepare_watched(api: Api, state: State, sites, *, limit: int = WATCH_PER_RO
             continue
         note = {"workday": f"Postúlate en el portal de {site.name} (Workday): pide tu cuenta en esa empresa; el bot aún no postula ahí.",
                 "eightfold": f"Postúlate en la página de empleos de {site.name}: pide tu cuenta allí; el bot aún no postula ahí.",
+                "getonbrd": "Postúlate en Get on Board: pide tu cuenta allí (Google, LinkedIn o GitHub); el bot aún no postula ahí.",
                 }.get(site.portal, f"Postúlate en el portal de {site.name}: pide iniciar sesión (con captcha), así que el bot no puede.")
         if info["closes"]:
             note += f" Cierra el {info['closes']:%d/%m/%Y}."
         item = {"id": sha256(rec["url"].encode()).hexdigest()[:12], "url": rec["url"], "titulo": vacancy.role or rec.get("cargo", ""),
-                "empresa": site.name, "cv": cv_path, "nota": note, "motivo": "", "respuestas": "", "puntaje": vacancy.score}
+                "empresa": company, "cv": cv_path, "nota": note, "motivo": "", "respuestas": "", "puntaje": vacancy.score}
         telegram.add_manual(item)
         sent += 1
         print(f"  ✓ {vacancy.score:>3}  {item['titulo']} — {site.name}: CV listo, enviado a Telegram")

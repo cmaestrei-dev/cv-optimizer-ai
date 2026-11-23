@@ -399,6 +399,8 @@ Entregas:
 - [x] `runner/eightfold.py`: búsqueda pública de Eightfold (Mercado Libre, `/api/pcsx/search` y `position_details`), solo las del país.
 - [x] `[[vigilar]] portal = "workday" | "eightfold"` con `pais` (y `dominio` en Eightfold); `buscar` es opcional. Más palabras de tecnología en inglés (backend, developer, support, security…) y exclusiones (lead, manager, expert). Hasta 10 ofertas vigiladas por vuelta.
 - [x] Verificado en vivo: Mercado Libre 59 en Colombia (17 encajan), Accenture 40 (9), DXC y Kyndryl responden. Configurados Accenture, DXC, Kyndryl, Unisys y Mercado Libre. El bot no postula ahí (cada empresa pide su cuenta): llegan por Telegram con su CV.
+- [x] Primera vuelta real: 41 ofertas nuevas que encajan; 1 enviada a Telegram (IT Customer Service, Accenture, 64), 2 descartadas, y 7 se gastaron en detalles de Accenture que frenaron (429). Ahora un portal que frena espera a la próxima vuelta sin gastar cupos, y el detalle de Workday lleva pausa.
+- [x] `runner/getonbrd.py` (`portal = "getonbrd"`): API pública de búsqueda de Get on Board por país; solo categorías de tecnología, nivel sin experiencia/junior/semi senior, del último mes, sin inglés salvo sede en el país. El detalle por API pide clave: se lee de la página pública (microdatos JobPosting), con la empresa de cada oferta, que es la que va a la app y a Telegram. Volumen bajo, como se esperaba: 3 recientes para Colombia el 2026-11-22, ninguna para el dueño.
 
 **elempleo (Fase 8, 2026-11-21).** Pedido del dueño («ya entré a elempleo, continúa y probablemente también debas modificar el perfil»).
 - [x] Hoja de vida del dueño igual a LinkedIn: descripción, experiencias (El Arte de Nicolás, Equimat, Karta; se quitó una freelance que no estaba), estudios formales (UdeC y UNAB), 12 cursos complementarios, 18 habilidades técnicas, el CV general como adjunto (en lugar de uno viejo de «Auxiliar de recursos educativos») y GitHub.
@@ -541,5 +543,5 @@ Cambios:
 2. ~~(dueño) Primer lote de Bancolombia~~: hecho el 2026-11-22 (2 enviadas). Cada oferta nueva que encaja avisa por Telegram con `python -m runner lote bancolombia`; el dueño entra en la ventana del bot y el bot hace el resto.
 3. Revisar `registro.log` tras las vueltas: el primer envío real a elempleo (20 preparadas el 2026-11-21) y las opciones de las preguntas que quedan sin respuesta (ahora se anotan), para ajustar el banco.
 4. ~~Resumen del CV honesto y natural~~: hecho el 2026-11-22 (ver la decisión). Revisar en los CV de las próximas vueltas que suene bien con el perfil real del dueño.
-5. Ver qué traen Workday y Mercado Libre en las vueltas. Si el dueño crea su cuenta en Accenture (Workday), estudiar postular ahí en lote como en Bancolombia.
+5. Ver qué traen Workday, Mercado Libre y Get on Board en las vueltas. Si el dueño crea su cuenta en Accenture (Workday), estudiar postular ahí en lote como en Bancolombia.
 6. Después: LinkedIn sin «Solicitud sencilla» (medir adónde llevan), Get on Board y la vista web de lo que hizo el bot.

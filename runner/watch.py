@@ -5,7 +5,8 @@ encajan la app las analiza y les hace el CV: le llegan a la persona por Telegram
 SuccessFactors con `postular = true` las postula el lote (`python -m runner lote <sitio>`).
 
 Portales (`portal` en `[[vigilar]]`): «successfactors» (por defecto: Bancolombia, Ecopetrol), «workday»
-(`runner/workday.py`: Accenture, Unisys…) y «eightfold» (`runner/eightfold.py`: Mercado Libre).
+(`runner/workday.py`: Accenture, Unisys…), «eightfold» (`runner/eightfold.py`: Mercado Libre) y «getonbrd»
+(`runner/getonbrd.py`: la bolsa Get on Board, con la empresa de cada oferta).
 
 Verificado (2026-11-21): `<sitio>/search/?q=<texto>&locale=es_ES` devuelve hasta 25 ofertas en HTML, cada una como
 `<a class="jobTitle-link" href="/<marca>/job/<slug>/<id>/">Cargo</a>`.
@@ -29,7 +30,7 @@ from pathlib import Path
 from runner import config as cfg
 from runner.discover import UA, BlockedError
 
-PORTALS = ("successfactors", "workday", "eightfold")
+PORTALS = ("successfactors", "workday", "eightfold", "getonbrd")
 
 # Palabras de tecnología en el cargo («Practicante en Tecnología» sí; «Practicante de Ciencias Económicas» no)
 DEFAULT_INCLUDE = ["software", "desarroll", "sistemas", "tecnolog", "informatic", "ciberseg", "seguridad informatica",
@@ -39,6 +40,9 @@ DEFAULT_INCLUDE = ["software", "desarroll", "sistemas", "tecnolog", "informatic"
                    "identidad"]
 DEFAULT_EXCLUDE = ["senior", "sr", "lider", "lead", "arquitect", "gerente", "manager", "director", "jefe", "head",
                    "principal", "staff", "expert", "iii", "iv"]
+# Get on Board ya filtra por categoría de tecnología: cualquier cargo («*»), menos ventas y los bilingües.
+BOARD_INCLUDE = ["*"]
+BOARD_EXCLUDE = [*DEFAULT_EXCLUDE, "sales", "ventas", "comercial", "bilingue", "bilingual"]
 _LINK = re.compile(r'<a[^>]+class="jobTitle-link"[^>]+href="([^"]+)"[^>]*>([^<]+)</a>')
 
 
@@ -90,8 +94,8 @@ def load_sites(path: Path | None = None) -> list[Site]:
         sites.append(Site(name=str(item.get("nombre") or base), base=base, terms=terms, portal=portal,
                           country=str(item.get("pais", "")).strip(), domain=str(item.get("dominio", "")).strip(),
                           tenant=str(item.get("tenant", "")).strip(),
-                          include=[str(w).lower() for w in item.get("incluir", DEFAULT_INCLUDE)],
-                          exclude=[str(w).lower() for w in item.get("excluir", DEFAULT_EXCLUDE)],
+                          include=[str(w).lower() for w in item.get("incluir", BOARD_INCLUDE if portal == "getonbrd" else DEFAULT_INCLUDE)],
+                          exclude=[str(w).lower() for w in item.get("excluir", BOARD_EXCLUDE if portal == "getonbrd" else DEFAULT_EXCLUDE)],
                           min_score=int(item.get("compatibilidad_minima", 60)), apply=bool(item.get("postular", False)),
                           login_url=str(item.get("acceso", "")).strip(),
                           signature=str(item.get("firma", "")).strip(),
@@ -120,6 +124,8 @@ def parse(page: str, base: str) -> list[tuple[str, str, str]]:
 
 def _has(word: str, text: str) -> bool:
     """La palabra al comienzo de una palabra del cargo («desarroll» → «desarrollador»); las cortas, completas («ti»)."""
+    if word.strip() == "*":
+        return True
     w = _norm(word).strip()
     return bool(w) and re.search(r"\b" + re.escape(w) + (r"\b" if len(w) <= 3 else ""), text) is not None
 
@@ -179,6 +185,9 @@ def read_posting(site: Site, url: str) -> dict:
     if site.portal == "eightfold":
         from runner import eightfold
         return eightfold.posting(site, url)
+    if site.portal == "getonbrd":
+        from runner import getonbrd
+        return getonbrd.posting(site, url)
     return posting(fetch(url))
 
 
@@ -216,6 +225,9 @@ def listing(site: Site, *, get: Callable[[str], str] = fetch) -> list[tuple[str,
     if site.portal == "eightfold":
         from runner import eightfold
         return eightfold.listing(site)
+    if site.portal == "getonbrd":
+        from runner import getonbrd
+        return getonbrd.listing(site)
     out: list[tuple[str, str, str]] = []
     for term in site.terms:
         try:
