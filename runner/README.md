@@ -173,7 +173,7 @@ respuestas = { "como te enteraste" = "Portal de empleo de Bancolombia" }
 Algunas empresas publican solo en su propio portal, que pide una cuenta por empresa: Bancolombia y Ecopetrol usan
 SAP SuccessFactors; Accenture, DXC, Kyndryl y Unisys, Workday; Mercado Libre, Eightfold. El bot vigila su búsqueda
 pública en cada vuelta y te avisa (registro y Telegram) de las vacantes nuevas cuyo cargo
-encaja. Además, la app analiza cada una (hasta 10 por vuelta): si llega a la compatibilidad mínima (60 por
+encaja. Además, la app analiza cada una (hasta 20 por vuelta): si llega a la compatibilidad mínima (60 por
 defecto, `compatibilidad_minima` en cada `[[vigilar]]`), le hace el CV y te la manda por Telegram con el PDF, lista
 para postular (`/manuales`). Si no llega, queda descartada en la app con el motivo. Por defecto encajan los cargos con una palabra de
 tecnología (software, sistemas, tecnología, desarrollo, ciberseguridad, soporte, QA, datos…), así que «Practicante

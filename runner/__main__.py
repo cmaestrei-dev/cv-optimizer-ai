@@ -608,7 +608,7 @@ def cmd_diario(_args) -> int:
         return code
 
 
-WATCH_PER_ROUND = 10  # ofertas de portales de empresas que la app analiza por vuelta (usan cupo de IA)
+WATCH_PER_ROUND = 20  # ofertas de portales de empresas que la app analiza por vuelta (usan cupo de IA)
 
 
 def _watch_sites(*, prepare: bool = True) -> list[dict]:
