@@ -821,9 +821,10 @@ def _auto_apply_watched(api: Api, conf: cfg.Config, state: State, sites, *, subm
                 print(f"\n· {site.name}: {rec.get('cargo', '')}  (compatibilidad {rec.get('puntaje')})")
                 answerer = _answerer(api, conf, rec["app"], units=True, quota=quota)
                 try:
+                    extra = {"title": rec.get("cargo", "")} if site.portal == "muevete" else {}  # AIRA: ¿es su formulario?
                     result = modules[site.portal].apply(page, rec["url"], Path(rec["cv"]), answerer, submit=submit,
                                                         contact=contact, overrides=site.answers,
-                                                        cover=lambda app=rec["app"]: _cover_letter(api, app))
+                                                        cover=lambda app=rec["app"]: _cover_letter(api, app), **extra)
                 except Exception as e:  # noqa: BLE001 — una oferta rara no tumba las demás
                     result = teamtailor_apply.ApplyResult("error", f"Falló al llenar el formulario: {str(e)[:150]}")
                 print(f"  → {result.status}{': ' + result.detail if result.detail else ''}")

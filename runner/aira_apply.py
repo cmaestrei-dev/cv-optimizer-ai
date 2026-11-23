@@ -3,11 +3,16 @@
 Verificado el 2026-11-23 con la cuenta del dueño, enviando una postulación real (Practicante Área de Sistemas):
 - La oferta (`falabella.airavirtual.com/postula/<código>`) lleva, con sesión, al formulario (`/test/step/<id>/1`); sin
   sesión, al registro. La persona entra en la ventana del bot (`python -m runner entrar aira`; sin captcha).
+- El enlace elige la postulación en la sesión del servidor (`/applications/select_application` → `/test`), y AIRA a
+  veces abre la última que se eligió, de otra vacante: antes de llenar nada se comprueba que el cargo que muestra
+  («Estado postulación <cargo>») sea el de la vacante.
 - El formulario es una aplicación Vue: «Hoja de vida» (el componente `FileWithPreview` sube el archivo cuando se llama a
   su `changedFile`; AIRA lo guarda como `resume.pdf` de esa postulación y marca `RESUME_SOURCE = UPLOADED`),
   «Expectativa salarial» (obligatoria), preguntas de la empresa (`specific_questions_groups`; los años de experiencia
-  son deslizadores `Slider` que avisan con `handleChangeRadiosSlider`), y dos casillas que vienen marcadas: «Guardar hoja
-  de vida en mi perfil» (reemplazaría el CV del perfil por el de esta vacante) y «Recibir alertas»: se desmarcan.
+  son deslizadores `Slider` que avisan con `handleChangeRadiosSlider`: de años, valores 0 a 5 «5+ años»; de nivel de
+  conocimiento, valores none/basic/middle/advanced/expert con etiquetas Ninguno…Experto), y dos casillas que vienen
+  marcadas: «Guardar hoja de vida en mi perfil» (reemplazaría el CV del perfil por el de esta vacante) y «Recibir
+  alertas»: se desmarcan.
 - «ENVIAR POSTULACIÓN» guarda el paso 2; si falta algo, la página dice «Campo requerido». Enviada, la oferta muestra el
   «Estado postulación» con las pruebas: Personalidad (D32) e Inteligencia (CAT) las hace la persona (valen 12 meses para
   todas las postulaciones de Falabella); mientras tanto la postulación queda «Pendiente información».
@@ -19,7 +24,7 @@ import time
 from collections.abc import Callable
 from pathlib import Path
 
-from runner.answers import INTERNSHIP_SALARY, bank_answer, to_integer
+from runner.answers import INTERNSHIP_SALARY, bank_answer, normalize, pick_option, to_integer
 from runner.linkedin import ApplyResult, Question
 
 Answerer = Callable[[list[Question]], dict[str, str]]
@@ -39,8 +44,8 @@ _FORM = """() => {
   const groups = vm.specific_questions_groups || {};
   const questions = [];
   for (const list of Object.values(groups)) for (const q of (list || [])) questions.push({id: q.id, type: q.type, text: q.text,
-    answer: q.answer, required: /required/.test((q.data || {}).param_validation || ''),
-    options: [...document.querySelectorAll(`input[name='q_${q.id}']`)].map(r => r.value)});
+    answer: q.answer, required: /required/.test((q.data || {}).param_validation || ''), levels: (q.data || {}).levels || '',
+    options: [...document.querySelectorAll(`input[name='q_${q.id}']`)].map(r => [(r.nextElementSibling || {}).innerText || r.value, r.value])});
   return {salary: general.SALARY ? general.SALARY.answer : null, source: general.RESUME_SOURCE ? general.RESUME_SOURCE.answer : null,
           questions};
 }"""
@@ -69,15 +74,32 @@ def _form(page) -> dict | None:
     return page.evaluate(_FORM)
 
 
+def _shown_title(text: str) -> str:
+    """El cargo de la postulación abierta: lo que sigue a «Estado postulación» (cargo, empresa, país…)."""
+    return normalize(text.split(STATUS, 1)[1]) if STATUS in text else ""
+
+
+def _open(page, offer_url: str, title: str) -> str:
+    """Abre la oferta y devuelve el texto de la página; si AIRA abrió otra postulación, lo intenta una vez más."""
+    for attempt in range(2):
+        page.goto(offer_url, wait_until="domcontentloaded")
+        time.sleep(7)
+        text = _text(page)
+        if not title or STATUS not in text or _shown_title(text).startswith(normalize(title)) or attempt:
+            return text
+        time.sleep(3)
+    return text
+
+
 def apply(page, offer_url: str, cv_pdf: Path, answerer: Answerer, *, submit: bool, contact: dict | None = None,
-          overrides: dict[str, str] | None = None, cover: Callable[[], str] | None = None) -> ApplyResult:
-    """Postula a una oferta de AIRA con el CV de la vacante."""
+          overrides: dict[str, str] | None = None, cover: Callable[[], str] | None = None, title: str = "") -> ApplyResult:
+    """Postula a una oferta de AIRA con el CV de la vacante. `title`: el cargo, para no llenar el formulario de otra."""
     overrides = overrides or {}
-    page.goto(offer_url, wait_until="domcontentloaded")
-    time.sleep(7)
+    text = _open(page, offer_url, title)
     if "/register" in page.url or page.locator("input[type=password]:visible").count():
         return ApplyResult("sin_sesion", "El navegador del bot no tiene sesión de AIRA (Falabella): python -m runner entrar aira")
-    text = _text(page)
+    if title and STATUS in text and not _shown_title(text).startswith(normalize(title)):
+        return ApplyResult("error", f"AIRA abrió otra postulación («{_shown_title(text)[:60]}»), no la de esta vacante")
     if STATUS in text and not page.locator("a, button").filter(has_text=SEND).count():
         return ApplyResult("ya_postulada")
     if re.search(r"captcha|verifica que eres humano", text, re.I):
@@ -91,11 +113,17 @@ def apply(page, offer_url: str, cv_pdf: Path, answerer: Answerer, *, submit: boo
         if q["answer"] not in (None, ""):
             continue
         if q["type"] == "slider" and q["options"]:
-            question = Question("radio", q["text"], True, "", q["options"], [str(q["id"])])
+            labels = [label.strip() for label, _ in q["options"]]
+            values = {label.strip(): value for label, value in q["options"]}
+            question = Question("radio", q["text"], True, "", labels, [str(q["id"])])
             value = (bank_answer(q["text"], overrides) or answerer([question]).get(q["text"]) or "").strip()
-            years = to_integer(value) if value else None
-            top = q["options"][-1]
-            option = None if years is None else years if years in q["options"] else top if int(years) > int(top) else None
+            if all(v.isdigit() for v in values.values()):  # años: 0…5 («5+ años»)
+                years = to_integer(value) if value else None
+                top = max(values.values(), key=int)
+                option = None if years is None else years if years in values.values() else top if int(years) > int(top) else None
+            else:  # nivel de conocimiento: Ninguno, Básico, Intermedio, Avanzado, Experto
+                picked = pick_option(value, labels) if value else None
+                option = values.get(picked) if picked else None
             if option is None or not page.evaluate(_SLIDE, [q["id"], option]):
                 missing.append(q["text"])
         elif q["type"] in ("text", "textarea", "number"):
@@ -135,10 +163,11 @@ def apply(page, offer_url: str, cv_pdf: Path, answerer: Answerer, *, submit: boo
     page.locator("a:visible, button:visible").filter(has_text=SEND).first.click()
     for _ in range(20):
         time.sleep(1)
+        sending = page.locator("a:visible, button:visible").filter(has_text=SEND).count()  # antes que el texto
         text = _text(page)
         if "Campo requerido" in text:
             return ApplyResult("error", "AIRA marcó campos requeridos sin llenar: revísalo tú")
-        if STATUS in text and not page.locator("a:visible, button:visible").filter(has_text=SEND).count():
+        if STATUS in text and not sending:
             follow = ("Falabella pide dos pruebas (personalidad e inteligencia, 25 minutos, valen 12 meses): hazlas tú en "
                       "«Mis postulaciones» de AIRA; sin ellas la postulación queda «Pendiente información».") if TESTS_PENDING.search(text) else ""
             return ApplyResult("enviada", "Confirmada por AIRA (Estado postulación)", follow_up=follow)
