@@ -200,10 +200,18 @@ portal = "eightfold"
 sitio = "https://mercadolibre.eightfold.ai"
 dominio = "mercadolibre.com"
 pais = "Colombia"
+
+[[vigilar]]
+nombre = "Get on Board"   # bolsa de empleos de tecnología: cada oferta va con su empresa
+portal = "getonbrd"
+sitio = "https://www.getonbrd.com"
+pais = "Colombia"   # las abiertas al país (también remotas para quien vive allí), del último mes
 ```
 
 Workday frena si se le pide seguido (HTTP 429): el bot hace pausas largas y, si frena, ese portal espera a la
-próxima vuelta. En Workday y Eightfold el bot no postula (cada empresa pide su cuenta): te llegan por Telegram con su CV.
+próxima vuelta. En Workday, Eightfold y Get on Board el bot no postula (cada uno pide su cuenta): te llegan por Telegram con su CV.
+De Get on Board toma solo las de tecnología (por su categoría), sin experiencia, junior o semi senior, y descarta las
+de ventas, las bilingües y las que están en inglés sin sede en el país.
 
 `python -m runner vigilar` lo revisa ya. Para tener la cuenta de Bancolombia en el navegador del bot:
 `python -m runner entrar bancolombia`.

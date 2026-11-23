@@ -1,12 +1,12 @@
 """Vigilar portales de empresas en Workday (Accenture…) y Eightfold (Mercado Libre) con sus APIs públicas, sin red."""
 
 import json
-from datetime import date
+from datetime import date, datetime, timedelta
 
 import pytest
 
 from runner import config as cfg
-from runner import eightfold, watch, workday
+from runner import eightfold, getonbrd, watch, workday
 from runner.discover import BlockedError
 
 MELI = watch.Site(name="Mercado Libre", base="https://mercadolibre.eightfold.ai", terms=[], portal="eightfold",
@@ -178,3 +178,72 @@ def test_a_portal_that_blocks_waits_without_using_the_round(tmp_path, monkeypatc
     assert read == ["Accenture", "Mercado Libre"]  # tras el primer freno no insiste con Accenture
     assert state.data["vigiladas"]["Mercado Libre:7"]["app"] == 1
     assert all("app" not in state.data["vigiladas"][f"Accenture:R{i}"] for i in range(3))  # esperan a la próxima vuelta
+
+
+# --- Get on Board -----------------------------------------------------------------------------------------------
+
+GOB = watch.Site(name="Get on Board", base="https://www.getonbrd.com", terms=[], portal="getonbrd", country="Colombia",
+                 include=watch.BOARD_INCLUDE, exclude=watch.BOARD_EXCLUDE)
+TODAY = date(2026, 11, 22)
+
+
+def _gob(slug: str, title: str, *, level=2, category="Programming", lang="es", countries=("Colombia",), days=3) -> dict:
+    published = int((datetime(2026, 11, 22, 12) - timedelta(days=days)).timestamp())
+    return {"id": slug, "type": "job", "links": {"public_url": f"https://www.getonbrd.com/jobs/{slug}"},
+            "attributes": {"title": title, "category_name": category, "lang": lang, "countries": list(countries),
+                           "remote_modality": "hybrid", "published_at": published,
+                           "seniority": {"data": {"id": level, "type": "seniority"}}}}
+
+
+def test_getonbrd_keeps_recent_tech_jobs_for_juniors_in_the_country():
+    jobs = [_gob("agente-mesa-ti", "Agente de Mesa de Servicios TI", category="Technical Support"),
+            _gob("sre-engineer", "SRE Engineer", level=3, category="SysAdmin / DevOps / QA"),
+            _gob("backend-senior", "Back-end Developer", level=4),  # senior
+            _gob("ejecutivo", "Ejecutivo Comercial", category="Sales"),  # no es de tecnología
+            _gob("remote-en", "Data Engineer", lang="en", countries=("Remote",)),  # en inglés y no es de una sede aquí
+            _gob("viejo", "Desarrollador Junior", days=40)]  # publicada hace más de un mes
+    calls = []
+    rows = getonbrd.listing(GOB, get=lambda url: calls.append(url) or {"data": jobs, "meta": {"total_pages": 1}}, today=TODAY)
+    assert [r[0] for r in rows] == ["agente-mesa-ti", "sre-engineer"]
+    assert "country_code=CO" in calls[0] and "per_page=100" in calls[0] and len(calls) == 1
+    assert all(watch.matches(GOB, title) for _, title, _ in rows)  # la categoría ya dice que es de tecnología
+    assert not watch.matches(GOB, "AI Sales Development Representative") and not watch.matches(GOB, "DBA Oracle Bilingüe")
+    with pytest.raises(ValueError, match="Narnia"):
+        getonbrd.listing(watch.Site(name="X", base=GOB.base, terms=[], portal="getonbrd", country="Narnia"), get=lambda url: {})
+
+
+GOB_PAGE = """<div class="bg-gradient-main" id="right-col" itemscope itemtype="http://schema.org/JobPosting">
+<time datetime="2026-10-15T02:01:02+00:00" itemprop="datePosted"></time>
+<span itemprop="jobLocation" itemscope><span itemprop="address" itemscope><meta content="Medellín" itemprop="addressLocality">
+<meta content="CO" itemprop="addressCountry"></span></span>
+<h1><span itemprop="title">
+Agente de Mesa de Servicios TI </span><span class="fake-hidden size-3"> en Factor IT </span></h1>
+<div class="my2" itemprop="hiringOrganization" itemscope><a href="/companies/factor-it"><img alt="Factor IT" src="x.png"></a></div>
+<div id="job-body" itemprop="description"><div class="gb-rich-txt"><p>Soporte a usuarios.</p><ul><li>Windows</li><li>Redes</li></ul></div></div>
+<footer>Fuera de la oferta</footer></div>"""
+
+
+def test_getonbrd_posting_comes_from_the_public_page(monkeypatch):
+    monkeypatch.setattr(watch, "fetch", lambda url: GOB_PAGE)
+    info = getonbrd.posting(GOB, "https://www.getonbrd.com/jobs/agente-mesa-ti")
+    assert info == {"title": "Agente de Mesa de Servicios TI", "place": "Medellín, CO", "text": "Soporte a usuarios.\n- Windows\n- Redes",
+                    "posted": date(2026, 10, 15), "closes": None, "company": "Factor IT"}
+
+
+def test_a_job_board_offer_goes_to_the_app_with_its_own_company(tmp_path, monkeypatch):
+    from runner import __main__ as cli
+    from runner import telegram
+    from runner.state import State
+    from tests.test_runner_watch import FakeApi
+
+    monkeypatch.setattr(cfg, "DATA_DIR", tmp_path)
+    monkeypatch.setattr(watch, "fetch", lambda url: GOB_PAGE)
+    state = State(tmp_path / "estado.json")
+    state.data["vigiladas"] = {"Get on Board:agente-mesa-ti": {"cargo": "Agente de Mesa de Servicios TI", "encaja": True,
+                                                               "url": "https://www.getonbrd.com/jobs/agente-mesa-ti"}}
+    sent = []
+    monkeypatch.setattr(telegram, "add_manual", lambda item: sent.append(item) or True)
+    api = FakeApi(score=72)
+    assert cli._prepare_watched(api, state, [GOB]) == 1
+    assert api.added[0][0].startswith("Agente de Mesa de Servicios TI\nFactor IT\nMedellín, CO")  # la empresa, no la bolsa
+    assert sent[0]["empresa"] == "Factor IT" and "Get on Board" in sent[0]["nota"]
