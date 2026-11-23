@@ -801,7 +801,7 @@ def _auto_apply_watched(api: Api, conf: cfg.Config, state: State, sites, *, subm
                     print("    Sin respuesta (respóndelas por Telegram: /preguntas):", "; ".join(result.unanswered[:4]))
                 if result.status == "enviada":
                     try:
-                        api.post(f"/applications/{rec['app']}/sent", {"cv_id": rec["cv_id"], "platform": site.name})
+                        api.post(f"/applications/{rec['app']}/sent", {"cv_id": rec["cv_id"], "platform": "Página de la empresa"})
                     except ApiError as e:
                         print(f"    Enviada en {site.name}, pero la app no la registró: {e.detail}")
                     rec["estado"] = "enviada"
