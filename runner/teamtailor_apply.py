@@ -16,7 +16,7 @@ import time
 from collections.abc import Callable
 from pathlib import Path
 
-from runner.answers import bank_answer, negative, pick_option
+from runner.answers import bank_answer, negative, pick_option, to_integer
 from runner.linkedin import ApplyResult, Question
 
 Answerer = Callable[[list[Question]], dict[str, str]]
@@ -36,6 +36,7 @@ _QUESTIONS = """() => [...document.querySelectorAll('#job-application-form div.q
   return {index: i, label, required: q.dataset.questionMandatory === 'true',
           kind: choices.length ? 'radio' : (text ? (text.tagName === 'TEXTAREA' ? 'textarea' : 'text') : 'otro'),
           options, field: text ? text.id : '', dropdown: !!q.querySelector('button[aria-haspopup=menu]'),
+          numeric: !!(text && text.type === 'number'),
           answered: choices.some(c => c.checked) || !!(text && text.value.trim())};
 })"""
 
@@ -100,13 +101,16 @@ def apply(page, offer_url: str, cv_pdf: Path, answerer: Answerer, *, submit: boo
         if not q["required"] or q["answered"] or q["kind"] == "otro" or not q["label"]:
             continue
         options = [o for o, _ in q["options"]]
-        question = Question("radio" if options else q["kind"], q["label"], True, "", options, [q["field"]])
+        question = Question("radio" if options else q["kind"], q["label"], True, "", options, [q["field"]], numeric=q["numeric"])
         value = (bank_answer(q["label"], overrides) or answerer([question]).get(q["label"]) or "").strip()
         if options:
             option = pick_option(value, options) if value else None
             if not option or (negative(option) and not value.lower().startswith("no")) or not _choose(page, q, option):
                 missing.append(q["label"])
+        elif q["numeric"] and not to_integer(value):
+            missing.append(q["label"])  # el campo solo acepta un número
         elif value:
+            value = to_integer(value) if q["numeric"] else value
             field = page.locator(f"[id='{q['field']}']")
             field.scroll_into_view_if_needed()
             field.fill(value[:1000])

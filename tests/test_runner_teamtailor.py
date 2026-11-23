@@ -40,6 +40,8 @@ class FakeTeamtailor:
    <input type="radio" id="c2_1" name="candidate[answers_attributes][2][choice]" value="A1" required><label for="c2_1">A1</label>
    <input type="radio" id="c2_2" name="candidate[answers_attributes][2][choice]" value="A2"><label for="c2_2">A2</label>
  </fieldset></div>
+ <div class="question" data-question-mandatory="true"><label for="q4">¿Indícanos meses de experiencia tienes el rol?<sup>*</sup></label>
+   <input type="number" id="q4" name="candidate[answers_attributes][4][number]" required></div>
  <div class="question" data-question-mandatory="false"><label for="q3">Cuéntanos algo más</label><textarea id="q3" name="candidate[answers_attributes][3][text]"></textarea></div>
  <input type="text" id="candidate_first_name" name="candidate[first_name]" required>
  <input type="text" id="candidate_last_name" name="candidate[last_name]" required>
@@ -92,7 +94,8 @@ def run(chromium, fake, tmp_path, *, submit=True, known=None):
     page.route(re.compile(r"https://jobs\.periferiaitgroup\.com/.*"), fake.handle)
     cv = tmp_path / "Camilo_Maestre_Analista_Soporte_Periferia_IT.pdf"
     cv.write_bytes(b"%PDF-1.4")
-    known = {"¿Dónde vives actualmente (ciudad y barrio)?": "Cartagena, Manga"} if known is None else known
+    known = {"¿Dónde vives actualmente (ciudad y barrio)?": "Cartagena, Manga",
+             "¿Indícanos meses de experiencia tienes el rol?": "12 meses"} if known is None else known
     overrides = {"formacion academica": "Estudiante Universitario", "nivel de ingles": "A2"}
     try:
         return tt.apply(page, OFFER, cv, lambda qs: {q.label: known[q.label] for q in qs if q.label in known},
@@ -109,6 +112,7 @@ def test_fills_everything_and_sends_with_this_vacancys_cv(chromium, tmp_path):
     assert sent["candidate[answers_attributes][0][text]"] == "Cartagena, Manga"
     assert sent["candidate[answers_attributes][1][choice]"] == "2"  # desplegable: Estudiante Universitario
     assert sent["candidate[answers_attributes][2][choice]"] == "A2"
+    assert sent["candidate[answers_attributes][4][number]"] == "12"  # el campo numérico solo lleva el número
     assert (sent["candidate[first_name]"], sent["candidate[last_name]"], sent["candidate[email]"]) == ("Camilo", "Maestre", "camilo@example.com")
     assert sent["candidate[consent_given]"] == "1" and "candidate[consent_given_future_jobs]" not in sent  # solo el obligatorio
     assert sent["candidate[answers_attributes][3][text]"] == ""  # la opcional no se inventa
@@ -118,8 +122,9 @@ def test_fills_everything_and_sends_with_this_vacancys_cv(chromium, tmp_path):
 def test_dry_run_and_unanswered_questions_never_send(chromium, tmp_path):
     fake = FakeTeamtailor()
     assert run(chromium, fake, tmp_path, submit=False).status == "revisada" and fake.posted == []
-    skipped = run(chromium, fake, tmp_path, known={})  # nadie sabe dónde vive: no se envía
-    assert skipped.status == "saltada" and skipped.unanswered == ["¿Dónde vives actualmente (ciudad y barrio)?"]
+    skipped = run(chromium, fake, tmp_path, known={"¿Indícanos meses de experiencia tienes el rol?": "Sí, tengo experiencia"})
+    assert skipped.status == "saltada"  # nadie sabe dónde vive, y «Sí» no es un número: no se envía
+    assert skipped.unanswered == ["¿Dónde vives actualmente (ciudad y barrio)?", "¿Indícanos meses de experiencia tienes el rol?"]
     assert fake.posted == []
 
 

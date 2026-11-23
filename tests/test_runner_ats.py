@@ -270,3 +270,26 @@ def test_offers_the_bot_can_send_are_analyzed_first(tmp_path, monkeypatch):
     periferia = replace(MELI, name="Periferia IT", portal="teamtailor", base="https://periferiait.teamtailor.com", apply=True)
     cli._prepare_watched(FakeApi(score=70), state, [MELI, periferia], limit=1)
     assert read == ["Periferia IT"] and state.data["vigiladas"]["Periferia IT:2"]["estado"] == "preparada"
+
+
+def test_an_offer_whose_full_title_is_senior_is_discarded(tmp_path, monkeypatch):
+    from runner import __main__ as cli
+    from runner import telegram
+    from runner.api import Vacancy
+    from runner.state import State
+    from tests.test_runner_watch import FakeApi
+
+    class SeniorApi(FakeApi):
+        def add_vacancy(self, *, text, url, posted):
+            self.added.append((text, url, posted))
+            return Vacancy(id=1, created=True, role="Desarrollador Python Senior", company="Periferia IT", score=72, missing=[])
+
+    monkeypatch.setattr(cfg, "DATA_DIR", tmp_path)
+    state = State(tmp_path / "estado.json")
+    state.data["vigiladas"] = {"Mercado Libre:9": {"cargo": "Desarrollador Python", "url": "https://mercadolibre.eightfold.ai/careers/job/9", "encaja": True}}
+    monkeypatch.setattr(watch, "read_posting", lambda site, url: {"title": "Desarrollador Python", "place": "Bogotá", "text": "Python",
+                                                                   "posted": None, "closes": None})
+    monkeypatch.setattr(telegram, "add_manual", lambda item: pytest.fail("no debía ir a Telegram"))
+    api = SeniorApi()
+    assert cli._prepare_watched(api, state, [MELI]) == 0
+    assert state.data["vigiladas"]["Mercado Libre:9"]["listo"] == "no_encaja" and api.discarded

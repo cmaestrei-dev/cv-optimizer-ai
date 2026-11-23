@@ -699,6 +699,11 @@ def _prepare_watched(api: Api, state: State, sites, *, limit: int = WATCH_PER_RO
         rec["app"], rec["puntaje"] = vacancy.id, vacancy.score
         if not vacancy.created and not vacancy.unfinished:
             continue  # ya estaba en la app
+        if vacancy.role and not watch.matches(site, vacancy.role):  # la oferta completa dice «Senior» aunque la lista no
+            rec["listo"] = "no_encaja"
+            _discard(api, vacancy.id, f"El bot la descartó: el cargo de la oferta («{vacancy.role}») no encaja con tus reglas.")
+            print(f"  · {site.name}: {vacancy.role} — el cargo de la oferta no encaja: descartada")
+            continue
         if vacancy.score is None or vacancy.score < site.min_score:
             _discard(api, vacancy.id, f"El bot la descartó: compatibilidad {vacancy.score if vacancy.score is not None else '—'} "
                                       f"(mínimo {site.min_score}).")
@@ -786,8 +791,11 @@ def _auto_apply_watched(api: Api, conf: cfg.Config, state: State, sites, *, subm
                     continue
                 print(f"\n· {site.name}: {rec.get('cargo', '')}  (compatibilidad {rec.get('puntaje')})")
                 answerer = _answerer(api, conf, rec["app"], units=True, quota=quota)
-                result = teamtailor_apply.apply(page, rec["url"], Path(rec["cv"]), answerer, submit=submit, contact=contact,
-                                                overrides=site.answers)
+                try:
+                    result = teamtailor_apply.apply(page, rec["url"], Path(rec["cv"]), answerer, submit=submit,
+                                                    contact=contact, overrides=site.answers)
+                except Exception as e:  # noqa: BLE001 — una oferta rara no tumba las demás
+                    result = teamtailor_apply.ApplyResult("error", f"Falló al llenar el formulario: {str(e)[:150]}")
                 print(f"  → {result.status}{': ' + result.detail if result.detail else ''}")
                 if result.unanswered:
                     print("    Sin respuesta (respóndelas por Telegram: /preguntas):", "; ".join(result.unanswered[:4]))
