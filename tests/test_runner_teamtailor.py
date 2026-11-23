@@ -51,6 +51,7 @@ class FakeTeamtailor:
  <input type="text" id="candidate_last_name" name="candidate[last_name]" required>
  <input type="email" id="candidate_email" name="candidate[email]" required>
  <input type="tel" id="candidate_phone" name="candidate[phone]" required>
+ <label for="cl">Carta de motivación</label><textarea id="cl" name="candidate[job_applications_attributes][0][cover_letter]"></textarea>
  <label for="candidate_location">Dirección* Obligatorio</label>
  <input type="text" id="candidate_location" name="candidate[location][query]" oninput="suggest(this)">
  <input type="hidden" id="loc_city" name="candidate[location][city]"><ul id="suggestions"></ul>
@@ -114,7 +115,8 @@ def run(chromium, fake, tmp_path, *, submit=True, known=None):
     overrides = {"formacion academica": "Estudiante Universitario", "nivel de ingles": "A2"}
     try:
         return tt.apply(page, OFFER, cv, lambda qs: {q.label: known[q.label] for q in qs if q.label in known},
-                        submit=submit, contact=CONTACT, overrides=overrides)
+                        submit=submit, contact=CONTACT, overrides=overrides,
+                        cover=lambda: "Hola, me postulo a la vacante de Analista de Soporte.")
     finally:
         page.close()
 
@@ -132,6 +134,7 @@ def test_fills_everything_and_sends_with_this_vacancys_cv(chromium, tmp_path):
     assert sent["candidate[consent_given]"] == "1" and "candidate[consent_given_future_jobs]" not in sent  # solo el obligatorio
     assert sent["candidate[answers_attributes][3][text]"] == ""  # la opcional no se inventa
     assert sent["cv"] == "Camilo_Maestre_Analista_Soporte_Periferia_IT.pdf"
+    assert sent["candidate[job_applications_attributes][0][cover_letter]"].startswith("Hola, me postulo")  # la carta de la app
     assert sent["candidate[location][query]"] == "Cartagena, Colombia" and sent["candidate[location][city]"] == "Cartagena"
 
 
