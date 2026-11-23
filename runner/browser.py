@@ -32,9 +32,14 @@ LOGINS = {
     "elempleo": ("elempleo.com", None, "https://www.elempleo.com/co/iniciar-sesion"),
     # SuccessFactors: «Iniciar sesión | Ir a mi perfil» arriba a la derecha (o «Únete a la comunidad de talentos»)
     "bancolombia": ("grupobancolombia.com", None, "https://empleo.grupobancolombia.com/bancolombia/"),
+    # Gupy (Stefanini): su acceso tiene el captcha de Cloudflare, que rechaza la ventana que maneja el bot; en un Chrome
+    # normal pasa. Una cuenta sirve para todas las empresas que usan Gupy.
+    "gupy": ("gupy.io", None, "https://stefaninilatam.gupy.io/"),
+    # Teamtailor de Periferia IT: entra con un enlace que llega al correo (ábrelo en esta misma ventana)
+    "periferia": ("periferiaitgroup.com", None, "https://jobs.periferiaitgroup.com/connect/login"),
 }
 NAMES = {"linkedin": "LinkedIn", "computrabajo": "Computrabajo", "magneto": "Magneto", "elempleo": "elempleo",
-         "bancolombia": "Bancolombia"}
+         "bancolombia": "Bancolombia", "gupy": "Gupy (Stefanini)", "periferia": "Periferia IT"}
 
 
 def _cookie_names(domain: str, profile: Path = PROFILE_DIR) -> set[str]:
@@ -183,6 +188,9 @@ def login(portal: str = "linkedin", *, timeout_minutes: int = 25) -> int:
     if cookie is None:  # aún no se sabe qué cookie marca la sesión: la persona cierra la ventana al terminar
         before = _cookie_names(domain)
         print(f"1. En la ventana que se abrió, entra a {NAMES[portal]} con tu correo y tu contraseña.")
+        if portal == "periferia":
+            print("   Te llega un enlace al correo: cópialo y ábrelo en ESTA ventana (si lo abres en otro navegador,")
+            print("   la sesión queda allá y no en el bot). Si no llega, revisa spam y la carpeta «Promociones».")
         print("   Si quieres, actualiza ahí mismo tu hoja de vida.")
         print("2. Cuando hayas entrado, cierra la ventana.\n")
         try:
