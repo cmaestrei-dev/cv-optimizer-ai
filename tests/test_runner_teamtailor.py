@@ -18,13 +18,15 @@ CONTACT = {"full_name": "Camilo Maestre", "email": "camilo@example.com", "phone"
 
 
 class FakeTeamtailor:
-    def __init__(self, *, verify_email: bool = False):
+    def __init__(self, *, verify_email: bool = False, hidden_consent: bool = False):
         self.posted: list[dict] = []
-        self.verify_email = verify_email
+        self.verify_email, self.hidden_consent = verify_email, hidden_consent
 
     def _form(self) -> str:
         done = ("history.pushState({}, '', '/jobs/8777639/applications/email_verification_needed');" if self.verify_email
                 else "document.body.innerHTML = '<h1>¡Gracias por tu postulación!</h1>';")
+        consent = ('<input type="hidden" id="candidate_consent_given" name="candidate[consent_given]" value="1">' if self.hidden_consent
+                   else '<input type="checkbox" id="candidate_consent_given" name="candidate[consent_given]" value="1" required>')
         return """<html><body>
 <form id="job-application-form" action="/jobs/8777639/applications" method="post">
  <div class="question" data-question-mandatory="true"><label for="q0">¿Dónde vives actualmente (ciudad y barrio)?<sup>*</sup></label>
@@ -54,7 +56,7 @@ class FakeTeamtailor:
  <input type="hidden" id="loc_city" name="candidate[location][city]"><ul id="suggestions"></ul>
  <label for="candidate_resume_remote_url">Subir currículum* Obligatorio</label>
  <input type="file" id="candidate_resume_remote_url" onchange="document.getElementById('cv-name').innerText = this.files[0].name; this.value = ''"><span id="cv-name"></span>
- <input type="checkbox" id="candidate_consent_given" name="candidate[consent_given]" value="1" required>
+ CONSENT
  <input type="checkbox" id="candidate_consent_given_future_jobs" name="candidate[consent_given_future_jobs]" value="1">
  <input type="submit" name="commit" value="Enviar">
 </form>
@@ -73,7 +75,7 @@ class FakeTeamtailor:
    const data = Object.fromEntries(new FormData(ev.target)); data.cv = document.getElementById('cv-name').innerText;
    await fetch('/submit', {method: 'POST', body: JSON.stringify(data)});
    DONE; });
-</script></body></html>""".replace("DONE", done)
+</script></body></html>""".replace("DONE", done).replace("CONSENT", consent)
 
     def handle(self, route, request):
         url = urlparse(request.url)
@@ -177,3 +179,10 @@ def test_a_portal_that_asks_to_confirm_by_email_hands_it_over(chromium, tmp_path
     fake = FakeTeamtailor(verify_email=True)
     result = run(chromium, fake, tmp_path)
     assert result.status == "enviada" and "correo" in result.follow_up and len(fake.posted) == 1
+
+
+def test_a_consent_given_on_submit_has_no_box_to_tick(chromium, tmp_path):
+    # Caso real (Alegra, 2026-11-22): el consentimiento es un campo oculto («al presentar esta solicitud, acepto…»).
+    fake = FakeTeamtailor(hidden_consent=True)
+    result = run(chromium, fake, tmp_path)
+    assert result.status == "enviada" and fake.posted[0]["candidate[consent_given]"] == "1"

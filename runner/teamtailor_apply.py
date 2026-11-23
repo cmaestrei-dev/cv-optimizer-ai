@@ -180,9 +180,9 @@ def apply(page, offer_url: str, cv_pdf: Path, answerer: Answerer, *, submit: boo
             break
     else:
         return ApplyResult("saltada", "No quedó adjunto el CV de esta vacante (no se envía con otro)")
-    consent = page.locator("#candidate_consent_given")
-    if consent.count() and not consent.is_checked():
-        page.evaluate("() => document.getElementById('candidate_consent_given').click()")
+    # El consentimiento obligatorio: una casilla, o un campo oculto cuando se acepta al enviar (Alegra)
+    page.evaluate("""() => { const box = document.querySelector('#job-application-form input[type=checkbox][name="candidate[consent_given]"]');
+                             if (box && !box.checked) box.click(); }""")
     invalid = [label for label in [*page.evaluate(_INVALID), *page.evaluate(_REQUIRED_EMPTY)] if label]
     if invalid:
         return ApplyResult("saltada", "El formulario no está completo (no se envía)", unanswered=invalid[:6])
