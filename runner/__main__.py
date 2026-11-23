@@ -12,6 +12,7 @@
 """
 
 import argparse
+import contextlib
 import getpass
 import re
 import sys
@@ -334,9 +335,26 @@ def _answerer(api: Api, conf: cfg.Config, application_id: int, *, units: bool = 
     def flagged(reply: dict) -> bool:  # la IA respondió, pero la verificación no lo respaldó
         return bool(reply.get("needs_you") and (reply.get("answer") or "").strip())
 
+    vacancy: dict = {}
+
+    def salary(q) -> str | None:
+        """La aspiración según la vacante (rango que publica o 3 millones); en prácticas, sin cifra."""
+        if not vacancy:
+            with contextlib.suppress(Exception):  # sin la vacante, la aspiración por defecto
+                vacancy.update(api.get(f"/applications/{application_id}") or {})
+            vacancy.setdefault("role", "")
+        amount = answers.expected_salary(vacancy.get("vacancy_text") or "", vacancy.get("role") or "")
+        if amount is None:
+            return None if q.numeric else "A convenir: el apoyo de sostenimiento que tenga definido la empresa para la práctica"
+        return str(amount)
+
     def answer(questions) -> dict[str, str]:
         out, ask = {}, []
         for q in questions:
+            if answers.asks_expected_salary(q.label):  # nunca la cifra fija del banco en una práctica
+                if (value := salary(q)) is not None:
+                    out[q.label] = value
+                continue
             value = answers.bank_answer(q.label, conf.answers)
             if value is not None:
                 out[q.label] = value

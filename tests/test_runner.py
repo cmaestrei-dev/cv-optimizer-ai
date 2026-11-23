@@ -465,6 +465,21 @@ class TestAnswerer:
         assert "¿Requieres patrocinio de visa?" not in out  # no es de experiencia: sin respuesta, se salta
         assert out["¿Cuál es tu aspiración salarial?"] == "3000000"
 
+    def test_the_salary_follows_the_published_range_and_internships_get_no_number(self):
+        from runner.linkedin import Question
+
+        def answer(vacancy: dict, question: Question) -> dict:
+            api = SimpleNamespace(post=lambda path, body: [], get=lambda path: vacancy)
+            conf = cfg.Config(api="https://x", token="t", answers={"aspiracion salarial|salario": "3000000"})
+            return cli._answerer(api, conf, 1)([question])
+
+        label = "¿Cuál es tu aspiración salarial?"
+        ranged = {"role": "Desarrollador Junior", "vacancy_text": "Salario: $3.000.000 a $4.000.000 COP"}
+        assert answer(ranged, Question("text", label, True, "", [], [], True)) == {label: "3500000"}
+        intern = {"role": "Practicante de Sistemas", "vacancy_text": "Práctica profesional"}
+        assert answer(intern, Question("text", label, True, "", [], [], True)) == {}  # número obligatorio: sin cifra, se salta
+        assert answer(intern, Question("textarea", label, True, "", [], []))[label].startswith("A convenir")
+
     def test_si_picks_a_favorable_option_when_si_does_not_fit(self):
         # 2026-11-21: «¿Cuál es tu nivel de experiencia con React…?» (Básico/Intermedio/Avanzado) quedaba sin respuesta.
         from runner.linkedin import Question
