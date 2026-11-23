@@ -137,3 +137,48 @@ _EXPERIENCE = re.compile(r"\b(experienc\w*|conocimientos?|manejas?|manejo|(has|h
 def asks_experience(question: str) -> bool:
     """¿La pregunta es sobre experiencia o conocimiento de algo? (la que `sin_evidencia` responde sin evidencia)."""
     return bool(_EXPERIENCE.search(normalize(question)))
+
+
+# --- Aspiración salarial según la vacante (decisión del dueño, 2026-11-22) ---
+# «Decídela tú según la vacante y mi experiencia; si es solo para el perfil de la plataforma, 3 millones.»
+SALARY_DEFAULT = 3_000_000
+_EXPECTED = ("aspiracion salarial", "expectativa salarial", "pretension salarial", "salario esperado", "salario deseado",
+             "aspiracion economica", "expectativa economica", "cuanto esperas ganar", "cuanto aspiras", "expected salary",
+             "salary expectation", "desired salary")
+_INTERNSHIP = re.compile(r"\b(practicante|practica|pasante|pasantia|aprendiz|intern|internship|trainee|estudiante en practica)\b")
+# Cifras en pesos: «$2.500.000», «2500000 COP», «3 millones», «2,8 a 3,2 millones». Solo cuentan si llevan moneda o si
+# van justo después de una palabra de sueldo: las ofertas hablan de «11.000.000 de transacciones» o de teléfonos.
+_MONEY = re.compile(r"(?<![\d.,])(\$\s*|cop\s*)?(\d{1,3}(?:[.,]\d{3}){1,2}|\d{7,8})(?![\d.,]*\d)(\s*(?:cop|pesos))?"
+                    r"|(?<![\d.,])(\d+(?:[.,]\d+)?)\s*(?:(?:a|y|-|–)\s*(\d+(?:[.,]\d+)?)\s*)?millones")
+_PAY = re.compile(r"(salari|sueldo|remuneraci|asignaci|compensaci|ingreso|pago mensual|salary|rango)")
+
+
+def asks_expected_salary(question: str) -> bool:
+    """«¿Cuál es tu aspiración salarial?» (no el salario actual o el último)."""
+    q = normalize(question)
+    return any(p in q for p in _EXPECTED) and not re.search(r"\b(actual|ultimo|anterior|current|last)\b", q)
+
+
+def _amounts(text: str) -> list[int]:
+    t, out = normalize(text), []
+    for m in _MONEY.finditer(t):
+        if m.group(4):  # «N millones» o «N a M millones»
+            values = [float(v.replace(",", ".")) * 1_000_000 for v in (m.group(4), m.group(5)) if v]
+        else:
+            if not (m.group(1) or m.group(3) or _PAY.search(t[max(0, m.start() - 60):m.start()])):
+                continue
+            values = [float(re.sub(r"[.,]", "", m.group(2)))]
+        out.extend(int(v) for v in values if 1_000_000 <= v <= 20_000_000)  # sueldo mensual en pesos
+    return out
+
+
+def expected_salary(vacancy_text: str, title: str = "", *, default: int = SALARY_DEFAULT) -> int | None:
+    """La aspiración para esta vacante: dentro del rango que publica (el punto medio) o su cifra; sin cifra, `default`.
+    Para prácticas no se da cifra (None): el apoyo de sostenimiento lo fija la empresa."""
+    amounts = _amounts(vacancy_text)
+    if amounts:
+        value = (min(amounts) + max(amounts)) / 2 if len(amounts) > 1 else amounts[0]
+        return int(round(value / 100_000) * 100_000)
+    if _INTERNSHIP.search(normalize(title)):
+        return None
+    return default

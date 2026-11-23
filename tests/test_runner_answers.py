@@ -85,3 +85,17 @@ def test_experience_questions_with_typos():
     assert answers.asks_experience("Do you have experience with Docker?")
     assert not answers.asks_experience("¿Es mayor de edad?")
 
+
+
+def test_expected_salary_follows_the_vacancy():
+    # Decisión del dueño (2026-11-22): según la vacante; sin cifra publicada, 3 millones; en prácticas, sin cifra.
+    from runner.answers import asks_expected_salary, expected_salary
+
+    assert asks_expected_salary("¿Cuál es tu aspiración salarial?") and asks_expected_salary("Indícanos tu expectativa salarial")
+    assert not asks_expected_salary("¿Cuál es tu salario actual?") and not asks_expected_salary("¿Último salario?")
+    assert expected_salary("Salario: $2.500.000 - $3.500.000 COP", "Desarrollador Junior") == 3_000_000  # punto medio
+    assert expected_salary("Rango salarial entre 2,8 y 3,4 millones", "Analista") == 3_100_000
+    assert expected_salary("Salario 2800000 + prestaciones", "Analista") == 2_800_000
+    assert expected_salary("Somos 300 personas desde 2015; 11.000.000 de transacciones; tel 3001234567", "Dev") == 3_000_000
+    assert expected_salary("Auxilio de transporte $200.000", "Soporte") == 3_000_000  # no es un sueldo
+    assert expected_salary("", "Practicante de Sistemas") is None
