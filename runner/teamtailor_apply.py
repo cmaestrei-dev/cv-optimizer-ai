@@ -200,7 +200,10 @@ def apply(page, offer_url: str, cv_pdf: Path, answerer: Answerer, *, submit: boo
         if done := DONE.search(text):  # se deja el aviso del portal en el registro, para poder revisarlo
             around = " ".join(text[max(0, done.start() - 40):done.end() + 80].split())
             return ApplyResult("enviada", f"Confirmada por el portal: «{around}»")
-        if "/applications/new" not in page.url:
-            return ApplyResult("enviada", f"El portal cambió de página tras enviar ({page.url.split('?')[0][-60:]})")
+        if "email_verification" in page.url:  # Teamtailor pide confirmar la postulación desde el correo
+            return ApplyResult("enviada", "El portal pidió confirmar la postulación desde tu correo",
+                               follow_up="Abre el correo que te mandó la empresa y confirma la postulación (si no, no queda completa).")
+        if "/applications/new" not in page.url:  # p. ej. «/surveys»: la encuesta opcional que sigue a una postulación
+            return ApplyResult("enviada", f"El portal pasó a {page.url.split('?')[0].rsplit('/', 1)[-1]} tras enviar")
     errors = [t.strip() for t in page.locator(f"{FORM} .error:visible, {FORM} [role=alert]:visible").all_inner_texts() if t.strip()]
     return ApplyResult("error", "El portal no confirmó el envío" + (": " + "; ".join(errors)[:300] if errors else ": revísalo tú"))
