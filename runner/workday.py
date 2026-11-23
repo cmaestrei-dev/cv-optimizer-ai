@@ -89,6 +89,7 @@ def posting(site, url: str, *, get: PostJson | None = None) -> dict:
     public, api = _parts(site)
     path = url.split(public, 1)[1] if url.startswith(public) else urllib.parse.urlsplit(url).path
     path = path[path.find("/job/"):] if "/job/" in path else path
+    watch.pause(6, 10)  # el detalle también frena si va justo después de la búsqueda
     info = get(api + path).get("jobPostingInfo") or {}
     return {"title": str(info.get("title") or "").strip(), "place": str(info.get("location") or "").strip(),
             "text": watch.html_text(str(info.get("jobDescription") or "")), "posted": _day(info.get("startDate")),

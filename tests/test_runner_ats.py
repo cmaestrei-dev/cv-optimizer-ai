@@ -148,3 +148,33 @@ def test_request_json_turns_a_block_into_blocked_error(monkeypatch):
     monkeypatch.setattr(watch.urllib.request, "urlopen", refuse)
     with pytest.raises(BlockedError):
         watch.request_json("https://x.wd1.myworkdayjobs.com/wday/cxs/x/C/jobs", {"limit": 1})
+
+
+def test_a_portal_that_blocks_waits_without_using_the_round(tmp_path, monkeypatch):
+    # Caso real (2026-11-22): 7 de las 10 ofertas de la vuelta fueron de Accenture y frenaron; Mercado Libre no entró.
+    from runner import __main__ as cli
+    from runner import telegram
+    from runner.state import State
+    from tests.test_runner_watch import FakeApi
+
+    monkeypatch.setattr(cfg, "DATA_DIR", tmp_path)
+    state = State(tmp_path / "estado.json")
+    state.data["vigiladas"] = {
+        **{f"Accenture:R{i}": {"cargo": f"Application Developer {i}", "url": f"https://a/job/R{i}", "encaja": True} for i in range(3)},
+        "Mercado Libre:7": {"cargo": "Desarrollador Backend Junior", "url": "https://mercadolibre.eightfold.ai/careers/job/7", "encaja": True},
+    }
+    read = []
+
+    def posting(site, url):
+        read.append(site.name)
+        if site.portal == "workday":
+            raise BlockedError("el portal frenó las peticiones (HTTP 429)")
+        return {"title": "Desarrollador Backend Junior", "place": "Bogotá,Colombia", "text": "Python y APIs", "posted": None, "closes": None}
+
+    monkeypatch.setattr(watch, "read_posting", posting)
+    monkeypatch.setattr(telegram, "add_manual", lambda item: True)
+    api = FakeApi(score=70)
+    assert cli._prepare_watched(api, state, [ACCENTURE, MELI], limit=1) == 1
+    assert read == ["Accenture", "Mercado Libre"]  # tras el primer freno no insiste con Accenture
+    assert state.data["vigiladas"]["Mercado Libre:7"]["app"] == 1
+    assert all("app" not in state.data["vigiladas"][f"Accenture:R{i}"] for i in range(3))  # esperan a la próxima vuelta
