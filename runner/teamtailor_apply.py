@@ -7,7 +7,10 @@ Verificado el 2026-11-22 en una oferta de Periferia IT, llenando sin enviar:
   obligatorio; las demás se marcan con un clic en el radio.
 - Nombre, apellidos, correo, teléfono (con su país), el CV (`input[type=file]`) y el consentimiento de la política de
   privacidad (`candidate[consent_given]`), obligatorio para postular. El de «futuras oportunidades» queda sin marcar.
-- Antes de enviar, el formulario mismo dice si falta algo (`checkValidity`).
+- Algunos piden la ubicación (`#candidate_location`, «Dirección»): es una ciudad con sugerencias; se escribe la ciudad
+  del perfil y se elige la sugerencia de ese país (llena ciudad, país y coordenadas).
+- Antes de enviar, el formulario mismo dice si falta algo (`checkValidity`), y además se revisan los campos cuya
+  etiqueta dice «Obligatorio» aunque el campo no lo exija (Bluetab rechazó el envío por la ubicación vacía).
 Si aparece una verificación (captcha), el bot se detiene; nunca la resuelve.
 """
 
@@ -46,6 +49,37 @@ _INVALID = """() => [...document.querySelectorAll('#job-application-form input, 
   .map(e => { const q = e.closest('div.question'); const head = q && q.querySelector('legend, label');
               const own = e.id && document.querySelector('label[for="' + e.id + '"]');
               return ((head || own) ? (head || own).innerText : (e.name || e.id)).replace(/\\*|Obligatorio/g, '').replace(/\\s+/g, ' ').trim(); })"""
+
+
+# Campos fuera de las preguntas cuya etiqueta dice «Obligatorio» y siguen vacíos (el servidor los rechazaría).
+_REQUIRED_EMPTY = """() => [...document.querySelectorAll('#job-application-form label')]
+  .filter(l => /Obligatorio|Required/i.test(l.innerText) && !l.closest('div.question') && l.htmlFor)
+  .map(l => [l.innerText.replace(/\\*|Obligatorio|Required/gi, '').replace(/\\s+/g, ' ').trim(), document.getElementById(l.htmlFor)])
+  .filter(([, e]) => e && (e.type === 'file' ? !e.files.length : e.type === 'checkbox' ? !e.checked : !String(e.value || '').trim()))
+  .map(([label]) => label)"""
+
+
+def _location(page, city: str) -> bool:
+    """La ubicación con sugerencias: se escribe la ciudad y se elige la sugerencia de ese país."""
+    field = page.locator("#candidate_location")
+    if not field.count() or field.input_value().strip():
+        return True
+    name, _, rest = city.partition(",")
+    country = rest.split(",")[-1].strip()
+    if not name.strip():
+        return False  # sin ciudad en el perfil no se elige una cualquiera
+    field.scroll_into_view_if_needed()
+    field.click()
+    field.type(name.strip(), delay=60)
+    time.sleep(2.5)
+    options = page.locator("[role=option]:visible")
+    for i in range(options.count()):
+        text = options.nth(i).inner_text()
+        if name.strip().lower() in text.lower() and (not country or country.lower() in text.lower()):
+            options.nth(i).click()
+            time.sleep(0.8)
+            return True
+    return False
 
 
 def application_url(offer_url: str) -> str:
@@ -132,10 +166,13 @@ def apply(page, offer_url: str, cv_pdf: Path, answerer: Answerer, *, submit: boo
         if field.count() and value and not field.input_value().strip():
             field.fill(value)
             field.press("Tab")
+    if not _location(page, contact.get("city", "")):
+        return ApplyResult("saltada", "No pude elegir tu ciudad en el campo de ubicación del formulario")
     upload = page.locator(f"{FORM} input[type=file]")
     if not upload.count():
         return ApplyResult("error", "No encontré dónde subir el CV en el formulario")
-    upload.first.set_input_files(str(cv_pdf))
+    resume = page.locator("#candidate_resume_remote_url")  # hay formularios con otro campo de «archivos adicionales»
+    (resume if resume.count() else upload.first).set_input_files(str(cv_pdf))
     for _ in range(10):
         time.sleep(1)
         if cv_pdf.name in page.inner_text(FORM):
@@ -145,7 +182,7 @@ def apply(page, offer_url: str, cv_pdf: Path, answerer: Answerer, *, submit: boo
     consent = page.locator("#candidate_consent_given")
     if consent.count() and not consent.is_checked():
         page.evaluate("() => document.getElementById('candidate_consent_given').click()")
-    invalid = [label for label in page.evaluate(_INVALID) if label]
+    invalid = [label for label in [*page.evaluate(_INVALID), *page.evaluate(_REQUIRED_EMPTY)] if label]
     if invalid:
         return ApplyResult("saltada", "El formulario no está completo (no se envía)", unanswered=invalid[:6])
     if not submit:

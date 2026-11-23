@@ -14,7 +14,7 @@ from runner import teamtailor_apply as tt  # noqa: E402
 from runner import watch  # noqa: E402
 
 OFFER = "https://jobs.periferiaitgroup.com/jobs/8777639-analista-soporte"
-CONTACT = {"full_name": "Camilo Maestre", "email": "camilo@example.com", "phone": "+57 300 000 0000"}
+CONTACT = {"full_name": "Camilo Maestre", "email": "camilo@example.com", "phone": "+57 300 000 0000", "city": "Cartagena, Colombia"}
 
 
 class FakeTeamtailor:
@@ -47,12 +47,22 @@ class FakeTeamtailor:
  <input type="text" id="candidate_last_name" name="candidate[last_name]" required>
  <input type="email" id="candidate_email" name="candidate[email]" required>
  <input type="tel" id="candidate_phone" name="candidate[phone]" required>
+ <label for="candidate_location">Dirección* Obligatorio</label>
+ <input type="text" id="candidate_location" name="candidate[location][query]" oninput="suggest(this)">
+ <input type="hidden" id="loc_city" name="candidate[location][city]"><ul id="suggestions"></ul>
  <input type="file" id="candidate_resume_remote_url" required onchange="document.getElementById('cv-name').innerText = this.files[0].name"><span id="cv-name"></span>
  <input type="checkbox" id="candidate_consent_given" name="candidate[consent_given]" value="1" required>
  <input type="checkbox" id="candidate_consent_given_future_jobs" name="candidate[consent_given_future_jobs]" value="1">
  <input type="submit" name="commit" value="Enviar">
 </form>
 <script>
+ function suggest(input) {  // como Teamtailor: la ubicación se elige entre sugerencias (ciudad, país)
+   const ul = document.getElementById('suggestions'); ul.innerHTML = '';
+   for (const place of ['Cartagena, Spain', 'Cartagena, Colombia']) {
+     if (!place.toLowerCase().startsWith(input.value.toLowerCase())) continue;
+     const li = document.createElement('li'); li.setAttribute('role', 'option'); li.innerText = place;
+     li.onclick = () => { input.value = place; document.getElementById('loc_city').value = place.split(',')[0]; ul.innerHTML = ''; };
+     ul.appendChild(li); } }
  function pick(q, id, value) { document.getElementById(id).checked = true; document.getElementById('hidden' + q).value = value;
    document.getElementById('menu' + q).style.display = 'none'; }
  document.getElementById('job-application-form').addEventListener('submit', async ev => {
@@ -117,6 +127,7 @@ def test_fills_everything_and_sends_with_this_vacancys_cv(chromium, tmp_path):
     assert sent["candidate[consent_given]"] == "1" and "candidate[consent_given_future_jobs]" not in sent  # solo el obligatorio
     assert sent["candidate[answers_attributes][3][text]"] == ""  # la opcional no se inventa
     assert sent["cv"] == "Camilo_Maestre_Analista_Soporte_Periferia_IT.pdf"
+    assert sent["candidate[location][query]"] == "Cartagena, Colombia" and sent["candidate[location][city]"] == "Cartagena"
 
 
 def test_dry_run_and_unanswered_questions_never_send(chromium, tmp_path):
@@ -149,3 +160,10 @@ def test_postular_is_allowed_on_teamtailor_without_login(tmp_path):
 
 def test_query_string_is_ignored_when_building_the_form_link():
     assert parse_qs(urlparse(tt.application_url(OFFER)).query) == {}
+
+
+def test_a_required_location_without_a_city_is_not_sent(chromium, tmp_path, monkeypatch):
+    fake = FakeTeamtailor()
+    monkeypatch.setitem(CONTACT, "city", "")
+    result = run(chromium, fake, tmp_path)
+    assert result.status == "saltada" and "ubicación" in result.detail and fake.posted == []
