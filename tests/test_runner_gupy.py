@@ -57,8 +57,8 @@ QUESTIONS = """<fieldset><legend>¿Tienes disponibilidad para trabajar presencia
 
 
 class FakeGupy:
-    def __init__(self, *, logged=True, questions=QUESTIONS):
-        self.logged, self.questions, self.posts = logged, questions, []
+    def __init__(self, *, logged=True, questions=QUESTIONS, list_first=False):
+        self.logged, self.questions, self.posts, self.list_first = logged, questions, [], list_first
 
     def handle(self, route, request):
         if request.method == "POST":
@@ -66,6 +66,9 @@ class FakeGupy:
             return route.fulfill(status=200, content_type="application/json", body="{}")
         if not self.logged:
             return route.fulfill(status=200, content_type="text/html", body='<html><body><input type="password"></body></html>')
+        if self.list_first:  # como el real: la primera visita a una postulación nueva cae en «Mis candidaturas»
+            self.list_first = False
+            return route.fulfill(status=200, content_type="text/html", body="<html><body><h1>Mis candidaturas</h1></body></html>")
         body = PAGE.replace("QUESTIONS", json.dumps(self.questions))
         return route.fulfill(status=200, content_type="text/html; charset=utf-8", body=body)
 
@@ -129,3 +132,8 @@ def test_apply_link():
     assert gupy.apply_url(OFFER) == "https://stefaninilatam.gupy.io/candidates/jobs/12857712/apply?jobBoardSource=gupy_public_page"
     with pytest.raises(ValueError):
         gupy.apply_url("https://stefaninilatam.gupy.io/")
+
+
+def test_a_first_visit_that_lands_on_the_application_list_is_retried(chromium, tmp_path):
+    fake = FakeGupy(list_first=True)
+    assert run(chromium, fake, tmp_path).status == "enviada"
