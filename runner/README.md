@@ -214,8 +214,8 @@ basta (sale en la dirección de su página de empleos):
 ```toml
 [[vigilar]]
 nombre = "Bold"
-portal = "recruitee"          # también: greenhouse, lever, ashby, smartrecruiters
-sitio = "https://jobs.bold.co"  # Recruitee: la página de empleos; los demás usan «cuenta»
+portal = "recruitee"          # también: greenhouse, lever, ashby, smartrecruiters, teamtailor, buk, gupy, muevete
+sitio = "https://jobs.bold.co"  # Recruitee, Teamtailor, Buk y Gupy: la página de empleos; los demás usan «cuenta»
 pais = "Colombia"
 
 [[vigilar]]
@@ -225,8 +225,9 @@ cuenta = "addi"               # jobs.ashbyhq.com/addi · Greenhouse: job-boards.
 pais = "Colombia"             # Lever: jobs.lever.co/<cuenta> · SmartRecruiters: jobs.smartrecruiters.com/<cuenta>
 ```
 
-Workday frena si se le pide seguido (HTTP 429): el bot hace pausas largas y, si frena, ese portal espera a la
-próxima vuelta. En estos portales el bot no postula (piden cuenta o tienen captcha): te llegan por Telegram con su CV.
+Workday frena si se le pide seguido (HTTP 429), y el límite es por conexión, no por empresa: en cada vuelta el bot
+revisa solo 3 portales de Workday (los que llevan más tiempo sin revisarse), con pausas largas, y si uno frena espera
+a la próxima vuelta. En estos portales el bot no postula (piden cuenta o tienen captcha): te llegan por Telegram con su CV.
 De Get on Board toma solo las de tecnología (por su categoría), sin experiencia, junior o semi senior, y descarta las
 de ventas, las bilingües y las que están en inglés sin sede en el país.
 

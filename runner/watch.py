@@ -7,7 +7,11 @@ SuccessFactors con `postular = true` las postula el lote (`python -m runner lote
 Portales (`portal` en `[[vigilar]]`): «successfactors» (por defecto: Bancolombia, Ecopetrol), «workday»
 (`runner/workday.py`: Accenture, Unisys…), «eightfold» (`runner/eightfold.py`: Mercado Libre) y «getonbrd»
 (`runner/getonbrd.py`: la bolsa Get on Board, con la empresa de cada oferta), y «recruitee», «greenhouse», «lever»,
-«ashby» y «smartrecruiters» (`runner/boards.py`, con la `cuenta` de la empresa en cada sistema).
+«ashby», «smartrecruiters», «teamtailor», «buk», «gupy» y «muevete» (`runner/boards.py`: con la `cuenta` de la empresa
+en ese sistema o la dirección de su página de empleos en `sitio`).
+
+Workday frena por conexión (no por empresa): en cada vuelta se revisan solo `WORKDAY_PER_ROUND` portales de Workday,
+los que llevan más tiempo sin revisarse, con pausas largas entre uno y otro.
 
 Verificado (2026-11-21): `<sitio>/search/?q=<texto>&locale=es_ES` devuelve hasta 25 ofertas en HTML, cada una como
 `<a class="jobTitle-link" href="/<marca>/job/<slug>/<id>/">Cargo</a>`.
@@ -31,8 +35,9 @@ from pathlib import Path
 from runner import config as cfg
 from runner.discover import UA, BlockedError
 
+WORKDAY_PER_ROUND = 3
 PORTALS = ("successfactors", "workday", "eightfold", "getonbrd", "recruitee", "greenhouse", "lever", "ashby",
-           "smartrecruiters")
+           "smartrecruiters", "teamtailor", "buk", "gupy", "muevete")
 # Sistemas que identifican a la empresa con una «cuenta» (su página pública se arma con ella si no hay «sitio»)
 ACCOUNT_PORTALS = ("greenhouse", "lever", "ashby", "smartrecruiters")
 COUNTRY_CODES = {"colombia": "CO", "chile": "CL", "peru": "PE", "mexico": "MX", "argentina": "AR", "uruguay": "UY",
@@ -44,7 +49,7 @@ DEFAULT_INCLUDE = ["software", "desarroll", "sistemas", "tecnolog", "informatic"
                    "seguridad de la informacion", "soporte", "ti", "it", "qa", "pruebas", "datos", "programa", "devops",
                    "cloud", "web", "backend", "frontend", "fullstack", "full stack", "developer", "data", "cyber",
                    "security", "support", "mesa de ayuda", "help desk", "redes", "infra", "middleware", "iam",
-                   "identidad"]
+                   "identidad", "plataforma", "analitica", "corebanking", "core banking"]
 DEFAULT_EXCLUDE = ["senior", "sr", "lider", "lead", "arquitect", "gerente", "manager", "director", "jefe", "head",
                    "principal", "staff", "expert", "iii", "iv", "sales", "ventas", "comercial"]
 # Get on Board ya filtra por categoría de tecnología: cualquier cargo («*»), menos los bilingües.
@@ -214,7 +219,7 @@ def fetch(url: str, *, timeout: float = 25) -> str:
         return response.read(3_000_000).decode("utf-8", "replace")
 
 
-def request_json(url: str, body: dict | None = None, *, timeout: float = 25) -> dict:
+def request_json(url: str, body: dict | None = None, *, timeout: float = 40, limit: int = 15_000_000) -> dict:
     """GET (o POST con `body`) a una API pública de empleos. 429/403: el portal está frenando (BlockedError)."""
     headers = {"User-Agent": UA, "Accept": "application/json", "Accept-Language": "es-CO,es;q=0.9"}
     data = None
@@ -223,7 +228,7 @@ def request_json(url: str, body: dict | None = None, *, timeout: float = 25) -> 
     request = urllib.request.Request(url, data=data, headers=headers)
     try:
         with urllib.request.urlopen(request, timeout=timeout) as response:
-            return json.loads(response.read(5_000_000).decode("utf-8", "replace"))
+            return json.loads(response.read(limit).decode("utf-8", "replace"))
     except urllib.error.HTTPError as e:
         if e.code in (403, 429):
             raise BlockedError(f"el portal frenó las peticiones (HTTP {e.code}); se reintenta en la próxima vuelta") from None
@@ -262,8 +267,18 @@ def listing(site: Site, *, get: Callable[[str], str] = fetch) -> list[tuple[str,
 def check(sites: list[Site], data: dict, *, get: Callable[[str], str] = fetch) -> list[dict]:
     """Revisa los sitios y devuelve las ofertas nuevas que encajan. Anota todas las vistas en `data["vigiladas"]`."""
     seen = data.setdefault("vigiladas", {})
-    new = []
+    checked = data.setdefault("portales_revisados", {})  # nombre → cuándo se revisó (para repartir los de Workday)
+    workday = sorted((s for s in sites if s.portal == "workday"), key=lambda s: checked.get(s.name, ""))
+    skip = {s.name for s in workday[WORKDAY_PER_ROUND:]}
+    new, first_workday = [], True
     for site in sites:
+        if site.name in skip:
+            continue
+        if site.portal == "workday":
+            if not first_workday:
+                pause(20, 30)
+            first_workday = False
+        checked[site.name] = datetime.now(UTC).isoformat(timespec="seconds")
         try:
             found = listing(site, get=get)
         except (BlockedError, urllib.error.URLError, TimeoutError, OSError, ValueError) as e:
