@@ -608,7 +608,7 @@ def cmd_diario(_args) -> int:
         return code
 
 
-WATCH_PER_ROUND = 5  # ofertas de portales de empresas que la app analiza por vuelta (usan cupo de IA)
+WATCH_PER_ROUND = 10  # ofertas de portales de empresas que la app analiza por vuelta (usan cupo de IA)
 
 
 def _watch_sites(*, prepare: bool = True) -> list[dict]:
@@ -655,8 +655,11 @@ def _prepare_watched(api: Api, state: State, sites, *, limit: int = WATCH_PER_RO
             break
         handled += 1
         try:
-            info = watch.posting(watch.fetch(rec["url"]))
-        except (urllib.error.URLError, TimeoutError, OSError) as e:
+            info = watch.read_posting(site, rec["url"])
+        except discover.BlockedError as e:
+            print(f"  {site.name}: {e}")
+            continue
+        except (urllib.error.URLError, TimeoutError, OSError, ValueError) as e:
             print(f"  {site.name}: no se pudo abrir «{rec.get('cargo', '')}» ({str(e)[:80]})")
             continue
         if not info["text"] or (info["closes"] and info["closes"] < date.today()):
@@ -691,7 +694,9 @@ def _prepare_watched(api: Api, state: State, sites, *, limit: int = WATCH_PER_RO
             for_batch[site.name] = for_batch.get(site.name, 0) + 1
             print(f"  ✓ {vacancy.score:>3}  {vacancy.role} — {site.name}: CV listo, pendiente para el lote")
             continue
-        note = f"Postúlate en el portal de {site.name}: pide iniciar sesión (con captcha), así que el bot no puede."
+        note = {"workday": f"Postúlate en el portal de {site.name} (Workday): pide tu cuenta en esa empresa; el bot aún no postula ahí.",
+                "eightfold": f"Postúlate en la página de empleos de {site.name}: pide tu cuenta allí; el bot aún no postula ahí.",
+                }.get(site.portal, f"Postúlate en el portal de {site.name}: pide iniciar sesión (con captcha), así que el bot no puede.")
         if info["closes"]:
             note += f" Cierra el {info['closes']:%d/%m/%Y}."
         item = {"id": sha256(rec["url"].encode()).hexdigest()[:12], "url": rec["url"], "titulo": vacancy.role or rec.get("cargo", ""),

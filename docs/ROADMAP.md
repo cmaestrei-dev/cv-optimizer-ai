@@ -393,6 +393,13 @@ Entregas:
   - **Primer lote real, 2026-11-22: 2 de 2 enviadas** (Backend Junior y Backend de EVC Gestión del Fraude); «Puestos solicitados» pasó de 1 a 3.
   - El bot no las pudo confirmar ni devolver el CV general porque el perfil solo abre con el código de la sesión en la dirección (`_s.crb`): el enlace directo responde «not authorized». Con sesión, el acceso lleva al perfil con ese código, así que el bot entra siempre por ahí (sobra `perfil` en la configuración). Si la devolución falla, dice en qué paso y deja una captura.
 
+**Portales de empresas en Workday y Eightfold (2026-11-22).** Pedido del dueño («arranca con Workday y Mercado Libre»).
+- [x] Estudio de portales (sin cuentas ni envíos): Get on Board tiene API pública pero unas 4 vacantes que le sirven; ticjob y Hireline casi nada; Indeed bloquea con un reto de JavaScript (no se salta). Lo que más rinde son los portales de grandes empresas.
+- [x] `runner/workday.py`: búsqueda pública de Workday (`/wday/cxs/<tenant>/<sitio>/jobs`), filtrada por el país que se busca por nombre en las facetas (el id de Colombia es el mismo en todas), y la oferta con su fecha de cierre. Frena rápido (429 por host): pausas de 6 a 10 s y, si frena, ese portal espera a la próxima vuelta.
+- [x] `runner/eightfold.py`: búsqueda pública de Eightfold (Mercado Libre, `/api/pcsx/search` y `position_details`), solo las del país.
+- [x] `[[vigilar]] portal = "workday" | "eightfold"` con `pais` (y `dominio` en Eightfold); `buscar` es opcional. Más palabras de tecnología en inglés (backend, developer, support, security…) y exclusiones (lead, manager, expert). Hasta 10 ofertas vigiladas por vuelta.
+- [x] Verificado en vivo: Mercado Libre 59 en Colombia (17 encajan), Accenture 40 (9), DXC y Kyndryl responden. Configurados Accenture, DXC, Kyndryl, Unisys y Mercado Libre. El bot no postula ahí (cada empresa pide su cuenta): llegan por Telegram con su CV.
+
 **elempleo (Fase 8, 2026-11-21).** Pedido del dueño («ya entré a elempleo, continúa y probablemente también debas modificar el perfil»).
 - [x] Hoja de vida del dueño igual a LinkedIn: descripción, experiencias (El Arte de Nicolás, Equimat, Karta; se quitó una freelance que no estaba), estudios formales (UdeC y UNAB), 12 cursos complementarios, 18 habilidades técnicas, el CV general como adjunto (en lugar de uno viejo de «Auxiliar de recursos educativos») y GitHub.
 - [x] Estudio sin postular:
@@ -534,4 +541,5 @@ Cambios:
 2. ~~(dueño) Primer lote de Bancolombia~~: hecho el 2026-11-22 (2 enviadas). Cada oferta nueva que encaja avisa por Telegram con `python -m runner lote bancolombia`; el dueño entra en la ventana del bot y el bot hace el resto.
 3. Revisar `registro.log` tras las vueltas: el primer envío real a elempleo (20 preparadas el 2026-11-21) y las opciones de las preguntas que quedan sin respuesta (ahora se anotan), para ajustar el banco.
 4. ~~Resumen del CV honesto y natural~~: hecho el 2026-11-22 (ver la decisión). Revisar en los CV de las próximas vueltas que suene bien con el perfil real del dueño.
-5. Después: LinkedIn sin «Solicitud sencilla» (medir adónde llevan), Get on Board y la vista web de lo que hizo el bot.
+5. Ver qué traen Workday y Mercado Libre en las vueltas. Si el dueño crea su cuenta en Accenture (Workday), estudiar postular ahí en lote como en Bancolombia.
+6. Después: LinkedIn sin «Solicitud sencilla» (medir adónde llevan), Get on Board y la vista web de lo que hizo el bot.
