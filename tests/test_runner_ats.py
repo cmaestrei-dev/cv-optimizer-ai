@@ -247,3 +247,26 @@ def test_a_job_board_offer_goes_to_the_app_with_its_own_company(tmp_path, monkey
     assert cli._prepare_watched(api, state, [GOB]) == 1
     assert api.added[0][0].startswith("Agente de Mesa de Servicios TI\nFactor IT\nMedellín, CO")  # la empresa, no la bolsa
     assert sent[0]["empresa"] == "Factor IT" and "Get on Board" in sent[0]["nota"]
+
+
+def test_offers_the_bot_can_send_are_analyzed_first(tmp_path, monkeypatch):
+    from dataclasses import replace
+
+    from runner import __main__ as cli
+    from runner import telegram
+    from runner.state import State
+    from tests.test_runner_watch import FakeApi
+
+    monkeypatch.setattr(cfg, "DATA_DIR", tmp_path)
+    state = State(tmp_path / "estado.json")
+    state.data["vigiladas"] = {
+        "Mercado Libre:1": {"cargo": "Desarrollador Backend Junior", "url": "https://mercadolibre.eightfold.ai/careers/job/1", "encaja": True},
+        "Periferia IT:2": {"cargo": "Desarrollador Fullstack", "url": "https://jobs.periferiaitgroup.com/jobs/2-dev", "encaja": True},
+    }
+    read = []
+    monkeypatch.setattr(watch, "read_posting", lambda site, url: read.append(site.name) or
+                        {"title": "Desarrollador", "place": "Bogotá", "text": "Python", "posted": None, "closes": None})
+    monkeypatch.setattr(telegram, "add_manual", lambda item: True)
+    periferia = replace(MELI, name="Periferia IT", portal="teamtailor", base="https://periferiait.teamtailor.com", apply=True)
+    cli._prepare_watched(FakeApi(score=70), state, [MELI, periferia], limit=1)
+    assert read == ["Periferia IT"] and state.data["vigiladas"]["Periferia IT:2"]["estado"] == "preparada"
