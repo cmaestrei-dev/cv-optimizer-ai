@@ -227,7 +227,13 @@ pais = "Colombia"             # Lever: jobs.lever.co/<cuenta> · SmartRecruiters
 
 Workday frena si se le pide seguido (HTTP 429), y el límite es por conexión, no por empresa: en cada vuelta el bot
 revisa solo 3 portales de Workday (los que llevan más tiempo sin revisarse), con pausas largas, y si uno frena espera
-a la próxima vuelta. En estos portales el bot no postula (piden cuenta o tienen captcha): te llegan por Telegram con su CV.
+a la próxima vuelta. En casi todos estos portales el bot no postula (piden cuenta o tienen captcha): te llegan por Telegram con su CV.
+**Teamtailor sí**: su formulario no pide cuenta ni captcha. Con `postular = true` en su `[[vigilar]]`, en cada vuelta el bot
+postula solo a las que llegan a la compatibilidad mínima (hasta 10 por vuelta): responde las preguntas de la empresa con
+tu banco y tu perfil, usa tu nombre, correo y teléfono del perfil de la app, sube el CV de esa vacante y marca solo el
+consentimiento obligatorio de la política de privacidad (el de «futuras oportunidades» no). Si una pregunta queda sin
+respuesta, no envía: te la pregunta por Telegram (`/preguntas`) y la reintenta cuando la respondes. Para probar sin
+enviar: `python -m runner lote <empresa> --prueba`.
 De Get on Board toma solo las de tecnología (por su categoría), sin experiencia, junior o semi senior, y descarta las
 de ventas, las bilingües y las que están en inglés sin sede en el país.
 

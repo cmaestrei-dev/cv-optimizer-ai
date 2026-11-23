@@ -1,8 +1,9 @@
 """Vigilar los portales de empleo propios de algunas empresas y avisar de las vacantes nuevas que encajen.
 
 Esos portales piden una cuenta por empresa, que crea la persona. El bot mira la búsqueda pública, y a las ofertas que
-encajan la app las analiza y les hace el CV: le llegan a la persona por Telegram, listas para postular. En
-SuccessFactors con `postular = true` las postula el lote (`python -m runner lote <sitio>`).
+encajan la app las analiza y les hace el CV: le llegan a la persona por Telegram, listas para postular. Con
+`postular = true`, el bot las postula: en SuccessFactors con el lote (`python -m runner lote <sitio>`: la persona
+entra), y en los portales sin cuenta (Teamtailor) solo, en cada vuelta.
 
 Portales (`portal` en `[[vigilar]]`): «successfactors» (por defecto: Bancolombia, Ecopetrol), «workday»
 (`runner/workday.py`: Accenture, Unisys…), «eightfold» (`runner/eightfold.py`: Mercado Libre) y «getonbrd»
@@ -36,6 +37,9 @@ from runner import config as cfg
 from runner.discover import UA, BlockedError
 
 WORKDAY_PER_ROUND = 3
+# Dónde puede postular el bot: con la sesión que abre la persona (lote) o sin cuenta (en cada vuelta)
+LOGIN_APPLY = ("successfactors",)
+AUTO_APPLY = ("teamtailor",)
 PORTALS = ("successfactors", "workday", "eightfold", "getonbrd", "recruitee", "greenhouse", "lever", "ashby",
            "smartrecruiters", "teamtailor", "buk", "gupy", "muevete")
 # Sistemas que identifican a la empresa con una «cuenta» (su página pública se arma con ella si no hay «sitio»)
@@ -66,7 +70,7 @@ class Site:
     include: list[str] = field(default_factory=lambda: list(DEFAULT_INCLUDE))
     exclude: list[str] = field(default_factory=lambda: list(DEFAULT_EXCLUDE))
     min_score: int = 60  # compatibilidad mínima para hacerle el CV y mandarla a la persona
-    apply: bool = False  # postular con `python -m runner lote <nombre>` (la persona entra; el bot postula)
+    apply: bool = False  # postular: lote con la sesión de la persona (SuccessFactors) o solo (Teamtailor)
     login_url: str = ""  # el acceso del portal (career8…loginFlowRequired=true); con sesión lleva al perfil
     signature: str = ""  # nombre completo para aceptar la declaración de conformidad (autorizado por la persona)
     answers: dict[str, str] = field(default_factory=dict)  # respuestas propias del portal (patrón → opción)
@@ -108,8 +112,8 @@ def load_sites(path: Path | None = None) -> list[Site]:
             raise cfg.ConfigError(f"[[vigilar]] de {portal} necesita «pais» (p. ej., \"Colombia\").")
         if portal == "eightfold" and not str(item.get("dominio", "")).strip():
             raise cfg.ConfigError("[[vigilar]] de eightfold necesita «dominio» (p. ej., \"mercadolibre.com\").")
-        if portal != "successfactors" and item.get("postular"):
-            raise cfg.ConfigError(f"[[vigilar]] «postular» solo funciona en SuccessFactors (no en {portal}).")
+        if item.get("postular") and portal not in LOGIN_APPLY + AUTO_APPLY:
+            raise cfg.ConfigError(f"[[vigilar]] «postular» funciona en {', '.join(LOGIN_APPLY + AUTO_APPLY)} (no en {portal}).")
         sites.append(Site(name=str(item.get("nombre") or base), base=base, terms=terms, portal=portal,
                           country=str(item.get("pais", "")).strip(), domain=str(item.get("dominio", "")).strip(),
                           tenant=str(item.get("tenant", "")).strip(), account=account,
@@ -119,7 +123,7 @@ def load_sites(path: Path | None = None) -> list[Site]:
                           login_url=str(item.get("acceso", "")).strip(),
                           signature=str(item.get("firma", "")).strip(),
                           answers={str(k): str(v) for k, v in (item.get("respuestas") or {}).items()}))
-        if sites[-1].apply and not sites[-1].login_url.startswith("https://"):
+        if sites[-1].apply and portal in LOGIN_APPLY and not sites[-1].login_url.startswith("https://"):
             raise cfg.ConfigError(f"[[vigilar]] «{sites[-1].name}» con postular = true necesita «acceso» (https://…).")
     return sites
 

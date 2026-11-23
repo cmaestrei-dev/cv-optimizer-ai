@@ -257,7 +257,7 @@ def pending_questions(state: State) -> list[str]:
 
     bank = {**_bank(), **extra_answers()}
     seen, out = set(), []
-    for v in state.data["vistas"].values():
+    for v in [*state.data["vistas"].values(), *state.data.get("vigiladas", {}).values()]:  # también portales de empresas
         if v.get("estado") != "saltada":
             continue
         for q in v.get("preguntas") or []:
