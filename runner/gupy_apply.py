@@ -11,6 +11,8 @@ Verificado el 2026-11-23 con la cuenta del dueño, terminando una postulación r
   «Sitio de la empresa») → «Guardar y continuar» → «Preguntas creadas por la empresa» («Responder ahora»; las de
   Stefanini no cargaron: su servicio respondió 404 y la página quedó sin preguntas) → «Guardar y continuar» → aviso
   opcional «Preséntate» → «Finalizar candidatura» → «¡Candidatura finalizada!».
+- La primera vez que se abre una postulación nueva, Gupy a veces lleva a «Mis candidaturas» (la postulación queda en
+  0/5): al abrir otra vez el enlace sigue normal.
 - Las respuestas a las preguntas de la empresa no se pueden editar después: si alguna queda sin respuesta, no se
   guarda nada y la postulación queda en curso en Gupy (se reintenta cuando haya respuesta).
 Ante una verificación (Cloudflare, captcha) el bot se detiene; nunca la resuelve.
@@ -147,9 +149,13 @@ def apply(page, offer_url: str, cv_pdf: Path, answerer: Answerer, *, submit: boo
           overrides: dict[str, str] | None = None, cover: Callable[[], str] | None = None) -> ApplyResult:
     """Postula a una oferta de Gupy con la hoja de vida de Gupy de la persona. `cv_pdf` no se envía (queda en la app)."""
     overrides = overrides or {}
-    page.goto(apply_url(offer_url), wait_until="domcontentloaded")
-    time.sleep(6)
-    text = _text(page)
+    for _ in range(3):  # la primera vez que crea la postulación, Gupy a veces lleva a «Mis candidaturas»: se reintenta
+        page.goto(apply_url(offer_url), wait_until="domcontentloaded")
+        time.sleep(6)
+        text = _text(page)
+        if "Mis candidaturas" not in text or "continuamos" in text:
+            break
+        time.sleep(4)
     if CHALLENGE.search(text):
         return ApplyResult("verificacion", "Gupy pidió una verificación (Cloudflare): entra tú y complétala")
     if "/signin" in page.url or "login" in page.url or page.locator("input[type=password]:visible").count():
