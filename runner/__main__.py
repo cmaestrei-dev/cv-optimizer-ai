@@ -701,6 +701,8 @@ def _prepare_watched(api: Api, state: State, sites, *, limit: int = WATCH_PER_RO
         note = {"workday": f"Postúlate en el portal de {site.name} (Workday): pide tu cuenta en esa empresa; el bot aún no postula ahí.",
                 "eightfold": f"Postúlate en la página de empleos de {site.name}: pide tu cuenta allí; el bot aún no postula ahí.",
                 "getonbrd": "Postúlate en Get on Board: pide tu cuenta allí (Google, LinkedIn o GitHub); el bot aún no postula ahí.",
+                **dict.fromkeys(("recruitee", "greenhouse", "lever", "ashby", "smartrecruiters"),
+                                f"Postúlate en la página de empleos de {site.name}: su formulario pide cuenta o captcha, así que el bot no puede."),
                 }.get(site.portal, f"Postúlate en el portal de {site.name}: pide iniciar sesión (con captcha), así que el bot no puede.")
         if info["closes"]:
             note += f" Cierra el {info['closes']:%d/%m/%Y}."

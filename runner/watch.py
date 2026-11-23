@@ -6,7 +6,8 @@ SuccessFactors con `postular = true` las postula el lote (`python -m runner lote
 
 Portales (`portal` en `[[vigilar]]`): «successfactors» (por defecto: Bancolombia, Ecopetrol), «workday»
 (`runner/workday.py`: Accenture, Unisys…), «eightfold» (`runner/eightfold.py`: Mercado Libre) y «getonbrd»
-(`runner/getonbrd.py`: la bolsa Get on Board, con la empresa de cada oferta).
+(`runner/getonbrd.py`: la bolsa Get on Board, con la empresa de cada oferta), y «recruitee», «greenhouse», «lever»,
+«ashby» y «smartrecruiters» (`runner/boards.py`, con la `cuenta` de la empresa en cada sistema).
 
 Verificado (2026-11-21): `<sitio>/search/?q=<texto>&locale=es_ES` devuelve hasta 25 ofertas en HTML, cada una como
 `<a class="jobTitle-link" href="/<marca>/job/<slug>/<id>/">Cargo</a>`.
@@ -30,7 +31,13 @@ from pathlib import Path
 from runner import config as cfg
 from runner.discover import UA, BlockedError
 
-PORTALS = ("successfactors", "workday", "eightfold", "getonbrd")
+PORTALS = ("successfactors", "workday", "eightfold", "getonbrd", "recruitee", "greenhouse", "lever", "ashby",
+           "smartrecruiters")
+# Sistemas que identifican a la empresa con una «cuenta» (su página pública se arma con ella si no hay «sitio»)
+ACCOUNT_PORTALS = ("greenhouse", "lever", "ashby", "smartrecruiters")
+COUNTRY_CODES = {"colombia": "CO", "chile": "CL", "peru": "PE", "mexico": "MX", "argentina": "AR", "uruguay": "UY",
+                 "ecuador": "EC", "venezuela": "VE", "bolivia": "BO", "paraguay": "PY", "costa rica": "CR",
+                 "brasil": "BR", "brazil": "BR", "panama": "PA"}
 
 # Palabras de tecnología en el cargo («Practicante en Tecnología» sí; «Practicante de Ciencias Económicas» no)
 DEFAULT_INCLUDE = ["software", "desarroll", "sistemas", "tecnolog", "informatic", "ciberseg", "seguridad informatica",
@@ -39,10 +46,10 @@ DEFAULT_INCLUDE = ["software", "desarroll", "sistemas", "tecnolog", "informatic"
                    "security", "support", "mesa de ayuda", "help desk", "redes", "infra", "middleware", "iam",
                    "identidad"]
 DEFAULT_EXCLUDE = ["senior", "sr", "lider", "lead", "arquitect", "gerente", "manager", "director", "jefe", "head",
-                   "principal", "staff", "expert", "iii", "iv"]
-# Get on Board ya filtra por categoría de tecnología: cualquier cargo («*»), menos ventas y los bilingües.
+                   "principal", "staff", "expert", "iii", "iv", "sales", "ventas", "comercial"]
+# Get on Board ya filtra por categoría de tecnología: cualquier cargo («*»), menos los bilingües.
 BOARD_INCLUDE = ["*"]
-BOARD_EXCLUDE = [*DEFAULT_EXCLUDE, "sales", "ventas", "comercial", "bilingue", "bilingual"]
+BOARD_EXCLUDE = [*DEFAULT_EXCLUDE, "bilingue", "bilingual"]
 _LINK = re.compile(r'<a[^>]+class="jobTitle-link"[^>]+href="([^"]+)"[^>]*>([^<]+)</a>')
 
 
@@ -62,6 +69,7 @@ class Site:
     country: str = ""  # Workday y Eightfold: solo las ofertas de este país («Colombia»)
     domain: str = ""  # Eightfold: el dominio de la empresa («mercadolibre.com»)
     tenant: str = ""  # Workday: si no es la primera parte del dominio («accenture».wd103.myworkdayjobs.com)
+    account: str = ""  # Greenhouse, Lever, Ashby, SmartRecruiters: la empresa en ese sistema («clara», «addi»…)
 
 
 def _norm(text: str) -> str:
@@ -81,6 +89,12 @@ def load_sites(path: Path | None = None) -> list[Site]:
         base = str(item.get("sitio", "")).strip().rstrip("/")
         terms = [str(t).strip() for t in item.get("buscar", []) if str(t).strip()]
         portal = str(item.get("portal", "successfactors")).strip().lower()
+        account = str(item.get("cuenta", "")).strip()
+        if portal in ACCOUNT_PORTALS and not account:
+            raise cfg.ConfigError(f"[[vigilar]] de {portal} necesita «cuenta» (la empresa en {portal}).")
+        if portal in ACCOUNT_PORTALS and not base:
+            from runner import boards
+            base = boards.PUBLIC[portal].format(account)
         if portal not in PORTALS:
             raise cfg.ConfigError(f"[[vigilar]] «portal» debe ser uno de: {', '.join(PORTALS)}.")
         if not base.startswith("https://") or (portal == "successfactors" and not terms):
@@ -93,7 +107,7 @@ def load_sites(path: Path | None = None) -> list[Site]:
             raise cfg.ConfigError(f"[[vigilar]] «postular» solo funciona en SuccessFactors (no en {portal}).")
         sites.append(Site(name=str(item.get("nombre") or base), base=base, terms=terms, portal=portal,
                           country=str(item.get("pais", "")).strip(), domain=str(item.get("dominio", "")).strip(),
-                          tenant=str(item.get("tenant", "")).strip(),
+                          tenant=str(item.get("tenant", "")).strip(), account=account,
                           include=[str(w).lower() for w in item.get("incluir", BOARD_INCLUDE if portal == "getonbrd" else DEFAULT_INCLUDE)],
                           exclude=[str(w).lower() for w in item.get("excluir", BOARD_EXCLUDE if portal == "getonbrd" else DEFAULT_EXCLUDE)],
                           min_score=int(item.get("compatibilidad_minima", 60)), apply=bool(item.get("postular", False)),
@@ -188,6 +202,9 @@ def read_posting(site: Site, url: str) -> dict:
     if site.portal == "getonbrd":
         from runner import getonbrd
         return getonbrd.posting(site, url)
+    if site.portal != "successfactors":
+        from runner import boards
+        return boards.posting(site, url)
     return posting(fetch(url))
 
 
@@ -228,6 +245,9 @@ def listing(site: Site, *, get: Callable[[str], str] = fetch) -> list[tuple[str,
     if site.portal == "getonbrd":
         from runner import getonbrd
         return getonbrd.listing(site)
+    if site.portal != "successfactors":
+        from runner import boards
+        return boards.listing(site)
     out: list[tuple[str, str, str]] = []
     for term in site.terms:
         try:
