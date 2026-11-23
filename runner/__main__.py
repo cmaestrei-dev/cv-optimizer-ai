@@ -644,24 +644,27 @@ def _prepare_watched(api: Api, state: State, sites, *, limit: int = WATCH_PER_RO
 
     by_name, handled, sent = {s.name: s for s in sites}, 0, 0
     for_batch: dict[str, int] = {}
+    blocked: set[str] = set()  # portales que frenaron en esta vuelta: sus ofertas esperan y no gastan cupo
     for key, rec in state.data.get("vigiladas", {}).items():
         site = by_name.get(key.split(":", 1)[0])
-        if not site or not rec.get("encaja") or "app" in rec or rec.get("listo"):
+        if not site or not rec.get("encaja") or "app" in rec or rec.get("listo") or site.name in blocked:
             continue
         if not watch.matches(site, rec.get("cargo", "")):  # anotada con reglas viejas
             rec["listo"] = "no_encaja"
             continue
         if handled >= limit:
             break
-        handled += 1
         try:
             info = watch.read_posting(site, rec["url"])
         except discover.BlockedError as e:
             print(f"  {site.name}: {e}")
+            blocked.add(site.name)
             continue
         except (urllib.error.URLError, TimeoutError, OSError, ValueError) as e:
+            handled += 1
             print(f"  {site.name}: no se pudo abrir «{rec.get('cargo', '')}» ({str(e)[:80]})")
             continue
+        handled += 1
         if not info["text"] or (info["closes"] and info["closes"] < date.today()):
             rec["listo"] = "cerrada" if info["text"] else "sin_texto"
             continue
