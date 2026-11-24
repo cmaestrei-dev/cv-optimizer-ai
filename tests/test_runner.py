@@ -715,3 +715,22 @@ def test_a_watched_offer_skipped_without_pending_questions_is_not_retried(tmp_pa
     conf = cfg.Config(api="https://x", token="t")
     api = SimpleNamespace(get=lambda path: pytest.fail("no debía llegar a postular"))
     assert cli._auto_apply_watched(api, conf, state, [site], submit=True) == 0
+
+
+
+def test_a_watched_offer_already_sent_in_the_app_is_never_sent_again(tmp_path):
+    # 2026-11-24: una vuelta en curso reescribió el estado y «olvidó» una postulación ya enviada a Mercado Libre.
+    from runner import watch
+
+    cv = tmp_path / "cv.pdf"
+    cv.write_bytes(b"%PDF-1.4")
+    state = State(tmp_path / "estado.json")
+    rec = {"cargo": "Software Engineer", "url": "https://mercadolibre.eightfold.ai/careers/job/1", "app": 7, "puntaje": 80,
+           "cv": str(cv), "cv_id": 2}
+    state.data["vigiladas"] = {"Mercado Libre:1": dict(rec), "Mercado Libre:2": {**rec, "app": 8}}
+    site = watch.Site(name="Mercado Libre", base="https://mercadolibre.eightfold.ai", terms=[], apply=True, portal="eightfold")
+    statuses = {"/applications/7": "postulada", "/applications/8": "cv_generado"}
+    api = SimpleNamespace(get=lambda path: {"status": statuses[path]})
+    todo = [(site, k, v) for k, v in state.data["vigiladas"].items()]
+    assert [k for _, k, _ in cli._not_sent_yet(api, state, todo, limit=10)] == ["Mercado Libre:2"]
+    assert State(tmp_path / "estado.json").data["vigiladas"]["Mercado Libre:1"]["estado"] == "ya_postulada"

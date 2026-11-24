@@ -857,7 +857,7 @@ def _auto_apply_watched(api: Api, conf: cfg.Config, state: State, sites, *, subm
             if rec.get("estado") == "saltada" and not (questions and all(_answerable(q, conf, site.answers) for q in questions)):
                 continue  # espera respuestas; sin preguntas (oferta cerrada, sin CV adjunto…) no se reintenta sola
             todo.append((site, key, rec))
-    todo = todo[: limit or None]
+    todo = _not_sent_yet(api, state, todo, limit)
     if not todo:
         return 0
     contact = (api.get("/profile") or {}).get("contact") or {}
@@ -934,6 +934,29 @@ def cmd_vigilar(_args) -> int:
     else:
         print("Sin vacantes nuevas que encajen en los portales vigilados.")
     return 0
+
+
+SENT_STATUSES = ("postulada", "en_revision", "entrevista", "oferta", "rechazada")  # en la app: ya se envió
+
+
+def _not_sent_yet(api: Api, state: State, todo: list, limit: int) -> list:
+    """Nunca dos veces la misma: si la app ya la tiene enviada (la persona la mandó, o una vuelta perdió su registro
+    en el estado: pasó el 2026-11-24 con Mercado Libre), se marca «ya_postulada» y se sigue con la siguiente."""
+    out = []
+    for site, key, rec in todo:
+        if limit and len(out) >= limit:
+            break
+        try:
+            status = (api.get(f"/applications/{rec['app']}") or {}).get("status", "")
+        except ApiError:
+            status = ""
+        if status in SENT_STATUSES:
+            rec["estado"] = "ya_postulada"
+            print(f"· {site.name}: {rec.get('cargo', '')} ya figura enviada en la app: no se repite.")
+            continue
+        out.append((site, key, rec))
+    state.save()
+    return out
 
 
 def _batch_pending(state: State, site) -> list[tuple[str, dict]]:
