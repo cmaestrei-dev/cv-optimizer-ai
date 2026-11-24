@@ -676,3 +676,15 @@ def test_vacancies_in_other_languages_are_skipped_unless_in_the_home_country(tmp
     assert cli._foreign(api, conf, 1) and cli._foreign(api, conf, 3)
     assert not cli._foreign(api, conf, 2) and not cli._foreign(api, conf, 4) and not cli._foreign(api, conf, 5)
     assert cli._foreign(api, cfg.Config(api="https://x", token="t"), 1) == ""  # sin solo_idiomas no se omite nada
+
+
+def test_months_in_the_profiles_answer_are_never_declared_as_years():
+    # Caso real (2026-11-24): la app respondió «4 meses» (Equimat) y el bot escribía «4 años».
+    from runner.linkedin import Question
+
+    label = "¿Cuántos años de experiencia tienes con herramientas de análisis de seguridad?"
+    api = SimpleNamespace(post=lambda path, body: [{"question": label, "answer": "4 meses en Equimat Solutions", "needs_you": False}])
+    numeric = Question("text", label, True, "", [], [], numeric=True)
+    for policy, expected in (("cero", "0"), ("si", "2")):  # «si»: lo que decidió el dueño para junior (2 años)
+        conf = cfg.Config(api="https://x", token="t", no_evidence=policy, default_years=2)
+        assert cli._answerer(api, conf, 1)([numeric])[label] == expected

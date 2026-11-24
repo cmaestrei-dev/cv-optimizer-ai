@@ -24,6 +24,15 @@ def test_integers_round_down():
     assert answers.to_integer("") is None and answers.to_integer("varios") is None
 
 
+def test_periods_never_turn_months_into_years():
+    # Caso real (2026-11-24): «4 meses en Equimat» salía como «4 años»; «11 meses en Karta», como «11 años».
+    assert answers.to_period("4 meses (Equimat Solutions)") == "0"
+    assert answers.to_period("Tengo 11 meses de experiencia en Karta") == "0"
+    assert answers.to_period("18 meses") == "1" and answers.to_period("2 años") == "2" and answers.to_period("1,5 años") == "1"
+    assert answers.to_period("1 año", months=True) == "12" and answers.to_period("4 meses", months=True) == "4"
+    assert answers.to_period("3") == "3" and answers.to_period("ninguna") is None
+
+
 def test_pick_option():
     assert answers.pick_option("Sí", ["Selecciona una opción", "Sí", "No"]) == "Sí"
     assert answers.pick_option("Yes", ["Select an option", "Yes", "No"]) == "Yes"
