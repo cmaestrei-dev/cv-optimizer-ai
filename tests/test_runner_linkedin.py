@@ -114,3 +114,9 @@ def test_a_closed_job_is_skipped_not_handed_over(page, cv):
                                                                        body="<h1>Analista</h1><p>Ya no se aceptan solicitudes</p>"))
     result = linkedin.apply(page, "https://example.com/job", cv, answerer, submit=True)
     assert result.status == "saltada" and "ya no recibe" in result.detail
+
+
+def test_the_2026_applied_notice_means_already_applied(page, cv):
+    page.route("https://example.com/job", lambda route: route.fulfill(content_type="text/html; charset=utf-8",
+                                                                       body="<h1>Analista</h1><p>Solicitud enviada justo ahora</p>"))
+    assert linkedin.apply(page, "https://example.com/job", cv, answerer, submit=True).status == "ya_postulada"
