@@ -853,8 +853,9 @@ def _auto_apply_watched(api: Api, conf: cfg.Config, state: State, sites, *, subm
                 continue
             if rec.get("estado") in ("error", "verificacion"):
                 continue
-            if rec.get("estado") == "saltada" and not all(_answerable(q, conf, site.answers) for q in rec.get("preguntas") or []):
-                continue  # sigue esperando respuestas
+            questions = rec.get("preguntas") or []
+            if rec.get("estado") == "saltada" and not (questions and all(_answerable(q, conf, site.answers) for q in questions)):
+                continue  # espera respuestas; sin preguntas (oferta cerrada, sin CV adjunto…) no se reintenta sola
             todo.append((site, key, rec))
     todo = todo[: limit or None]
     if not todo:
@@ -881,6 +882,8 @@ def _auto_apply_watched(api: Api, conf: cfg.Config, state: State, sites, *, subm
                 answerer = _answerer(api, conf, rec["app"], units=True, quota=quota)
                 try:
                     extra = {"title": rec.get("cargo", "")} if site.portal == "muevete" else {}  # AIRA: ¿es su formulario?
+                    if site.portal == "eightfold":  # sin confirmación, una captura para revisarla
+                        extra["shots"] = cfg.DATA_DIR / "capturas"
                     result = modules[site.portal].apply(page, rec["url"], Path(rec["cv"]), answerer, submit=submit,
                                                         contact=contact, overrides=site.answers,
                                                         cover=lambda app=rec["app"]: _cover_letter(api, app), **extra)

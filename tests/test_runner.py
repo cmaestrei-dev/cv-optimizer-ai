@@ -698,3 +698,20 @@ def test_a_yes_from_the_bank_never_answers_a_years_question():
     api = SimpleNamespace(post=lambda path, body: [{"question": label, "answer": "1 año", "needs_you": False}])
     conf = cfg.Config(api="https://x", token="t", no_evidence="cero", default_years=2, answers={"practica|pasantia": "Sí"})
     assert cli._answerer(api, conf, 1)([Question("text", label, True, "", [], [], numeric=True)])[label] == "1"
+
+
+def test_a_watched_offer_skipped_without_pending_questions_is_not_retried(tmp_path):
+    # 2026-11-24: una oferta de Softtek cerrada («no tiene formulario») se volvía a intentar en cada lote y vuelta.
+    pytest.importorskip("playwright.sync_api")
+    from runner import watch
+
+    cv = tmp_path / "cv.pdf"
+    cv.write_bytes(b"%PDF-1.4")
+    state = State(tmp_path / "estado.json")
+    state.data["vigiladas"] = {"Softtek:1": {"cargo": "Desarrollador FullStack", "url": "https://jobs.softtek.com/careers/job/1",
+                                            "app": 1, "puntaje": 70, "cv": str(cv), "cv_id": 2, "estado": "saltada",
+                                            "detalle": "La oferta no tiene formulario de postulación"}}
+    site = watch.Site(name="Softtek", base="https://jobs.softtek.com", terms=[], apply=True, portal="eightfold")
+    conf = cfg.Config(api="https://x", token="t")
+    api = SimpleNamespace(get=lambda path: pytest.fail("no debía llegar a postular"))
+    assert cli._auto_apply_watched(api, conf, state, [site], submit=True) == 0
