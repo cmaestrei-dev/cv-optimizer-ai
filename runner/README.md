@@ -237,6 +237,10 @@ El bot sube el CV de cada vacante, responde la expectativa salarial, los años d
 (Ninguno…Experto) y deja sin marcar «Guardar hoja de vida en mi perfil» y «Recibir alertas». Antes de llenar nada
 comprueba que el formulario abierto sea el de esa vacante (AIRA a veces abre la última postulación que se eligió). Falabella pide además dos pruebas (personalidad e inteligencia, 25
 minutos, valen 12 meses): esas las haces tú en «Mis postulaciones» de AIRA.
+**Eightfold** (Mercado Libre, Softtek) también, sin cuenta: con `postular = true` el bot sube el CV de la vacante, llena tu
+contacto (Eightfold lee el CV y a veces lo cambia: se corrige con el del perfil), país y código del teléfono, las
+preguntas del puesto y las autorizaciones obligatorias (p. ej. el contacto por WhatsApp de Mercado Libre); nunca marca
+«Guardar mis respuestas». Tiene reCAPTCHA invisible: si Google pide una verificación, la vacante te llega a ti.
 **Teamtailor sí**: su formulario no pide cuenta ni captcha. Con `postular = true` en su `[[vigilar]]`, en cada vuelta el bot
 postula solo a las que llegan a la compatibilidad mínima (hasta 10 por vuelta): responde las preguntas de la empresa con
 tu banco y tu perfil, usa tu nombre, correo y teléfono del perfil de la app, sube el CV de esa vacante y marca solo el

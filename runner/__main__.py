@@ -840,9 +840,9 @@ def _auto_apply_watched(api: Api, conf: cfg.Config, state: State, sites, *, subm
 
     from playwright.sync_api import sync_playwright
 
-    from runner import aira_apply, browser, gupy_apply, teamtailor_apply, watch
+    from runner import aira_apply, browser, eightfold_apply, gupy_apply, teamtailor_apply, watch
 
-    modules = {"teamtailor": teamtailor_apply, "gupy": gupy_apply, "muevete": aira_apply}
+    modules = {"teamtailor": teamtailor_apply, "gupy": gupy_apply, "muevete": aira_apply, "eightfold": eightfold_apply}
 
     todo = []
     for site in sites:

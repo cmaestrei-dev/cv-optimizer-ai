@@ -40,7 +40,7 @@ WORKDAY_PER_ROUND = 3
 # Dónde puede postular el bot: con la sesión que abre la persona (lote) o sin cuenta (en cada vuelta)
 LOGIN_APPLY = ("successfactors",)
 # Gupy y AIRA (portal «muevete» de Falabella): con la sesión que la persona dejó en el navegador del bot (entrar gupy/aira)
-AUTO_APPLY = ("teamtailor", "gupy", "muevete")
+AUTO_APPLY = ("teamtailor", "gupy", "muevete", "eightfold")
 PORTALS = ("successfactors", "workday", "eightfold", "getonbrd", "recruitee", "greenhouse", "lever", "ashby",
            "smartrecruiters", "teamtailor", "buk", "gupy", "muevete")
 # Sistemas que identifican a la empresa con una «cuenta» (su página pública se arma con ella si no hay «sitio»)

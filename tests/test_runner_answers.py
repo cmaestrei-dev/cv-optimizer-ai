@@ -114,3 +114,10 @@ def test_salary_question_with_a_typo():
     # Caso real (Computrabajo, 2026-11-24): «cual seria tu aspiracion salaria».
     assert answers.asks_expected_salary("cual seria tu aspiracion salaria")
     assert not answers.asks_expected_salary("¿Cuál es tu salario actual?")
+
+
+def test_language_levels_map_to_the_forms_words():
+    softtek = ["Básico", "Intermedio", "Intermedio alto", "Avanzado", "Fluent", "Native / Bilingual"]
+    assert answers.pick_option("A2", softtek) == "Básico" and answers.pick_option("B1", softtek) == "Intermedio"
+    assert answers.pick_option("B2", softtek) == "Intermedio alto" and answers.pick_option("C1", softtek) == "Avanzado"
+    assert answers.pick_option("A2", ["A1", "A2", "B1"]) == "A2"  # si el formulario usa el marco europeo, tal cual
