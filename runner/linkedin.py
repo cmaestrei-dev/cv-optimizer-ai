@@ -31,7 +31,8 @@ SUBMIT = re.compile(r"^(enviar solicitud|submit application)", re.I)
 SENT = re.compile(r"(se envi[oó] tu solicitud|tu solicitud se (ha )?envi[oó]|se ha enviado tu solicitud|solicitud enviada"
                   r"|application (was )?sent|your application was sent)", re.I)
 APPLIED = re.compile(r"^(postulado|solicitado|applied|solicitud enviada)\b", re.I)
-LIMIT = re.compile(r"(l[ií]mite diario|daily (application )?limit|has alcanzado el l[ií]mite|reached [^.]{0,40}\blimit)", re.I)
+LIMIT = re.compile(r"(l[ií]mite diario|daily (application )?limit|alcanzado el l[ií]mite (diario|de (las )?solicitudes|de postulaciones)|"
+                   r"reached [^.]{0,40}\b(application|apply|daily)[^.]{0,20}\blimit|limit for today)", re.I)
 CLOSED = re.compile(r"(ya no se aceptan solicitudes|no longer accepting applications)", re.I)
 FOLLOW = re.compile(r"(seguir a|follow )", re.I)
 CHALLENGE_URL = ("/checkpoint", "/authwall", "/uas/login", "/login")
