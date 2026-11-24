@@ -142,7 +142,8 @@ def _country(page, country: str) -> bool:
 
 
 def apply(page, offer_url: str, cv_pdf: Path, answerer: Answerer, *, submit: bool, contact: dict,
-          overrides: dict[str, str] | None = None, cover: Callable[[], str] | None = None) -> ApplyResult:
+          overrides: dict[str, str] | None = None, cover: Callable[[], str] | None = None,
+          shots: Path | None = None) -> ApplyResult:
     """Postula a una oferta de Eightfold con el CV de la vacante. `contact`: el del perfil (full_name, email, phone,
     city, linkedin_url)."""
     overrides = overrides or {}
@@ -239,7 +240,13 @@ def apply(page, offer_url: str, cv_pdf: Path, answerer: Answerer, *, submit: boo
     if not submit:
         return ApplyResult("revisada", "Modo prueba: formulario lleno y no se envió")
 
-    page.get_by_role("button", name=SUBMIT).last.click()
+    posts: list[str] = []  # lo que responde el servidor al enviar: si no hay confirmación, queda en el registro
+    page.on("response", lambda r: posts.append(f"{r.request.method} {r.url.split('?')[0][-60:]} → {r.status}")
+            if r.request.method in ("POST", "PUT") and "google" not in r.url else None)
+    buttons = page.get_by_role("button", name=SUBMIT).filter(visible=True)
+    if not buttons.count():
+        return ApplyResult("error", "No encontré el botón para enviar la solicitud")
+    buttons.last.click()
     for _ in range(25):
         time.sleep(1)
         if page.locator(CHALLENGE).filter(visible=True).count():
@@ -250,5 +257,11 @@ def apply(page, offer_url: str, cv_pdf: Path, answerer: Answerer, *, submit: boo
         if done := DONE.search(text):
             around = " ".join(text[max(0, done.start() - 40):done.end() + 80].split())
             return ApplyResult("enviada", f"Confirmada por el portal: «{around}»")
-    errors = [e for e in page.locator("[role=status]").all_inner_texts() if e.strip()]
-    return ApplyResult("error", "Eightfold no confirmó el envío" + (f": {'; '.join(errors)[:150]}" if errors else ": revísalo tú"))
+    errors = [e for e in page.locator("[role=status], [role=alert]").all_inner_texts() if e.strip()]
+    shot = ""
+    if shots:
+        shots.mkdir(parents=True, exist_ok=True)
+        shot = str(shots / f"eightfold-{re.sub(r'[^0-9]', '', apply_url(offer_url))[-12:]}.png")
+        page.screenshot(path=shot, full_page=True)
+    return ApplyResult("error", "Eightfold no confirmó el envío (revísalo tú): " + "; ".join(errors + posts[-4:])[:300],
+                       screenshot=shot)
