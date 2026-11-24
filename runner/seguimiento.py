@@ -1,8 +1,9 @@
 """Seguimiento: qué pasó con las postulaciones en cada portal (solo lectura, con la sesión del navegador del bot).
 
 Verificado el 2026-11-24 con las cuentas del dueño (pedido suyo: «revisa tú mismo mis plataformas»):
-- Computrabajo: «Mis aplicaciones» por estado (`/candidate/match?st=2` HdV Vista, `st=3` Finalista, `st=4` Proceso
-  finalizado). Cada postulación es un `[data-match]` (id estable) con cargo, empresa, ciudad, estado y cuándo.
+- Computrabajo: «Mis aplicaciones» (`/candidate/match?p=N`, 10 por página). Cada postulación es un `[data-match]`
+  (id estable) con cargo, empresa, ciudad, estado («Postulado», «HdV Vista», «Finalista», «Proceso finalizado») y
+  cuándo. Ojo: su correo «tu candidatura avanza» llegó también por procesos que la página ya daba por finalizados.
 - elempleo: «Mis procesos» (`/co/estadisticas/mis-procesos/`, 20 por página; el selector `ResultsByPage` deja 100).
   Cada fila es `tr[id][data-job-offer-id]`; el estado de la persona está en «Mi proceso»
   (`estado-de-mi-proceso/<id>`): una línea de tiempo con fecha («Oferta publicada», «Postulación a oferta», …).
@@ -125,15 +126,15 @@ def parse_aira(rows: list[list[str]]) -> list[Seen]:
 
 # --- Leer cada portal con el navegador del bot ---
 
-def read_computrabajo(page) -> list[Seen]:
-    items = []
-    for st in (2, 3, 4):  # lo que pasó de «Postulado»
-        page.goto(f"{CT}?st={st}", wait_until="domcontentloaded")
-        time.sleep(5)
-        for _ in range(3):  # la lista carga más al bajar
-            page.mouse.wheel(0, 4000)
-            time.sleep(1.5)
-        items += [(el.get_attribute("data-match") or "", el.inner_text()) for el in page.locator("[data-match]").all()]
+def read_computrabajo(page, *, pages: int = 15) -> list[Seen]:
+    items: list[tuple[str, str]] = []
+    for n in range(1, pages + 1):
+        page.goto(f"{CT}?p={n}", wait_until="domcontentloaded")
+        time.sleep(4)
+        found = [(el.get_attribute("data-match") or "", el.inner_text()) for el in page.locator("[data-match]").all()]
+        if not found or {k for k, _ in found} <= {k for k, _ in items}:  # se acabó (o repite la última página)
+            break
+        items += found
     return parse_computrabajo(items)
 
 
