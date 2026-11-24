@@ -1,8 +1,12 @@
 <!doctype html><html lang="es"><head><meta charset="utf-8"><title>Vacante</title></head><body>
 <!-- Copia mínima del formulario de «Solicitud sencilla» (estructura observada el 2026-11-18, clases omitidas). -->
 <h1>Desarrollador Backend</h1>
+<button aria-label="Solicitud sencilla" style="display:none">Solicitud sencilla</button>
 <button aria-label="Solicitud sencilla" onclick="openForm()">Solicitud sencilla</button>
 <div id="dlg" role="dialog" aria-label="Aplicar a Empresa" hidden></div>
+<!-- Desde 2026-11 el aviso de guardar se apila encima del formulario, con su propia X («Descartar»). -->
+<dialog id="save"><p>¿Quieres guardar esta solicitud?</p><button aria-label="Descartar" data-dialog-dismiss>×</button>
+  <button>Descartar</button><button>Guardar</button></dialog>
 <script>
   window.sent = false;
   const steps = [
@@ -23,6 +27,9 @@
      <fieldset aria-required="true"><legend>¿Puedes hacer práctica empresarial?*</legend>
        <input type="radio" name="pr" id="si"><label for="si">Sí</label>
        <input type="radio" name="pr" id="no"><label for="no">No</label></fieldset>
+     <!-- Estructura de 2026-11: la pregunta en el aria-label de cada radio, etiqueta vacía, la opción al lado. -->
+     <div><div><div><input type="radio" name="radio-group-_r_7u_" id="be1" aria-label="¿Tienes experiencia en desarrollo backend?"><label for="be1"></label></div><div><p>Yes</p></div></div>
+          <div><div><input type="radio" name="radio-group-_r_7u_" id="be2" aria-label="¿Tienes experiencia en desarrollo backend?"><label for="be2"></label></div><div><p>No</p></div></div></div>
      <button onclick="go(1)">Volver</button><button onclick="check(3)">Revisar</button>`,
     `<h3>Revisa tu solicitud</h3><p>Currículum: {{cv}}</p>
      <input type="checkbox" id="fw" checked><label for="fw">Seguir a Empresa para estar al día</label>
@@ -47,13 +54,15 @@
   }
   function openForm() { document.getElementById('dlg').hidden = false; current = 0; render(); }
   function go(n) { save(); current = n; render(); }
-  function check(n) { save(); if (!values.py || values.en === 'Selecciona una opción' || !(values.si || values.no)) return; go(n); }
+  function check(n) { save(); if (!values.py || values.en === 'Selecciona una opción' || !(values.si || values.no) || !(values.be1 || values.be2)) return; go(n); }
   function submitForm() { save(); window.sent = true; window.follow = values.fw; window.answers = {...values};
     if (window.quietSend) {  // sin aviso: el diálogo se cierra y la vacante pasa a «Postulado»
       const d = document.getElementById('dlg'); d.hidden = true; d.innerHTML = '';
       document.body.insertAdjacentHTML('beforeend', '<p>Postulado hace 1 minuto</p>'); return; }
     document.getElementById('dlg').innerHTML = '<p>Se envió tu solicitud a Empresa</p><button aria-label="Descartar">Listo</button>'; }
-  function closeForm() { const d = document.getElementById('dlg');
-    d.innerHTML = '<p>¿Guardar esta solicitud?</p><button>Descartar</button><button>Guardar</button>';
-    d.querySelectorAll('button')[0].onclick = () => { d.hidden = true; d.innerHTML = ''; }; }
+  function closeForm() { const d = document.getElementById('dlg'), s = document.getElementById('save'); s.show();
+    const [x, discard, keep] = s.querySelectorAll('button');
+    x.onclick = () => s.close();  // la X del aviso solo vuelve al formulario
+    keep.onclick = () => { s.close(); d.hidden = true; window.saved = true; };
+    discard.onclick = () => { s.close(); d.hidden = true; d.innerHTML = ''; window.discarded = true; }; }
 </script></body></html>
