@@ -107,3 +107,10 @@ def test_reads_the_2026_radio_questions(page):
     questions = {q.label: q for q in linkedin._questions(page.get_by_role("dialog").first)}
     backend = questions["¿Tienes experiencia en desarrollo backend?"]
     assert backend.kind == "radio" and backend.required and backend.options == ["Yes", "No"]
+
+
+def test_a_closed_job_is_skipped_not_handed_over(page, cv):
+    page.route("https://example.com/job", lambda route: route.fulfill(content_type="text/html; charset=utf-8",
+                                                                       body="<h1>Analista</h1><p>Ya no se aceptan solicitudes</p>"))
+    result = linkedin.apply(page, "https://example.com/job", cv, answerer, submit=True)
+    assert result.status == "saltada" and "ya no recibe" in result.detail
