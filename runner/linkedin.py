@@ -28,8 +28,9 @@ NAV = re.compile(r"^(siguiente|next|continuar|continue|revisar|review|enviar sol
 SUBMIT = re.compile(r"^(enviar solicitud|submit application)", re.I)
 SENT = re.compile(r"(se envi[oó] tu solicitud|tu solicitud se (ha )?envi[oó]|se ha enviado tu solicitud|solicitud enviada"
                   r"|application (was )?sent|your application was sent)", re.I)
-APPLIED = re.compile(r"^(postulado|solicitado|applied)\b", re.I)
+APPLIED = re.compile(r"^(postulado|solicitado|applied|solicitud enviada)\b", re.I)
 LIMIT = re.compile(r"(l[ií]mite diario|daily (application )?limit|has alcanzado el l[ií]mite|reached [^.]{0,40}\blimit)", re.I)
+CLOSED = re.compile(r"(ya no se aceptan solicitudes|no longer accepting applications)", re.I)
 FOLLOW = re.compile(r"(seguir a|follow )", re.I)
 CHALLENGE_URL = ("/checkpoint", "/authwall", "/uas/login", "/login")
 
@@ -106,9 +107,10 @@ def _challenge(page) -> bool:
 
 
 def _applied(page) -> bool:
-    """La vacante ya figura como postulada («Postulado hace 1 minuto», «Solicitado», «Applied»)."""
+    """La vacante ya figura como postulada («Postulado hace 1 minuto», «Solicitado», «Applied»; desde 2026-11,
+    «Solicitud enviada justo ahora»)."""
     return bool(page.get_by_role("button", name=APPLIED).count()
-                or page.get_by_text(re.compile(r"^(Postulado|Solicitado|Applied)\b")).count())
+                or page.get_by_text(re.compile(r"^(Postulado|Solicitado|Applied|Solicitud enviada)\b")).count())
 
 
 def _nav_button(dialog):
@@ -239,6 +241,8 @@ def apply(page, job_url: str, cv_pdf: Path, answerer: Answerer, *, submit: bool,
         return ApplyResult("tope", f"LinkedIn avisó el tope diario de solicitudes: «{notice[:120]}»")
     if _applied(page):
         return ApplyResult("ya_postulada")
+    if page.get_by_text(CLOSED).count():  # no es «externa»: no hay nada que hacer en el sitio de la empresa
+        return ApplyResult("saltada", "La vacante ya no recibe solicitudes")
     button = page.get_by_role("button", name=EASY).filter(visible=True).first  # el diseño nuevo trae uno oculto
     if not button.count():
         return ApplyResult("externa", "Sin «Solicitud sencilla» (postulación en la página de la empresa)")
