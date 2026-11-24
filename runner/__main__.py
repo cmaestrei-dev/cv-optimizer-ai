@@ -356,6 +356,8 @@ def _answerer(api: Api, conf: cfg.Config, application_id: int, *, units: bool = 
                     out[q.label] = value
                 continue
             value = answers.bank_answer(q.label, conf.answers)
+            if value is not None and (answers.is_years(q.label) or q.numeric) and answers.to_period(value) is None:
+                value = None  # «¿Cuántos años… prácticas de IaC?» no se responde con el «Sí» de «práctica»
             if value is not None:
                 out[q.label] = value
             else:

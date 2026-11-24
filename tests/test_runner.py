@@ -688,3 +688,13 @@ def test_months_in_the_profiles_answer_are_never_declared_as_years():
     for policy, expected in (("cero", "0"), ("si", "2")):  # «si»: lo que decidió el dueño para junior (2 años)
         conf = cfg.Config(api="https://x", token="t", no_evidence=policy, default_years=2)
         assert cli._answerer(api, conf, 1)([numeric])[label] == expected
+
+
+def test_a_yes_from_the_bank_never_answers_a_years_question():
+    # Caso real: la clave «practica» del banco respondía «Sí» a «¿Cuántos años… prácticas de Infrastructure as Code?».
+    from runner.linkedin import Question
+
+    label = "¿Cuántos años de experiencia tienes con prácticas de Infrastructure as Code (IaC)?"
+    api = SimpleNamespace(post=lambda path, body: [{"question": label, "answer": "1 año", "needs_you": False}])
+    conf = cfg.Config(api="https://x", token="t", no_evidence="cero", default_years=2, answers={"practica|pasantia": "Sí"})
+    assert cli._answerer(api, conf, 1)([Question("text", label, True, "", [], [], numeric=True)])[label] == "1"

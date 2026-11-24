@@ -5,9 +5,16 @@ solicitud»): desde 2026 las clases de LinkedIn son aleatorias. Reglas:
 - Solo se llena lo obligatorio que esté vacío; lo que LinkedIn ya trae (respuestas anteriores de la persona) se deja.
 - Si algo obligatorio no tiene respuesta, se descarta la solicitud y la vacante se salta: nunca se responde al azar.
 - «Seguir a la empresa» se desmarca. En modo prueba se llega a la revisión y se descarta sin enviar.
-- Ante una verificación (checkpoint, captcha, tope de LinkedIn) se detiene todo.
+- Ante una verificación (checkpoint, captcha, tope de LinkedIn) se detiene todo. El tope es un aviso corto; una oferta
+  cuya descripción hable de límites no cuenta (una así frenó LinkedIn del 22 al 24-11-2026).
+- Diseño de 2026-11 (verificado el 24 con ofertas reales, sin enviar): hay un botón «Solicitud sencilla» oculto además
+  del visible; pulsarlo cambia la dirección (no se espera esa navegación); los diálogos son `<dialog open>` apilados
+  (la X del formulario abre «¿Quieres guardar esta solicitud?» encima: ahí se pulsa «Descartar»); los radios de las
+  preguntas llevan la pregunta en su aria-label, la etiqueta vacía, el texto de la opción al lado y van fuera de la
+  pantalla (se marcan con su propio clic). Los CV de la lista llevan su nombre de archivo en el aria-label.
 """
 
+import contextlib
 import re
 import time
 from collections.abc import Callable
@@ -22,7 +29,7 @@ SUBMIT = re.compile(r"^(enviar solicitud|submit application)", re.I)
 SENT = re.compile(r"(se envi[oó] tu solicitud|tu solicitud se (ha )?envi[oó]|se ha enviado tu solicitud|solicitud enviada"
                   r"|application (was )?sent|your application was sent)", re.I)
 APPLIED = re.compile(r"^(postulado|solicitado|applied)\b", re.I)
-LIMIT = re.compile(r"(l[ií]mite diario|daily (application )?limit|has alcanzado el l[ií]mite|reached the .*limit)", re.I)
+LIMIT = re.compile(r"(l[ií]mite diario|daily (application )?limit|has alcanzado el l[ií]mite|reached [^.]{0,40}\blimit)", re.I)
 FOLLOW = re.compile(r"(seguir a|follow )", re.I)
 CHALLENGE_URL = ("/checkpoint", "/authwall", "/uas/login", "/login")
 
@@ -39,10 +46,19 @@ _FIELDS_JS = """(dialog) => {
     const required = el.required || el.getAttribute('aria-required') === 'true'
       || /\\*\\s*$/.test(labelOf(el)) || !!el.closest('fieldset[aria-required=true]');
     if (el.type === 'radio') {
+      // Desde 2026-11: cada radio trae la pregunta en su aria-label, la etiqueta va vacía y el texto de la opción
+      // («Yes», «No») está al lado, en el contenedor más grande que solo tiene ese radio.
       const key = el.name || labelOf(el);
-      const legend = el.closest('fieldset')?.querySelector('legend')?.innerText?.replace(/\\s+/g, ' ').trim() || key;
+      const asked = el.getAttribute('aria-label') || '';
+      const legend = el.closest('fieldset')?.querySelector('legend')?.innerText?.replace(/\\s+/g, ' ').trim()
+        || ([...dialog.querySelectorAll(`input[type=radio][name="${CSS.escape(el.name)}"]`)].every(r => r.getAttribute('aria-label') === asked) && asked)
+        || key;
       const group = radios.get(key) || {kind: 'radio', key, label: legend, required: false, value: '', options: [], ids: []};
-      const text = (el.id && dialog.querySelector(`label[for="${CSS.escape(el.id)}"]`)?.innerText?.trim()) || el.value;
+      let box = el;
+      while (box.parentElement && box.parentElement !== dialog && box.parentElement.querySelectorAll('input[type=radio]').length === 1) box = box.parentElement;
+      const text = (el.id && dialog.querySelector(`label[for="${CSS.escape(el.id)}"]`)?.innerText?.trim())
+        || (box !== el && box.innerText.replace(/\\s+/g, ' ').trim()) || el.value;
+      if (asked && legend === asked) group.required = true;  // pregunta de la empresa: LinkedIn no deja avanzar sin ella
       group.options.push(text); group.ids.push(String(i));
       if (el.checked) group.value = text;
       group.required = group.required || required;
@@ -133,8 +149,12 @@ def _fill(dialog, q: Question, answer: str) -> bool:
         option = pick_option(answer, q.options)
         if option is None:
             return False
-        dialog.locator(f"[data-cvo='{q.ids[q.options.index(option)]}']").check(force=True)
-        return True
+        radio = dialog.locator(f"[data-cvo='{q.ids[q.options.index(option)]}']")
+        try:
+            radio.check(force=True, timeout=5_000)
+        except Exception:  # noqa: BLE001 — desde 2026-11 el radio real va fuera de la pantalla: su propio clic
+            radio.evaluate("e => e.click()")
+        return True  # LinkedIn vuelve a dibujar la pregunta: `apply` relee el formulario y ve si quedó respondida
     return False
 
 
@@ -178,16 +198,36 @@ def _cv_ok(dialog, cv_pdf: Path) -> bool:
     return name in dialog.inner_text()
 
 
+_SAVE_PROMPT = re.compile(r"guardar esta solicitud|save this application", re.I)
+_DISCARD = re.compile(r"^\s*(descartar|discard)\s*$", re.I)
+
+
 def _discard(page) -> None:
-    for name in (re.compile(r"^(descartar|dismiss|cerrar|close)", re.I),):
-        close = page.get_by_role("button", name=name).first
-        if close.count():
-            close.click()
-            time.sleep(1.5)
-    confirm = page.get_by_role("button", name=re.compile(r"^(descartar|discard)$", re.I))
-    if confirm.count():
-        confirm.last.click()
-        time.sleep(1)
+    """Cierra la solicitud sin enviarla. Desde 2026-11 LinkedIn apila sus diálogos (`<dialog open>`): la X del
+    formulario abre encima «¿Quieres guardar esta solicitud?», y ahí se pulsa «Descartar» (no su X ni «Guardar»)."""
+    for _ in range(3):
+        dialogs = page.get_by_role("dialog").filter(visible=True)
+        if not dialogs.count():
+            return
+        prompt = dialogs.filter(has_text=_SAVE_PROMPT)
+        if prompt.count():
+            button = prompt.last.locator("button:not([data-dialog-dismiss])").filter(has_text=_DISCARD)
+        else:
+            button = dialogs.last.get_by_role("button", name=re.compile(r"^(descartar|dismiss|cerrar|close)", re.I))
+        if not button.count():
+            return
+        with contextlib.suppress(Exception):  # si algo lo tapa, se vuelve a mirar
+            button.first.click(timeout=10_000, no_wait_after=True)
+        time.sleep(2)
+
+
+def _limit_notice(page) -> str:
+    """El aviso del tope de LinkedIn: un mensaje corto. No cuenta una oferta cuya descripción lo mencione (caso real,
+    2026-11-22/24: una descripción en inglés frenó LinkedIn dos días seguidos)."""
+    for text in page.get_by_text(LIMIT).all_text_contents()[:20]:
+        if len(text.strip()) <= 300:
+            return text.strip()
+    return ""
 
 
 def apply(page, job_url: str, cv_pdf: Path, answerer: Answerer, *, submit: bool, shots: Path | None = None) -> ApplyResult:
@@ -195,14 +235,14 @@ def apply(page, job_url: str, cv_pdf: Path, answerer: Answerer, *, submit: bool,
     time.sleep(5)
     if _challenge(page):
         return ApplyResult("verificacion", page.url)
-    if page.get_by_text(LIMIT).count():
-        return ApplyResult("tope", "LinkedIn avisó el tope diario de solicitudes")
+    if notice := _limit_notice(page):
+        return ApplyResult("tope", f"LinkedIn avisó el tope diario de solicitudes: «{notice[:120]}»")
     if _applied(page):
         return ApplyResult("ya_postulada")
-    button = page.get_by_role("button", name=EASY).first
+    button = page.get_by_role("button", name=EASY).filter(visible=True).first  # el diseño nuevo trae uno oculto
     if not button.count():
         return ApplyResult("externa", "Sin «Solicitud sencilla» (postulación en la página de la empresa)")
-    button.click()
+    button.click(no_wait_after=True)  # abre el diálogo y cambia la dirección: no se espera esa navegación
     dialog = page.get_by_role("dialog").first
     try:
         dialog.wait_for(timeout=30_000)
@@ -215,9 +255,9 @@ def apply(page, job_url: str, cv_pdf: Path, answerer: Answerer, *, submit: bool,
     for step in range(12):
         if _challenge(page):
             return ApplyResult("verificacion", page.url)
-        if page.get_by_text(LIMIT).count():
+        if notice := _limit_notice(page):
             _discard(page)
-            return ApplyResult("tope", "LinkedIn avisó el tope diario de solicitudes")
+            return ApplyResult("tope", f"LinkedIn avisó el tope diario de solicitudes: «{notice[:120]}»")
         if not uploaded and _upload(page, dialog, cv_pdf):
             uploaded = True
             if not _cv_ok(dialog, cv_pdf):
