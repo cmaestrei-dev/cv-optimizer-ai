@@ -34,6 +34,7 @@ FORM = f"""<html><body><form onsubmit="return false">
 {combo("input-9", "", CODES, aria_label="Código de país")}
 <input id="Informaci_n_de_contacto_phone" aria-required="true">
 <span id="pais_label">País</span>{combo("input-12", "pais_label", COUNTRIES)}
+<span id="estado_label">Estado</span>{combo("input-19", "estado_label", ["Antioquia", "Atlántico", "Bolívar", "Boyacá"]).replace(' aria-required="true"', '')}
 <label id="Informaci_n_de_contacto_city_label" for="Informaci_n_de_contacto_city">Ciudad*</label>
 <input id="Informaci_n_de_contacto_city" aria-required="true">
 <label id="Preguntas_sobre_la_solicitud_LinkedIn_label" for="Preguntas_sobre_la_solicitud_LinkedIn">LinkedIn</label>
@@ -70,9 +71,11 @@ async function send() {{
     city: v('Informaci_n_de_contacto_city'), linkedin: v('Preguntas_sobre_la_solicitud_LinkedIn'), years: v('q1'),
     working: (document.querySelector('[name=q2]:checked') || {{}}).value, english: v('input-16'), privacy: v('input-18'),
     whatsapp: document.getElementById('wa').checked, save: document.getElementById('save').checked}};
+  if (!v('input-19')) {{ document.body.insertAdjacentHTML('beforeend', '<div role="status">Error: selecciona un Estado.</div>'); return; }}
+  data.state = v('input-19');
   await fetch('/api/apply', {{method: 'POST', body: JSON.stringify(data)}});
   document.body.innerHTML = CHALLENGE ? '<iframe src="https://www.google.com/recaptcha/api2/bframe?k=x" style="width:300px;height:300px"></iframe>'
-                                      : '<h2>¡Gracias por tu postulación!</h2>'; }}
+                                      : '<h2>¡Gracias por su solicitud, Camilo!</h2>'; }}
 </script></body></html>"""
 
 
@@ -132,7 +135,7 @@ def test_fills_everything_and_sends(chromium, tmp_path):
     assert fake.posts == [{"email": "camilo@example.com", "first": "Camilo Andres", "last": "Maestre Iglesias", "phone": "3050000000",
                            "code": "Colombia (+57)", "country": "Colombia", "city": "Cartagena",
                            "linkedin": "https://www.linkedin.com/in/camilo", "years": "1", "working": "Si", "english": "Básico",
-                           "privacy": "Sí", "whatsapp": True, "save": False}]  # nunca «guardar mis respuestas»
+                           "privacy": "Sí", "whatsapp": True, "save": False, "state": "Bolívar"}]  # nunca «guardar mis respuestas»
 
 
 def test_dry_run_unanswered_challenge_and_already_applied(chromium, tmp_path):
