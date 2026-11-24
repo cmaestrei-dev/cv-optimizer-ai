@@ -161,7 +161,7 @@ SALARY_DEFAULT = 3_000_000
 # Cuando un formulario exige una cifra para una práctica (AIRA de Falabella): el apoyo de sostenimiento usual, cerca de
 # un salario mínimo (decisión delegada por el dueño, 2026-11-23).
 INTERNSHIP_SALARY = 1_750_000
-_EXPECTED = ("aspiracion salarial", "expectativa salarial", "pretension salarial", "salario esperado", "salario deseado",
+_EXPECTED = ("aspiracion salari", "expectativa salari", "pretension salari", "salario esperado", "salario deseado",  # «salaria»: errata real
              "aspiracion economica", "expectativa economica", "cuanto esperas ganar", "cuanto aspiras", "expected salary",
              "salary expectation", "desired salary")
 _INTERNSHIP = re.compile(r"\b(practicante|practica|pasante|pasantia|aprendiz|intern|internship|trainee|estudiante en practica)\b")

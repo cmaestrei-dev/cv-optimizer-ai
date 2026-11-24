@@ -108,3 +108,9 @@ def test_expected_salary_follows_the_vacancy():
     assert expected_salary("Somos 300 personas desde 2015; 11.000.000 de transacciones; tel 3001234567", "Dev") == 3_000_000
     assert expected_salary("Auxilio de transporte $200.000", "Soporte") == 3_000_000  # no es un sueldo
     assert expected_salary("", "Practicante de Sistemas") is None
+
+
+def test_salary_question_with_a_typo():
+    # Caso real (Computrabajo, 2026-11-24): «cual seria tu aspiracion salaria».
+    assert answers.asks_expected_salary("cual seria tu aspiracion salaria")
+    assert not answers.asks_expected_salary("¿Cuál es tu salario actual?")
