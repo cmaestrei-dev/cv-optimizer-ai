@@ -146,9 +146,12 @@ def read_elempleo(page, known: dict, *, details: int = 25) -> list[Seen]:
     if page.locator("#ResultsByPage").count():
         page.locator("#ResultsByPage").select_option("100")
         time.sleep(5)
-    rows = page.evaluate("""() => [...document.querySelectorAll('tr[id][data-job-offer-id]')].map(tr => ({id: tr.id,
-        offer: tr.getAttribute('data-job-offer-id'), title: (tr.querySelector('a[data-job-offer-title]') || {}).dataset?.jobOfferTitle || '',
-        company: ((tr.querySelectorAll('td')[1] || {}).innerText || '').trim()}))""")
+    # Con 100 por página, el cargo queda como texto de la primera celda (sin enlace y con «data-job-offer-title» vacío).
+    rows = page.evaluate("""() => [...document.querySelectorAll('tr[id][data-job-offer-id]')].map(tr => {
+        const cells = tr.querySelectorAll('td');
+        return {id: tr.id, offer: tr.getAttribute('data-job-offer-id'),
+                title: ((cells[0] || {}).innerText || '').replace(/Mi proceso|\\|/g, '').trim(),
+                company: ((cells[1] || {}).innerText || '').trim()}; })""")
     pending = sorted(rows, key=lambda r: (known.get(f"elempleo|{r['id']}", {}).get("level", SENT) != SENT,
                                           known.get(f"elempleo|{r['id']}", {}).get("checked", "")))
     out = []
