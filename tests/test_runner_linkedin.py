@@ -130,3 +130,11 @@ def test_saved_years_stay_when_there_is_no_new_answer(page, cv):
     result = linkedin.apply(page, FIXTURE.as_uri(), cv, lambda qs: {q.label: known[q.label] for q in qs if q.label in known},
                             submit=True)
     assert result.status == "enviada" and page.evaluate("window.answers")["java"] == "3"
+
+
+def test_a_field_answer_limit_is_not_the_daily_limit(page):
+    # Caso real (2026-11-24): «Has alcanzado el límite de 3 respuestas» (una pregunta de varias opciones) frenó LinkedIn.
+    page.set_content("<main><div role='dialog'><p>Has alcanzado el límite de 3 respuestas</p></div></main>")
+    assert linkedin._limit_notice(page) == ""
+    page.set_content("<main><div role='alert'>Has alcanzado el límite de solicitudes de hoy.</div></main>")
+    assert linkedin._limit_notice(page)
