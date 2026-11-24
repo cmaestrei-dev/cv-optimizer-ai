@@ -2,7 +2,9 @@
 
 Todo se ubica por roles y nombres accesibles («Solicitud sencilla», el diálogo, «Siguiente», «Revisar», «Enviar
 solicitud»): desde 2026 las clases de LinkedIn son aleatorias. Reglas:
-- Solo se llena lo obligatorio que esté vacío; lo que LinkedIn ya trae (respuestas anteriores de la persona) se deja.
+- Solo se llena lo obligatorio que esté vacío; lo que LinkedIn ya trae (respuestas anteriores de la persona) se deja,
+  salvo los años de experiencia: esos se responden siempre de nuevo (decisión del dueño, 2026-11-24: LinkedIn traía
+  «3 años de Java» de una respuesta vieja).
 - Si algo obligatorio no tiene respuesta, se descarta la solicitud y la vacante se salta: nunca se responde al azar.
 - «Seguir a la empresa» se desmarca. En modo prueba se llega a la revisión y se descarta sin enviar.
 - Ante una verificación (checkpoint, captcha, tope de LinkedIn) se detiene todo. El tope es un aviso corto; una oferta
@@ -21,7 +23,7 @@ from collections.abc import Callable
 from dataclasses import dataclass, field
 from pathlib import Path
 
-from runner.answers import pick_option
+from runner.answers import asks_experience, is_years, pick_option
 
 EASY = re.compile(r"^(solicitud sencilla|easy apply)", re.I)
 NAV = re.compile(r"^(siguiente|next|continuar|continue|revisar|review|enviar solicitud|submit application)", re.I)
@@ -134,6 +136,12 @@ def _questions(dialog) -> list[Question]:
 
 def _missing(questions: list[Question]) -> list[Question]:
     return [q for q in questions if q.required and not q.value and q.kind != "checkbox"]
+
+
+def _saved_years(questions: list[Question]) -> list[Question]:
+    """Años de experiencia que LinkedIn ya trae llenos (respuestas viejas): se vuelven a responder."""
+    return [q for q in questions if q.value and q.kind != "checkbox"
+            and (is_years(q.label) or (q.numeric and asks_experience(q.label)))]
 
 
 def _fill(dialog, q: Question, answer: str) -> bool:
@@ -268,12 +276,13 @@ def apply(page, job_url: str, cv_pdf: Path, answerer: Answerer, *, submit: bool,
                 _discard(page)
                 return ApplyResult("saltada", "No quedó elegido el CV de esta vacante (no se envía con otro)")
         questions = _questions(dialog)
-        missing = _missing(questions)
-        if missing:
-            answers = answerer(missing)
-            for q in missing:
-                if q.label in answers and answers[q.label]:
-                    _fill(dialog, q, answers[q.label])
+        missing, saved = _missing(questions), _saved_years(questions)
+        if missing or saved:
+            answers = answerer(missing + saved)
+            for q in missing + saved:
+                value = (answers.get(q.label) or "").strip()
+                if value and (q in missing or value != q.value):  # sin respuesta nueva, la guardada se deja
+                    _fill(dialog, q, value)
             still = _missing(_questions(dialog))
             if still:
                 _discard(page)
