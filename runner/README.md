@@ -298,3 +298,12 @@ comprueba que sea ese; si no, salta la vacante. Cada CV subido queda en tu lista
 - **Tope y pausas:** el tope diario (`tope_diario`) se cuenta en `~/.local/share/cv-optimizer-bot/estado.json`, junto con las vacantes ya vistas, para no repetirlas. Entre dos envíos espera `pausa_entre_envios_seg` (por defecto de 2 a 4 minutos, al azar).
 - **«Seguir a la empresa»** se desmarca siempre.
 - **Riesgo:** las condiciones de LinkedIn (§8.2) prohíben los bots. El riesgo es la cuenta (restricción o cierre).
+
+## Seguimiento de tus postulaciones
+
+Al final de cada vuelta (o con `python -m runner seguimiento`), el bot mira, sin cambiar nada, qué pasó con tus
+postulaciones en Computrabajo («HdV Vista», «Finalista», «Proceso finalizado»), elempleo («Mi proceso»), Gupy (paso
+del proceso), Magneto («Mis procesos») y AIRA (Falabella). Lo nuevo te llega por Telegram («Novedades en tus
+postulaciones») y pasa a la app: «En revisión» cuando una empresa vio tu hoja de vida o te pasó de etapa, «Rechazada»
+si cerró el proceso, con lo que dice el portal como nota. Si hay dos postulaciones iguales (mismo cargo y empresa), no
+adivina cuál fue: solo te avisa. Usa las sesiones del navegador del bot: si una se vence, ese portal se salta.
