@@ -92,6 +92,12 @@ def pick_years(years: int, options: list[str]) -> str | None:
     return min(spans, key=lambda x: min(abs(years - x[1][0]), abs(years - x[1][1])))[0] if spans else None
 
 
+# Niveles de idioma del marco europeo y cómo los llaman los formularios (de lo más exacto a lo más general).
+_CEFR = {"a1": ("basico|basic|elemental|principiante|beginner",), "a2": ("basico|basic|elemental|principiante|beginner",),
+         "b1": ("intermedio|intermediate",), "b2": ("intermedio alto|upper intermediate|intermedio avanzado", "intermedio|intermediate"),
+         "c1": ("avanzado|advanced",), "c2": ("nativo|native|bilingue|bilingual|fluent", "avanzado|advanced")}
+
+
 def pick_option(answer: str, options: list[str]) -> str | None:
     """La opción que corresponde a la respuesta (exacta, sí/no, rango de años o que la contiene). None si ninguna calza."""
     a = normalize(answer)
@@ -114,6 +120,11 @@ def pick_option(answer: str, options: list[str]) -> str | None:
     for original, o in clean:
         if a in o or o in a:
             return original
+    if level := _CEFR.get(a):  # «A2» cuando las opciones son «Básico / Intermedio / Avanzado…»
+        for words in level:
+            found = [original for original, o in clean if re.search(rf"\b({words})\b", o)]
+            if found:
+                return found[0]
     stems = lambda s: {w[:6] for w in re.findall(r"[a-z]{5,}", s)}  # noqa: E731 — «universitario» ~ «universitaria»
     scored = [(len(stems(o) & stems(a)), original) for original, o in clean]
     best = max((s for s, _ in scored), default=0)

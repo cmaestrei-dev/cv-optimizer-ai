@@ -9,6 +9,8 @@ Verificado el 2026-11-24 en ofertas reales de Mercado Libre y Softtek, llenando 
 - Mercado Libre pide autorizar el contacto por WhatsApp sobre la postulación (casilla obligatoria), aceptar su
   declaración de privacidad y decir si hay un familiar en la empresa. «Guardar mis respuestas para futuras
   solicitudes» queda sin marcar.
+- Softtek, al elegir el CV, pide aceptar su «Acuerdo de privacidad de datos» (tratamiento de datos para postular): se
+  acepta; las cookies no necesarias se rechazan.
 - Tiene reCAPTCHA invisible de Google. El bot no lo toca ni se oculta: si Google muestra un reto, se detiene y la
   vacante pasa a la persona.
 """
@@ -18,7 +20,7 @@ import time
 from collections.abc import Callable
 from pathlib import Path
 
-from runner.answers import bank_answer, negative, normalize, pick_option, to_integer
+from runner.answers import bank_answer, negative, normalize, pick_option, to_period
 from runner.linkedin import ApplyResult, Question
 
 Answerer = Callable[[list[Question]], dict[str, str]]
@@ -133,7 +135,9 @@ def _country(page, country: str) -> bool:
         code = "codigo" in name
         if not _typed_pick(page, combo["id"], country,
                            lambda o, code=code: normalize(country) in normalize(o) or (code and "+57" in o)):
-            return False
+            time.sleep(3)  # Eightfold puede llenarla tarde, al terminar de leer el CV
+            if not (page.locator(f"[id='{combo['id']}']").input_value() or "").strip():
+                return False
     return True
 
 
@@ -153,9 +157,19 @@ def apply(page, offer_url: str, cv_pdf: Path, answerer: Answerer, *, submit: boo
     if not upload.count():
         return ApplyResult("saltada", "La oferta no tiene formulario de postulación (¿cerrada?)")
 
+    decline = page.get_by_role("button", name=re.compile(r"^\s*(decline all|rechazar todo|rechazar)\s*$", re.I))
+    if decline.count() and decline.first.is_visible():  # cookies: solo las necesarias
+        decline.first.click()
+        time.sleep(0.5)
     upload.first.set_input_files(str(cv_pdf))  # Eightfold lee el CV y llena el contacto: se revisa después
     for _ in range(15):
         time.sleep(1)
+        privacy = page.get_by_role("dialog").filter(has_text=re.compile(r"privacidad|privacy", re.I))
+        agree = privacy.get_by_role("button", name=re.compile(r"^\s*(estoy de acuerdo|acepto|i agree|agree)\s*$", re.I))
+        if agree.count() and agree.first.is_visible():  # Softtek pide aceptar el tratamiento de datos para subir el CV
+            agree.first.click()
+            time.sleep(1)
+            continue
         if cv_pdf.stem[:40] in page.inner_text("body"):
             break
     else:
@@ -203,10 +217,13 @@ def apply(page, offer_url: str, cv_pdf: Path, answerer: Answerer, *, submit: boo
         elif value:
             field = page.locator(f"[id='{q['id']}']")
             field.scroll_into_view_if_needed()
-            field.fill((to_integer(value) or value) if re.search(r"a[nñ]os|years", q["label"], re.I) else value[:1000])
+            field.fill((to_period(value) or value) if re.search(r"a[nñ]os|years", q["label"], re.I) else value[:1000])
             field.press("Tab")
         else:
             missing.append(q["label"])
+    page.evaluate("""() => { for (const b of document.querySelectorAll('input[type=checkbox]')) {
+        const l = (document.querySelector(`label[for="${b.id}"]`) || {}).innerText || '';
+        if (b.checked && /guardar mis respuestas|save my (answers|responses)/i.test(l)) b.click(); } }""")
     for box_id, label in page.evaluate(_REQUIRED_BOXES):  # autorizaciones obligatorias fuera de las preguntas
         if CONSENT.search(label):
             page.evaluate("id => document.getElementById(id).click()", box_id)

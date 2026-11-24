@@ -47,11 +47,14 @@ FORM = f"""<html><body><form onsubmit="return false">
 <label id="q4_label" for="q4">¿Aceptas la Declaración de Privacidad de Mercado Libre?</label>{combo("input-18", "q4_label", ["Sí", "No"])}
 <p>¿Autorizas que te contactemos por WhatsApp para comunicarte avances sobre tu postulación?</p>
 <input type="checkbox" id="wa" name="q_whatsapp_authorize" aria-required="true"><label for="wa">Estoy de acuerdo</label>
-<input type="checkbox" id="save"><label for="save">Guardar mis respuestas para futuras solicitudes</label>
+<input type="checkbox" id="save" checked><label for="save">Guardar mis respuestas para futuras solicitudes</label>
 <button type="button">Cancelar</button><button type="submit" onclick="send()">Enviar solicitud</button>
 </form><script>
-function parsed(input) {{  // como Eightfold: lee el CV y llena el contacto (con su propio formato)
-  document.getElementById('cvname').innerText = input.files[0].name;
+function parsed(input) {{  // como Softtek: primero el acuerdo de privacidad; luego lee el CV y llena el contacto
+  document.body.insertAdjacentHTML('beforeend', '<div role="dialog" id="agree"><p>Acuerdo de privacidad de datos</p>' +
+    '<button type="button" onclick="document.getElementById(\\'agree\\').remove(); loaded()">Estoy de acuerdo</button></div>'); }}
+function loaded() {{
+  document.getElementById('cvname').innerText = document.getElementById('cv').files[0].name;
   document.getElementById('Informaci_n_de_contacto_firstname').value = 'CAMILO';
   document.getElementById('Informaci_n_de_contacto_email').value = 'otro@correo.com'; }}
 function openList(input) {{ document.getElementById(input.getAttribute('aria-controls')).hidden = false; }}
