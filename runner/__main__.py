@@ -8,6 +8,7 @@
     python -m runner postular        postula a las preparadas con «Solicitud sencilla» (--prueba: sin enviar)
     python -m runner diario          una vuelta completa: buscar y luego postular (la que corre la programación)
     python -m runner programar       lo programa cada día (temporizador de systemd del usuario; --quitar lo quita)
+    python -m runner seguimiento     revisa en cada portal qué pasó con tus postulaciones (también al final de cada vuelta)
     python -m runner lote bancolombia postula a las ofertas preparadas de un portal de empresa (entras tú; él postula)
 """
 
@@ -617,6 +618,12 @@ def cmd_diario(_args) -> int:
         except Exception:  # noqa: BLE001 — los portales de empresas nunca tumban la vuelta
             traceback.print_exc()
         code = cmd_postular(argparse.Namespace(prueba=False, max=0, portal=None))
+        try:
+            conf = cfg.load()
+            news = _follow_up(Api(conf.api, conf.token), State(cfg.DATA_DIR / "estado.json"))
+        except Exception:  # noqa: BLE001 — el seguimiento nunca tumba la vuelta
+            traceback.print_exc()
+            news = ""
         state = State(cfg.DATA_DIR / "estado.json")
         notice = f"Hoy: {state.today('enviadas')} enviadas y {state.today('preparadas')} preparadas."
         if companies := state.today(_key("enviadas", "empresas")):
@@ -639,8 +646,58 @@ def cmd_diario(_args) -> int:
         from runner import watch
 
         telegram.notify(notice + (f"\n\n{len(questions)} preguntas de filtro sin respuesta: /preguntas" if questions else "")
-                        + ("\n\n" + watch.notice(watched) if watched else ""))
+                        + ("\n\n" + watch.notice(watched) if watched else "") + ("\n\n" + news if news else ""))
         return code
+
+
+def _follow_up(api: Api, state: State) -> str:
+    """Revisa en cada portal qué pasó con las postulaciones (solo lectura), pasa los cambios a la app y devuelve el
+    aviso de novedades («» si no hay)."""
+    from playwright.sync_api import sync_playwright
+
+    from runner import browser
+    from runner import seguimiento as sg
+
+    previous = state.data.get("seguimiento", {})
+    seen: list = []
+    with sync_playwright() as p:
+        try:
+            context = browser.open_context(p)
+        except browser.BrowserUnavailableError as e:
+            print(e)
+            return ""
+        page = context.pages[0] if context.pages else context.new_page()
+        page.set_default_timeout(45_000)
+        try:
+            readers = {**sg.READERS, "elempleo": lambda page: sg.read_elempleo(page, previous)}
+            for portal, read in readers.items():
+                try:
+                    seen += read(page)
+                except Exception as e:  # noqa: BLE001 — un portal que no responde no frena a los demás
+                    print(f"Seguimiento: no pude leer {sg.NAMES[portal]} ({str(e)[:120]})")
+        finally:
+            context.close()
+    changes, state.data["seguimiento"] = sg.compare(previous, seen, now=datetime.now(UTC).isoformat(timespec="minutes"))
+    state.save()
+    if changes:
+        try:
+            refs = {key: v["app"] for key, v in state.data["vistas"].items() if v.get("app")}
+            moved = sg.update_app(api, changes, api.get("/applications?view=todas"), refs)
+            print(f"Seguimiento: {moved} postulaciones cambiaron de estado en la app.")
+        except ApiError as e:
+            print(f"Seguimiento: la app no registró los cambios ({e.detail})")
+    text = sg.notice(changes)
+    print(text or f"Seguimiento: revisé {len(seen)} postulaciones; sin novedades.")
+    return text
+
+
+def cmd_seguimiento(_args) -> int:
+    from runner import telegram
+
+    conf = cfg.load()
+    if news := _follow_up(Api(conf.api, conf.token), State(cfg.DATA_DIR / "estado.json")):
+        telegram.notify(news)
+    return 0
 
 
 WATCH_PER_ROUND = 20  # ofertas de portales de empresas que la app analiza por vuelta (usan cupo de IA)
@@ -1119,6 +1176,8 @@ def main(argv: list[str] | None = None) -> int:
     postular.set_defaults(fn=cmd_postular)
     sub.add_parser("diario").set_defaults(fn=cmd_diario)
     sub.add_parser("vigilar").set_defaults(fn=cmd_vigilar)
+    sub.add_parser("seguimiento", help="revisa en cada portal qué pasó con tus postulaciones y te avisa").set_defaults(
+        fn=cmd_seguimiento)
     manual = sub.add_parser("manual", help="una postulación que envías tú; te llega por Telegram con su CV")
     manual.add_argument("url")
     manual.add_argument("--titulo", required=True)

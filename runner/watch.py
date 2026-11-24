@@ -57,7 +57,8 @@ DEFAULT_INCLUDE = ["software", "desarroll", "sistemas", "tecnolog", "informatic"
                    "identidad", "plataforma", "analitica", "corebanking", "core banking"]
 DEFAULT_EXCLUDE = ["senior", "sr", "lider", "lead", "arquitect", "gerente", "manager", "director", "jefe", "head",
                    "principal", "staff", "expert", "iii", "iv", "sales", "ventas", "comercial",
-                   "inclusi", "discapacidad", "pcd"]  # vacantes para personas con discapacidad: el dueño no aplica
+                   "inclusi", "discapacidad", "pcd",  # vacantes para personas con discapacidad: el dueño no aplica
+                   "docente", "tesorer", "coordinador"]  # cargos de otro oficio que traía la búsqueda (2026-11-24)
 # Get on Board ya filtra por categoría de tecnología: cualquier cargo («*»), menos los bilingües.
 BOARD_INCLUDE = ["*"]
 BOARD_EXCLUDE = [*DEFAULT_EXCLUDE, "bilingue", "bilingual"]
