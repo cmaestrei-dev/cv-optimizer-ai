@@ -48,6 +48,22 @@ def to_integer(answer: str) -> str | None:
     return str(math.floor(float(match.group(0).replace(",", "."))))
 
 
+_DURATION = re.compile(r"(\d+(?:[.,]\d+)?)\s*(anos?|years?|mes(?:es)?|months?)\b")
+
+
+def to_period(answer: str, *, months: bool = False) -> str | None:
+    """Cuánto tiempo dice la respuesta, en años (o en `months`), hacia abajo: «4 meses» son 0 años, no 4; «1 año» son 12
+    meses. Sin unidad, el número tal cual (`to_integer`)."""
+    match = _DURATION.search(normalize(answer or ""))
+    if not match:
+        return to_integer(answer)
+    amount = float(match.group(1).replace(",", "."))
+    in_months = match.group(2).startswith(("mes", "month"))
+    if months:
+        return str(math.floor(amount if in_months else amount * 12))
+    return str(math.floor(amount / 12 if in_months else amount))
+
+
 _LESS = re.compile(r"\b(menos de|menor a|less than|under)\b|^<")
 _MORE = re.compile(r"\b(mas de|mayor a|more than|over)\b|\+|^>")
 

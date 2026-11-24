@@ -373,7 +373,7 @@ def _answerer(api: Api, conf: cfg.Config, application_id: int, *, units: bool = 
             if answers.is_years(q.label) and not choice and not q.numeric and len(re.findall(r"[^\W\d_]{3,}", text)) >= 4:
                 pass  # pregunta abierta («¿cuánto tiempo y en qué empresas?»): la respuesta del perfil dice más que un número
             elif answers.is_years(q.label) or (q.numeric and answers.asks_experience(q.label)):  # «nivel» en número: años
-                text = answers.to_integer(text) or ""
+                text = answers.to_period(text, months=answers.asks_months(q.label)) or ""  # «4 meses» no son 4 años
                 if conf.no_evidence == "si":
                     least = conf.default_years * (12 if answers.asks_months(q.label) else 1)
                     text = str(max(int(text or 0), least))
