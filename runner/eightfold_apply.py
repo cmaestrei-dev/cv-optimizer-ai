@@ -81,12 +81,18 @@ def _split_name(full_name: str) -> tuple[str, str]:
 
 
 def _options(page, combo_id: str) -> list[str]:
+    """Las opciones de una lista, leídas de SU listbox (otra lista abierta no cuenta). Esperan a que carguen."""
+    page.keyboard.press("Escape")  # que no quede abierta la anterior
     combo = page.locator(f"[id='{combo_id}']")
     combo.scroll_into_view_if_needed()
     combo.click()
-    time.sleep(0.8)
     listbox = combo.get_attribute("aria-controls") or ""
-    return [o.strip() for o in page.locator(f"[id='{listbox}'] [role=option]").all_inner_texts()] if listbox else []
+    for _ in range(6):
+        time.sleep(0.5)
+        options = [o.strip() for o in page.locator(f"[id='{listbox}'] [role=option]").all_inner_texts()] if listbox else []
+        if options:
+            return options
+    return []
 
 
 def _pick(page, combo_id: str, option: str, *, typed: str = "") -> bool:
@@ -112,21 +118,27 @@ _COMBOS = """() => [...document.querySelectorAll('input[role=combobox]')].map(c 
          .map(i => (document.getElementById(i) || {}).innerText || '').join(' ') || c.placeholder || '').replace(/\\s+/g, ' ').trim()}))"""
 
 
-def _typed_pick(page, combo_id: str, typed: str, want: Callable[[str], bool]) -> bool:
-    """Las listas largas (países) se filtran escribiendo; se elige la primera opción que sirve."""
-    combo = page.locator(f"[id='{combo_id}']")
-    combo.scroll_into_view_if_needed()
-    combo.click()
-    combo.fill(typed)
-    time.sleep(1)
-    listbox = combo.get_attribute("aria-controls") or ""
-    items = page.locator(f"[id='{listbox}'] [role=option]")
-    for i in range(min(items.count(), 30)):
-        if want(items.nth(i).inner_text().strip()):
-            items.nth(i).click()
-            time.sleep(0.4)
-            return bool((combo.input_value() or "").strip())
-    page.keyboard.press("Escape")
+def _typed_pick(page, combo_id: str, typed: str, want: Callable[[str], bool], tries: int = 3) -> bool:
+    """Las listas largas (países, departamentos) se filtran escribiendo; se elige la primera opción que sirve. La de
+    departamentos carga después de elegir el país: se reintenta."""
+    for _ in range(tries):
+        page.keyboard.press("Escape")
+        combo = page.locator(f"[id='{combo_id}']")
+        combo.scroll_into_view_if_needed()
+        combo.click()
+        combo.fill(typed)
+        listbox = combo.get_attribute("aria-controls") or ""
+        for _ in range(4):
+            time.sleep(0.5)
+            items = page.locator(f"[id='{listbox}'] [role=option]")
+            for i in range(min(items.count(), 30)):
+                if want(items.nth(i).inner_text().strip()):
+                    items.nth(i).click()
+                    time.sleep(0.4)
+                    if (combo.input_value() or "").strip():
+                        return True
+        page.keyboard.press("Escape")
+        time.sleep(1.5)
     return False
 
 
@@ -266,6 +278,8 @@ def apply(page, offer_url: str, cv_pdf: Path, answerer: Answerer, *, submit: boo
     buttons = page.get_by_role("button", name=SUBMIT).filter(visible=True)
     if not buttons.count():
         return ApplyResult("error", "No encontré el botón para enviar la solicitud")
+    if not _country(page, contact.get("country") or "Colombia", contact.get("city", "")):  # «Estado» puede salir tarde
+        return ApplyResult("saltada", "No pude elegir el departamento en el formulario (no se envía)")
     buttons.last.click()
     for _ in range(25):
         time.sleep(1)
