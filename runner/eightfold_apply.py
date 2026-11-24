@@ -11,6 +11,9 @@ Verificado el 2026-11-24 en ofertas reales de Mercado Libre y Softtek, llenando 
   solicitudes» queda sin marcar.
 - Softtek, al elegir el CV, pide aceptar su «Acuerdo de privacidad de datos» (tratamiento de datos para postular): se
   acepta; las cookies no necesarias se rechazan.
+- Al enviar: `POST /api/application/v2/submit` → 201 y «¡Gracias por su solicitud, <nombre>!» (Mercado Libre,
+  2026-11-24, primer envío real). «Estado» (departamento) es obligatorio aunque no lo marque: sin él sale «Error:
+  selecciona un Estado.» y no se envía nada.
 - Tiene reCAPTCHA invisible de Google. El bot no lo toca ni se oculta: si Google muestra un reto, se detiene y la
   vacante pasa a la persona.
 """
@@ -19,6 +22,7 @@ import re
 import time
 from collections.abc import Callable
 from pathlib import Path
+from urllib.parse import urlparse
 
 from runner.answers import bank_answer, negative, normalize, pick_option, to_period
 from runner.linkedin import ApplyResult, Question
@@ -126,11 +130,25 @@ def _typed_pick(page, combo_id: str, typed: str, want: Callable[[str], bool]) ->
     return False
 
 
-def _country(page, country: str) -> bool:
-    """«País» → el país del perfil; «Código de país» del teléfono → la opción de ese país (o +57)."""
+# El departamento de las ciudades más comunes: Eightfold pide «Estado» (obligatorio aunque no lo marque) tras el país.
+STATES = {"cartagena": "Bolívar", "barranquilla": "Atlántico", "santa marta": "Magdalena", "medellin": "Antioquia",
+          "bogota": "Bogotá", "cali": "Valle del Cauca", "bucaramanga": "Santander", "pereira": "Risaralda",
+          "manizales": "Caldas", "monteria": "Córdoba", "sincelejo": "Sucre", "valledupar": "Cesar"}
+
+
+def _country(page, country: str, city: str = "") -> bool:
+    """«País» → el país del perfil; «Código de país» del teléfono → la opción de ese país (o +57); «Estado» → el
+    departamento de la ciudad del perfil."""
+    state = next((s for c, s in STATES.items() if c in normalize(city)), "")
     for combo in page.evaluate(_COMBOS):
         name = normalize(combo["name"])
-        if combo["value"].strip() or not ("codigo" in name or re.fullmatch(r"pais\*?", name)):
+        if combo["value"].strip():
+            continue
+        if re.fullmatch(r"(estado|departamento|state|region)\*?", name):
+            if not state or not _typed_pick(page, combo["id"], state[:5], lambda o: normalize(state) in normalize(o)):
+                return False
+            continue
+        if not ("codigo" in name or re.fullmatch(r"pais\*?", name)):
             continue
         code = "codigo" in name
         if not _typed_pick(page, combo["id"], country,
@@ -188,8 +206,8 @@ def apply(page, offer_url: str, cv_pdf: Path, answerer: Answerer, *, submit: boo
     profile_url = contact.get("linkedin_url") or contact.get("linkedin") or ""
     if linkedin.count() and profile_url and not linkedin.first.input_value().strip():
         linkedin.first.fill(profile_url)
-    if not _country(page, contact.get("country") or "Colombia"):
-        return ApplyResult("saltada", "No pude elegir el país o el código del teléfono en el formulario")
+    if not _country(page, contact.get("country") or "Colombia", contact.get("city", "")):
+        return ApplyResult("saltada", "No pude elegir el país, el departamento o el código del teléfono en el formulario")
 
     missing = []
     for q in page.evaluate(_QUESTIONS):
@@ -241,8 +259,10 @@ def apply(page, offer_url: str, cv_pdf: Path, answerer: Answerer, *, submit: boo
         return ApplyResult("revisada", "Modo prueba: formulario lleno y no se envió")
 
     posts: list[str] = []  # lo que responde el servidor al enviar: si no hay confirmación, queda en el registro
-    page.on("response", lambda r: posts.append(f"{r.request.method} {r.url.split('?')[0][-60:]} → {r.status}")
-            if r.request.method in ("POST", "PUT") and "google" not in r.url else None)
+    accepted: list[int] = []  # Eightfold recibe la solicitud en POST /api/application/v2/submit (201 en Mercado Libre)
+    page.on("response", lambda r: (posts.append(f"{r.request.method} {r.url.split('?')[0][-60:]} → {r.status}"),
+                                   accepted.append(r.status) if "/api/application/" in r.url and "submit" in r.url else None)
+            if r.request.method in ("POST", "PUT") and urlparse(r.url).hostname == urlparse(page.url).hostname else None)
     buttons = page.get_by_role("button", name=SUBMIT).filter(visible=True)
     if not buttons.count():
         return ApplyResult("error", "No encontré el botón para enviar la solicitud")
@@ -254,9 +274,13 @@ def apply(page, offer_url: str, cv_pdf: Path, answerer: Answerer, *, submit: boo
         text = page.inner_text("body")
         if ALREADY.search(text):
             return ApplyResult("ya_postulada")
+        if wrong := re.search(r"Error: [^.\n]{3,80}", text):  # el formulario no se envió (falta algo)
+            return ApplyResult("saltada", f"El portal no aceptó el formulario: «{wrong.group(0)}»")
         if done := DONE.search(text):
             around = " ".join(text[max(0, done.start() - 40):done.end() + 80].split())
             return ApplyResult("enviada", f"Confirmada por el portal: «{around}»")
+        if any(status in (200, 201) for status in accepted):
+            return ApplyResult("enviada", "Confirmada por el portal (recibió la solicitud)")
     errors = [e for e in page.locator("[role=status], [role=alert]").all_inner_texts() if e.strip()]
     shot = ""
     if shots:
