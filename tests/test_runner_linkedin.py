@@ -41,7 +41,8 @@ def cv(tmp_path):
 
 def answerer(questions):
     known = {"¿Cuántos años de experiencia tienes con Python?": "2", "¿Cuál es tu nivel de inglés?*": "A2",
-             "¿Puedes hacer práctica empresarial?*": "Sí", "¿Tienes experiencia en desarrollo backend?": "Sí"}
+             "¿Puedes hacer práctica empresarial?*": "Sí", "¿Tienes experiencia en desarrollo backend?": "Sí",
+             "¿Cuántos años de experiencia tienes con Java?": "1"}
     return {q.label: known[q.label] for q in questions if q.label in known}
 
 
@@ -59,6 +60,7 @@ def test_auto_fills_uploads_unfollows_and_sends(page, cv):
     sent = page.evaluate("window.answers")
     assert sent["py"] == "2" and sent["en"] == "A2" and sent["si"] is True and sent["tel"] == "3000000000"
     assert sent["be1"] is True and sent["be2"] is False  # radios de 2026-11: «Sí» → «Yes»
+    assert sent["java"] == "1"  # los años que LinkedIn traía guardados («3») se responden de nuevo
     assert page.evaluate("window.follow") is False  # «Seguir a la empresa» desmarcado
     assert page.evaluate("window.cvName") == cv.name  # se subió el CV de esta vacante
 
@@ -120,3 +122,11 @@ def test_the_2026_applied_notice_means_already_applied(page, cv):
     page.route("https://example.com/job", lambda route: route.fulfill(content_type="text/html; charset=utf-8",
                                                                        body="<h1>Analista</h1><p>Solicitud enviada justo ahora</p>"))
     assert linkedin.apply(page, "https://example.com/job", cv, answerer, submit=True).status == "ya_postulada"
+
+
+def test_saved_years_stay_when_there_is_no_new_answer(page, cv):
+    known = {"¿Cuántos años de experiencia tienes con Python?": "2", "¿Cuál es tu nivel de inglés?*": "A2",
+             "¿Puedes hacer práctica empresarial?*": "Sí", "¿Tienes experiencia en desarrollo backend?": "Sí"}
+    result = linkedin.apply(page, FIXTURE.as_uri(), cv, lambda qs: {q.label: known[q.label] for q in qs if q.label in known},
+                            submit=True)
+    assert result.status == "enviada" and page.evaluate("window.answers")["java"] == "3"
