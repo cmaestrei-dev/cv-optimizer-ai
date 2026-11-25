@@ -734,3 +734,18 @@ def test_a_watched_offer_already_sent_in_the_app_is_never_sent_again(tmp_path):
     todo = [(site, k, v) for k, v in state.data["vigiladas"].items()]
     assert [k for _, k, _ in cli._not_sent_yet(api, state, todo, limit=10)] == ["Mercado Libre:2"]
     assert State(tmp_path / "estado.json").data["vigiladas"]["Mercado Libre:1"]["estado"] == "ya_postulada"
+
+
+
+RTVC_FALSA = """RTVC abre convocatoria dirigida a profesionales, técnicos, tecnólogos y especialistas de todo el país para participar
+en diferentes proyectos de cine, televisión, producción audiovisual.
+PERFILES SOLICITADOS:
+""" + "\n".join(f"- Cargo {i}." for i in range(17))
+
+
+def test_scam_postings_are_skipped_before_the_cv():
+    # Caso real (2026-11-25): la falsa convocatoria «de RTVC» terminó en un cobro de 150.000 por cursos.
+    assert "convocatoria masiva" in cli.scam_reason(RTVC_FALSA)
+    assert "pide pagar" in cli.scam_reason("Para continuar debe pagar el curso de primeros auxilios y consignar a la cuenta.")
+    real = "Desarrollador Backend Junior\nResponsabilidades:\n- Construir APIs\n- Pruebas\nContratación inmediata."
+    assert cli.scam_reason(real) == ""  # «contratación inmediata» sola no basta

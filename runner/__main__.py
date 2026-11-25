@@ -108,6 +108,34 @@ def _foreign(api: Api, conf: cfg.Config, app_id: int) -> str:
     return f"vacante en «{language}» fuera de {conf.home_country or 'tu país'}"
 
 
+# Señales de estafa de empleo (caso real, 2026-11-25: una falsa convocatoria «de RTVC» en elempleo pidió por WhatsApp
+# cédula, correo y 150.000 pesos por cursos de SST y primeros auxilios «con devolución»). Una oferta real no cobra.
+_SCAM_PAY = re.compile(r"(consignar|consignacion|cancelar el valor|pagar (el|un|los) (curso|certificado|examen)|"
+                       r"costo (del|de los) (curso|certificado|examen)|la inscripcion tiene un (costo|valor))")
+_SCAM_MASS = re.compile(r"convocatoria (dirigida a|para) (los )?profesionales,? tecnicos")
+
+
+def scam_reason(text: str) -> str:
+    """Por qué una vacante parece una estafa («» si no hay señales): pide pagar, o es una «convocatoria» masiva de
+    decenas de cargos a la vez (la plantilla de las falsas RTVC y Comfamiliar de Nariño)."""
+    from runner.answers import normalize
+
+    plain = normalize(text or "")
+    if _SCAM_PAY.search(plain):
+        return "la oferta pide pagar (cursos, certificados o inscripción): señal de estafa"
+    roles = sum(1 for line in (text or "").splitlines() if re.match(r"\s*[-•*]\s*\w", line))
+    if _SCAM_MASS.search(plain) or (roles >= 12 and "convocatoria" in plain and "perfiles" in plain):
+        return "convocatoria masiva de decenas de cargos a la vez (plantilla de estafas que usan nombres de entidades)"
+    return ""
+
+
+def _scam(api: Api, app_id: int) -> str:
+    try:
+        return scam_reason((api.get(f"/applications/{app_id}") or {}).get("vacancy_text") or "")
+    except Exception:  # noqa: BLE001 — el filtro nunca frena la preparación
+        return ""
+
+
 def _key(kind: str, portal: str) -> str:
     """Claves del estado por portal; las de LinkedIn conservan su nombre de antes."""
     return kind if portal == "linkedin" else f"{kind}_{portal}"
@@ -170,7 +198,7 @@ def _refresh_alerts(api: Api, *, wait_seconds: int = 300, poll_seconds: int = 15
 def _prepare(api: Api, conf: cfg.Config, state: State, args, *, portal: str, job_id: str, app_id: int,
              score: int | None, url: str) -> bool:
     """Descarta por idioma o compatibilidad, o hace el CV y deja la vacante lista para postular. True si quedó preparada."""
-    if reason := _foreign(api, conf, app_id):
+    if reason := _foreign(api, conf, app_id) or _scam(api, app_id):
         _discard(api, app_id, f"El bot la omitió: {reason}.")
         state.mark(job_id, "excluida", portal=portal, app=app_id, motivo=reason, puntaje=score)
         print(f"        Omitida: {reason}.")
