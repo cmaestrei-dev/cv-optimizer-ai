@@ -4,6 +4,21 @@ import pytest
 
 from runner import watch
 
+
+@pytest.fixture(autouse=True)
+def frozen_today(monkeypatch):
+    # Las ofertas de ejemplo cierran el 2026-11-24: con la fecha real, desde el 25 el bot las daba por cerradas.
+    import datetime as _dt
+
+    import runner.__main__ as main
+
+    class Today(_dt.date):
+        @classmethod
+        def today(cls):
+            return cls(2026, 11, 20)
+
+    monkeypatch.setattr(main, "date", Today)
+
 PAGE = """
 <a class="jobTitle-link" href="/bancolombia/job/Etipani-Ingenieroa-Software-Backend-%28Junior%29-COL/1451777800/">Ingeniero/a Software Backend (Junior)</a>
 <a class="jobTitle-link" href="/bancolombia/job/Etipani-Ingenieroa-Software-Backend-%28Junior%29-COL/1451777800/">Ingeniero/a Software Backend (Junior)</a>
