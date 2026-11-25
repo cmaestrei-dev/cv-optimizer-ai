@@ -132,7 +132,7 @@ def scam_reason(text: str) -> str:
 def _scam(api: Api, app_id: int) -> str:
     try:
         return scam_reason((api.get(f"/applications/{app_id}") or {}).get("vacancy_text") or "")
-    except ApiError:
+    except Exception:  # noqa: BLE001 — el filtro nunca frena la preparación
         return ""
 
 
