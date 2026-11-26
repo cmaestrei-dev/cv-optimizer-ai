@@ -86,6 +86,35 @@ maximo = 10       # publicaciones nuevas que se leen por vuelta
 Para ver qué encontraría sin pasar nada a la app: `python -m runner menciones --prueba`. Para apagar las menciones:
 `revisar_menciones = false`; para no buscar, quita `[publicaciones]`.
 
+## Postular por correo
+
+Muchas vacantes (sobre todo en publicaciones) dicen «envía tu hoja de vida a seleccion@…». Con `[correo]`, el bot
+postula por ti desde tu Gmail (autorizado por el dueño el 2026-11-26). Envía el CV de esa vacante y el mensaje que
+escribe la app, verificado contra tu perfil, con tu firma, y usa el asunto que pida la vacante si lo dice. Después
+la marca como enviada en la app («Correo o referido») y te avisa por Telegram con el destinatario y el asunto.
+
+- Solo escribe a direcciones que estén en la vacante (en el texto de la publicación o en su afiche), nunca a las de
+  los comentarios ni a las de «no responder».
+- Máximo `tope_diario` correos al día, y nunca dos veces a la misma dirección en 30 días.
+- Pasa por los mismos filtros que lo demás: estafas, `[excluir]`, `[incluir]`, idioma, país y compatibilidad mínima.
+- En `modo = "prueba"` no envía nada; solo lo muestra.
+
+Usa una **contraseña de aplicación** de Google, no la de tu cuenta: créala en https://myaccount.google.com/apppasswords
+(necesita la verificación en dos pasos) y escríbela tú:
+
+```toml
+[correo]
+remitente = "tu-correo@gmail.com"
+tope_diario = 10
+```
+
+```bash
+python -m runner correo --probar   # la pide sin mostrarla, la comprueba con Gmail y te envía un correo de prueba
+```
+
+Se guarda solo en `~/.config/cv-optimizer-bot/correo` (0600). Sin ella, esas vacantes te siguen llegando por
+Telegram para enviarlas tú.
+
 ## Computrabajo
 
 Las búsquedas con `portal = "computrabajo"` usan la búsqueda pública de Computrabajo Colombia (sin sesión):

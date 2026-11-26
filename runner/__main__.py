@@ -17,7 +17,7 @@ import contextlib
 import getpass
 import re
 import sys
-from datetime import UTC, date, datetime
+from datetime import UTC, date, datetime, timedelta
 from pathlib import Path
 from types import SimpleNamespace
 
@@ -792,7 +792,7 @@ def _linkedin_posts(api: Api | None, conf: cfg.Config, state: State, *, limit: i
                           f"{len(post.links)} enlace(s), ofertas de portales: {post.job_links or 'ninguna'}"
                           + (f" [omitida: {skip['estado']}]" if searched and (skip := _skip_post(post, conf)) else ""))
                     continue
-                record = (_skip_post(post, conf) if searched else None) or _handle_post(api, conf, post, who)
+                record = (_skip_post(post, conf) if searched else None) or _handle_post(api, conf, post, who, state)
                 if record is None:  # sin cupo de IA o la app ocupada: se retoma en la próxima vuelta
                     break
                 seen[activity] = {"cuando": datetime.now(UTC).isoformat(timespec="seconds"), "quien": who,
@@ -838,7 +838,7 @@ def _abroad(detail: dict, conf: cfg.Config) -> str:
     return f"es en {vacancy.get('location')} y no es remota" if _ABROAD.search(place) else ""
 
 
-def _handle_post(api: Api, conf: cfg.Config, post, who: str) -> dict | None:
+def _handle_post(api: Api, conf: cfg.Config, post, who: str, state: State | None = None) -> dict | None:
     """Pasa una publicación por la app. Devuelve qué se hizo (para el estado) o None si hay que reintentar luego."""
     from hashlib import sha256
 
@@ -887,18 +887,103 @@ def _handle_post(api: Api, conf: cfg.Config, post, who: str) -> dict | None:
         _discard(api, vacancy.id, f"El bot la descartó: {reason}.")
         print(f"  · {vacancy.role} — {vacancy.company or post.author}: {reason}")
         return {"estado": "descartada", "app": vacancy.id, "motivo": reason}
-    cv_path = ""
+    cv_path, cv_id = "", None
     try:
         cv = api.make_cv(vacancy.id)
         cv_path = str(api.download_cv(cv["id"], cfg.DATA_DIR / "cvs" / str(vacancy.id) / cv["filename"]))
+        cv_id = cv["id"]
     except ApiError as e:
         print(f"        CV no generado: {e.detail}")
+    from runner import linkedin_posts as lp
+
+    emails = lp.emails_in(f"{post.text}\n{text}")
+    if state is not None and emails and cv_path and (to := _apply_by_email(
+            api, conf, state, vacancy, emails, text, Path(cv_path), cv_id)):
+        return {"estado": "correo", "app": vacancy.id, "para": to}
     item = {"id": sha256(post.url.encode()).hexdigest()[:12], "url": post.url, "titulo": vacancy.role,
             "empresa": vacancy.company or post.author, "cv": cv_path, "nota": _how_to_apply(post, text, who),
             "motivo": "", "respuestas": "", "puntaje": vacancy.score}
     telegram.add_manual(item)
     print(f"  ✓ {vacancy.score:>3}  {vacancy.role} — {item['empresa']}: CV listo, enviado a Telegram (publicación)")
     return {"estado": "manual", "app": vacancy.id}
+
+
+MAIL_REPEAT_DAYS = 30  # a una misma dirección no se le vuelve a escribir antes de esto
+
+
+def _apply_by_email(api: Api, conf: cfg.Config, state: State, vacancy, emails: list[str], vacancy_text: str,
+                    cv_pdf: Path, cv_id: int | None) -> str:
+    """Postula por correo (autorizado por el dueño el 2026-11-26) cuando la vacante lo pide: desde su Gmail, con el CV de
+    esa vacante y el mensaje que escribe la app. Devuelve a quién se envió, o «» si no se envió (sin configurar, tope
+    del día, modo prueba, error): entonces la vacante sigue por Telegram para enviarla a mano."""
+    from runner import mailer, telegram
+
+    if not conf.mail_from or not (secret := mailer.password()):
+        return ""
+    if state.today("correos") >= conf.mail_cap:
+        print(f"        Tope de {conf.mail_cap} correos por hoy: esta va por Telegram.")
+        return ""
+    recent = state.data.setdefault("correos_enviados", {})
+    limit = (date.today() - timedelta(days=MAIL_REPEAT_DAYS)).isoformat()
+    to = next((e for e in mailer.recipients(emails) if recent.get(e.lower(), "") < limit), "")
+    if not to:
+        return ""
+    contact = (api.get("/profile") or {}).get("contact") or {}
+    name = contact.get("full_name") or conf.mail_from
+    subject = mailer.requested_subject(vacancy_text) or f"Postulación: {vacancy.role} — {name}"
+    letter = _cover_letter(api, vacancy.id) or (
+        f"Buen día.\n\nMe postulo a la vacante de {vacancy.role}" + (f" en {vacancy.company}" if vacancy.company else "")
+        + ". Adjunto mi hoja de vida.\n\nQuedo atento a sus comentarios.")
+    signature = "\n".join(x for x in (name, contact.get("phone"), contact.get("email") or conf.mail_from,
+                                       contact.get("linkedin_url")) if x)
+    body = f"{letter.strip()}\n\nCordialmente,\n{signature}\n"
+    if conf.mode != "auto":
+        print(f"        Modo prueba: el correo a {to} («{subject}») no se envió.")
+        return ""
+    msg = mailer.build(sender=conf.mail_from, name=name, to=to, subject=subject, body=body, attachment=cv_pdf)
+    try:
+        mailer.send(conf.mail_from, secret, msg)
+    except mailer.MailError as e:
+        print(f"        Correo no enviado: {e}")
+        return ""
+    state.count("correos")
+    recent[to.lower()] = date.today().isoformat()
+    state.save()
+    try:
+        api.post(f"/applications/{vacancy.id}/sent", {"cv_id": cv_id, "platform": "Correo o referido"})
+        api.post(f"/applications/{vacancy.id}/notes", {"note": f"Enviada por correo a {to} · asunto «{subject}»"})
+    except ApiError as e:
+        print(f"        Correo enviado, pero la app no lo registró: {e.detail}")
+    telegram.notify(f"Te postulé por correo: {vacancy.role}" + (f" — {vacancy.company}" if vacancy.company else "")
+                    + f".\nPara: {to}\nAsunto: {subject}\nAdjunto: {cv_pdf.name}")
+    print(f"  ✓ {vacancy.score:>3}  {vacancy.role}: postulada por correo a {to}")
+    return to
+
+
+def cmd_correo(args) -> int:
+    """Guarda la contraseña de aplicación de Google para postular por correo (la escribe la persona; no se muestra)."""
+    from runner import mailer
+
+    conf = cfg.load()
+    if not conf.mail_from:
+        print('Primero agrega en la configuración: [correo] remitente = "tu-correo@gmail.com"')
+        return 1
+    print(f"Crea una contraseña de aplicación para {conf.mail_from} en https://myaccount.google.com/apppasswords "
+          "(necesita la verificación en dos pasos). No es la contraseña de tu cuenta.")
+    secret = getpass.getpass("Contraseña de aplicación (16 letras): ").replace(" ", "")
+    try:
+        mailer.check_login(conf.mail_from, secret)
+    except mailer.MailError as e:
+        print(e)
+        return 1
+    mailer.save_password(secret)
+    print(f"Listo: el bot postulará por correo desde {conf.mail_from} (máximo {conf.mail_cap} al día).")
+    if args.probar:
+        msg = mailer.build(sender=conf.mail_from, name=conf.mail_from, to=conf.mail_from, subject="Prueba del bot de CV Optimizer",
+                           body="Si te llegó este correo, el bot ya puede postular por correo por ti.", attachment=None)
+        mailer.send(conf.mail_from, secret, msg)
+        print(f"Te envié un correo de prueba a {conf.mail_from}.")
+    return 0
 
 
 def _how_to_apply(post, vacancy_text: str, who: str) -> str:
@@ -1443,6 +1528,9 @@ def main(argv: list[str] | None = None) -> int:
     postular.set_defaults(fn=cmd_postular)
     sub.add_parser("diario").set_defaults(fn=cmd_diario)
     sub.add_parser("vigilar").set_defaults(fn=cmd_vigilar)
+    correo = sub.add_parser("correo", help="guarda la contraseña de aplicación de Google para postular por correo")
+    correo.add_argument("--probar", action="store_true", help="además, te envía un correo de prueba a ti mismo")
+    correo.set_defaults(fn=cmd_correo)
     menciones = sub.add_parser("menciones", help="vacantes en publicaciones de LinkedIn: donde te etiquetan y las que busca")
     menciones.add_argument("--prueba", action="store_true", help="solo leer y mostrar; no pasa nada a la app")
     menciones.add_argument("--max", type=int, default=0)
