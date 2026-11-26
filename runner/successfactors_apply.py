@@ -73,7 +73,35 @@ _QUESTIONS = """() => {
       q.value = q.job && !el.dataset.cvoTouched ? '' : (/^sin selecci/i.test(shown) ? '' : shown);
     } else if (el.tagName === 'TEXTAREA') { q.kind = 'textarea'; q.value = el.value;
     } else if (el.tagName === 'INPUT') { q.kind = el.getAttribute('role') === 'combobox' || /_input$/.test(el.id) ? 'lista' : 'texto'; q.value = el.value; }
-    return q; });
+    return q; }).concat(
+  // Cuestionario del puesto de otro tipo (Front Mobile, 2026-11-26): `span.questionFieldLabel` y, debajo, radios
+  // nativos, una lista nativa o un campo de texto (`fbjq_question_N`). Antes el lote no los veía y el portal rechazaba
+  // el envío con «Se requiere una respuesta para la pregunta…».
+  [...document.querySelectorAll('span.questionFieldLabel')].filter(l => l.offsetParent !== null).map(l => {
+    const box = l.parentElement;
+    const q = {label: clean(l.innerText), required: !!l.querySelector('.required'), id: '', kind: 'otro', options: [], value: '',
+               job: true, max: 0};
+    const radios = [...box.querySelectorAll('input[type=radio]')];
+    const select = box.querySelector('select');
+    const text = box.querySelector('input[type=text], textarea');
+    if (radios.length) {
+      q.kind = 'nradio'; q.id = radios[0].name;
+      for (const r of radios) {
+        const lab = box.querySelector(`label[for="${CSS.escape(r.id)}"]`);
+        const t = clean(lab ? lab.innerText : r.value);
+        q.options.push([t, r.id]);
+        if (r.checked) q.value = t;
+      }
+    } else if (select) {
+      q.kind = 'select'; q.id = select.id;
+      q.options = [...select.options].filter(o => o.value !== '').map(o => [clean(o.text), o.value]);
+      q.value = select.value ? clean(select.options[select.selectedIndex].text) : '';
+    } else if (text) {
+      q.kind = text.tagName === 'TEXTAREA' ? 'textarea' : 'texto'; q.id = text.id; q.value = text.value;
+      const hint = (box.innerText.match(/(\\d+) caracteres como m[aá]ximo/) || [])[1];
+      q.max = text.maxLength > 0 ? text.maxLength : (hint ? Number(hint) : 0);
+    }
+    return q; }));
 }"""
 
 
@@ -182,8 +210,10 @@ def _choose(page, q: dict, option: str) -> bool:
         radio_id = dict(q["options"])[option]
         page.locator(f"[id='{radio_id}_radio']").click()
     elif q["kind"] == "select":
-        page.locator(f"[id='{q['id']}']").select_option(label=option)
-        page.locator(f"[id='{q['id']}']").evaluate("e => e.dataset.cvoTouched = '1'")
+        page.locator(f"select[id='{q['id']}']").select_option(label=option)  # las opciones del cuestionario repiten el id
+        page.locator(f"select[id='{q['id']}']").evaluate("e => e.dataset.cvoTouched = '1'")
+    elif q["kind"] == "nradio":  # radio nativo del cuestionario: el clic dispara su `onclick` (preguntas anidadas)
+        page.evaluate("id => document.getElementById(id).click()", dict(q["options"])[option])
     elif q["kind"] == "lista":
         box = page.locator(f"[id='{q['id']}']")
         box.click()
@@ -314,7 +344,7 @@ def apply(page, offer_url: str, cv_pdf: Path, answerer: Answerer, *, submit: boo
             if wrong or not _choose(page, q, option):
                 missing.append(question.label)
         elif value:
-            _type(page, q["id"], value[:1000])
+            _type(page, q["id"], value[: q.get("max") or 1000].rstrip())
         else:
             missing.append(question.label)
         _settle(page, rounds=3, pause=1)
@@ -337,8 +367,9 @@ def apply(page, offer_url: str, cv_pdf: Path, answerer: Answerer, *, submit: boo
         confirm.first.click()
         time.sleep(6)
     errors = [t.strip() for t in page.locator(".rcmValidationMsgArea:visible, [role=alert]:visible").all_inner_texts() if t.strip()]
-    errors += [line.strip() for line in page.inner_text("body").splitlines() if re.search(r"es un campo obligatorio", line)]
-    if any(re.search(r"corrija|obligatori|error", t, re.I) for t in errors):
+    errors += [line.strip() for line in page.inner_text("body").splitlines()
+               if re.search(r"es un campo obligatorio|Se requiere una respuesta", line)]
+    if any(re.search(r"corrija|obligatori|error|se requiere", t, re.I) for t in errors):
         return ApplyResult("error", "El portal no aceptó el formulario: " + "; ".join(dict.fromkeys(errors))[:600])
     after = applied_count(page, login_url)
     if before is not None and after is not None and after > before:

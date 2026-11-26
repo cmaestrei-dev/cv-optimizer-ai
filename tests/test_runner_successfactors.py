@@ -28,9 +28,9 @@ def radio(qid: int, label: str, options: list[str]) -> str:
 
 class FakeSF:
     def __init__(self, *, logged: bool = True, job_section: bool = True, practice: bool = False, button: str = "Aplicar",
-                 picklist_rows: bool = False, reject: bool = False):
+                 picklist_rows: bool = False, reject: bool = False, questionnaire: bool = False):
         self.logged, self.applied, self.posted, self.job_section, self.practice = logged, 1, [], job_section, practice
-        self.button, self.picklist_rows, self.reject = button, picklist_rows, reject
+        self.button, self.picklist_rows, self.reject, self.questionnaire = button, picklist_rows, reject, questionnaire
         self.profile_cv, self.saved = "Camilo_Maestre_Backend_Junior.pdf", []  # subir el CV en el formulario lo cambia también aquí
         self.ignore_saves = False
 
@@ -62,6 +62,27 @@ class FakeSF:
             for name, label, box, script in (("customSourcePrimary", "¿Cómo supo de este puesto?", "800:_input", primary),
                                              ("customSourceSecondary", "Detalles", "810:_input", secondary))) + "</table>"
 
+    @staticmethod
+    def _questionnaire() -> str:
+        """El cuestionario de Front Mobile (2026-11-26): `span.questionFieldLabel` con radios nativos, lista y texto."""
+        def item(n, label, control):
+            return (f'<li><div><span id="fieldLabel_{n}" class="questionFieldLabel"><span class="required">*</span>{label}</span>'
+                    f'<div class="checkbox_column_wrapper">{control}</div></div></li>')
+        radios = "".join(f'<div><input type="radio" id="fbjq_question_0_{o}" name="fbjq_question_0" value="{i}">'
+                         f'<label for="fbjq_question_0_{o}"> {o} </label></div>' for i, o in enumerate(["Si", "No"]))
+        options = "".join(f'<option id="fbjq_question_3" value="{v}">{t}</option>'
+                          for v, t in [("1.0", "1.0--Bachiller"), ("5.0", "5.0--6 a 10 semestre carrera universitaria")])
+        return "<ul>" + "".join([
+            item(0, "¿Actualmente eres empleado Outsourcing o trabajas para alguno de los proveedores que prestan servicios al "
+                    "Grupo Bancolombia?<br>En caso afirmativo, certifico que he notificado a mi empleador.",
+                 f'<fieldset role="radiogroup" aria-required="true">{radios}</fieldset>'),
+            item(1, "¿Cuál es tu aspiración salarial?", '<input id="fbjq_question_1" name="fbjq_question_1" type="text" value="">'),
+            item(3, "¿Cuál es tu nivel de formación académica?",
+                 f'<select id="fbjq_question_3" name="fbjq_question_3"><option value="">- Seleccionar -</option>{options}</select>'),
+            item(8, "¿Quién fue el reclutador que te contactó?",
+                 '<input id="fbjq_question_8" type="text"> El tamaño de la respuesta debe ser de 20 caracteres como máximo.'),
+        ]) + "</ul>"
+
     def _form(self) -> str:
         # Como el real: los valores cuentan cuando el formulario los recibe (change o clic), subir el CV o elegir en
         # una lista redibuja (lo respondido se pierde y los campos del perfil se ven vacíos un momento), y «Detalles»
@@ -86,6 +107,7 @@ class FakeSF:
             <select id="740:" onchange="model[this.id] = this.value"><option>1-Bachiller</option><option>5-6 a 10 semestre carrera universitaria</option></select>
             <label for="750:" class="rcmFormQuestionLabel">¿Algo más que quieras contarnos?</label><textarea id="750:"></textarea>
             {self._practice() if self.practice else ""}
+            {self._questionnaire() if self.questionnaire else ""}
           </div>
           <label for="837:_txtFld" class="rcmFormFieldLabel"><span class="requiredField">*</span>&nbsp;Si estás de acuerdo con la Declaración de Conformidad, por favor escribe tu nombre completo a continuación.</label>
           <input type="text" id="837:_txtFld" name="disclaimerAcknowledge" onchange="model.firma = this.value">
@@ -116,7 +138,12 @@ class FakeSF:
             async function send() {{
               if ({str(self.reject).lower()}) {{  // el portal se niega: avisa en la página y no registra nada
                 document.body.insertAdjacentHTML('beforeend', '<div>¿Cómo supo de este puesto? es un campo obligatorio.</div>'); return; }}
-              await fetch('/apply', {{method: 'POST', body: JSON.stringify({{model, cv: document.getElementById('cv-name').innerText}})}});
+              const fbjq = {{}};  // el cuestionario nativo: lo que tenga marcado o escrito al enviar
+              for (const n of [0, 1, 3, 8]) {{
+                const radio = document.querySelector(`[name=fbjq_question_${{n}}]:checked`);
+                const field = document.querySelector(`select#fbjq_question_${{n}}, input#fbjq_question_${{n}}`);
+                if (radio || field) fbjq[n] = radio ? radio.id : field.value; }}
+              await fetch('/apply', {{method: 'POST', body: JSON.stringify({{model, fbjq, cv: document.getElementById('cv-name').innerText}})}});
               document.body.insertAdjacentHTML('beforeend', '<p>Gracias por postularte</p>'); }}
           </script></body></html>"""
 
@@ -216,6 +243,16 @@ def test_a_form_without_the_job_section_still_opens(chromium, tmp_path):
     assert run(chromium, fake, tmp_path).status == "enviada" and len(fake.posted) == 1
     (sent,) = fake.posted
     assert (sent["model"]["800:_input"], sent["model"]["810:_input"]) == ("Portal de Empleo Externo", "empleo.grupobancolombia.com")
+
+
+def test_the_native_questionnaire_is_answered(chromium, tmp_path):
+    fake = FakeSF(questionnaire=True)
+    extra = {"outsourcing|proveedores que prestan": "No", "aspiracion salarial": "3000000",
+             "nivel de formacion academica": "6 a 10 semestre carrera universitaria",
+             "reclutador que te contacto": "Ninguno: me postulé directamente en el portal de empleo."}
+    assert run(chromium, fake, tmp_path, extra=extra).status == "enviada"
+    (sent,) = fake.posted
+    assert sent["fbjq"] == {"0": "fbjq_question_0_No", "1": "3000000", "3": "5.0", "8": "Ninguno: me postulé"}  # 20 caracteres
 
 
 def test_a_rejected_send_is_never_reported_as_sent(chromium, tmp_path):
