@@ -55,6 +55,24 @@ IP de casa, y las alertas son un uso normal que no arriesga la cuenta. Para acti
 3. En tu Gmail, crea un filtro que reenvíe a esa dirección los correos de `jobalerts-noreply@linkedin.com` (el código
    de confirmación de Gmail aparece en la app).
 
+## Publicaciones de LinkedIn donde te etiquetan
+
+Muchas vacantes no se publican como empleo, sino en publicaciones normales (texto o un afiche), y alguien te etiqueta
+en ellas. Antes de buscar, cada vuelta lee el filtro «Menciones» de tus notificaciones de LinkedIn con la sesión del
+navegador del bot, y cada publicación nueva una sola vez. Solo lee: no comenta, no reacciona y no abre los enlaces de la
+publicación. LinkedIn los envuelve en `/safety/go/?url=…`, y de ahí se toma el destino.
+
+- **Si enlaza una oferta de LinkedIn, Computrabajo, elempleo o Magneto,** la oferta va a la bandeja de la app y el bot la
+  postula como las demás.
+- **Si no,** la app analiza el texto de la publicación y sus imágenes: transcribe el afiche, sin inventar nada. Aplica
+  tus mismas reglas: estafas, `[excluir]`, `[incluir]`, idioma y `compatibilidad_minima`. Si la vacante encaja, hace tu
+  CV y te la manda por Telegram con cómo postular: el correo o el enlace que trae la publicación, o un aviso de revisarla
+  si no lo dice. Para enviar tu CV a un correo, lo haces tú: el bot no manda correos por ti.
+- **Lo que no parece una vacante** (sin palabras de empleo ni imágenes) no gasta IA.
+
+Para ver qué encontraría sin pasar nada a la app: `python -m runner menciones --prueba`. Para apagarlo:
+`revisar_menciones = false`.
+
 ## Computrabajo
 
 Las búsquedas con `portal = "computrabajo"` usan la búsqueda pública de Computrabajo Colombia (sin sesión):

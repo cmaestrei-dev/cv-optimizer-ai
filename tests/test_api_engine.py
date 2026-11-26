@@ -1,3 +1,4 @@
+import base64
 import json
 
 import pytest
@@ -13,6 +14,7 @@ from tests.test_core_engine import _VACANCY
 from tests.test_phase3 import JOBPOSTING_HTML
 
 JOB = "https://www.linkedin.com/jobs/view/4012345678"
+PNG = {"mime": "image/png", "data": base64.b64encode(b"\x89PNG\r\n\x1a\n" + b"\x00" * 40).decode()}
 
 
 class RouterLLM:
@@ -24,6 +26,8 @@ class RouterLLM:
         self.username = username
         self.calls: list[str] = []
         self.fail_with: Exception | None = None
+        self.image_text = "SE BUSCA Auxiliar Administrativo. Requisitos: Excel y facturación."
+        self.images_seen = 0
 
     def _ids(self):
         snap = profiles.snapshot(self.username)
@@ -33,7 +37,9 @@ class RouterLLM:
         if self.fail_with:
             raise self.fail_with
         snap, ids = self._ids()
+        self.images_seen += len(kwargs.get("images") or ())
         for title, kind, build in [
+            ("ImageText", "imagen", lambda: {"text": self.image_text}),
             ("VacancyAnalysis", "vacante", lambda: _VACANCY),
             ("EvidenceMap", "evidencias", lambda: {
                 "items": [{"requirement": 1, "level": "cubre", "evidence": [f"E{snap.education[0].id}"]},
@@ -115,6 +121,34 @@ class TestVacancies:
         assert (r.json()["platform"], r.json()["url"], r.json()["posted_on"]) == ("LinkedIn", JOB, "2026-11-15")
         dup = client.post("/vacancies", headers=h, json={**body, "url": JOB})
         assert dup.status_code == 409 and dup.json()["application_id"] == r.json()["id"]
+
+    def test_a_post_with_an_image_is_saved_with_the_image_text(self, ana, monkeypatch):
+        client, h, fake = ana
+        monkeypatch.setattr(capture, "_download", lambda *a, **k: (_ for _ in ()).throw(AssertionError("no debe descargar")))
+        post = "https://www.linkedin.com/feed/update/urn:li:activity:7528058303977893888/"
+        body = {"text": "¡Estamos contratando! Mira el afiche.", "url": post, "prepare": True, "images": [PNG]}
+        r = client.post("/vacancies", headers=h, json=body)
+        assert r.status_code == 201, r.text
+        assert (r.json()["url"], r.json()["status"]) == (post, "guardada")
+        assert r.json()["vacancy_text"] == ("¡Estamos contratando! Mira el afiche.\n\nTexto de la imagen:\n"
+                                            "SE BUSCA Auxiliar Administrativo. Requisitos: Excel y facturación.")
+        assert fake.calls[:2] == ["imagen", "vacante"] and fake.images_seen == 1  # solo la transcripción ve la imagen
+        fake.image_text = ""
+        empty = client.post("/vacancies", headers=h, json={"url": post.replace("7528", "9528"), "images": [PNG]})
+        assert empty.status_code == 422 and "imagen" in empty.json()["detail"]
+
+    @pytest.mark.parametrize("image", [
+        {"mime": "image/png", "data": "no-es-base64!"},
+        {"mime": "image/jpeg", "data": PNG["data"]},  # dice JPEG pero es PNG
+        {"mime": "image/gif", "data": PNG["data"]},
+        {"mime": "image/png", "data": base64.b64encode(b"\x89PNG\r\n\x1a\n" + b"0" * 1_200_000).decode()},
+    ])
+    def test_rejects_bad_images(self, ana, image):
+        client, h, fake = ana
+        r = client.post("/vacancies", headers=h, json={"text": "Vacante", "images": [image]})
+        assert r.status_code == 422 and fake.calls == []
+        four = client.post("/vacancies", headers=h, json={"text": "Vacante", "images": [PNG] * 4})
+        assert four.status_code == 422
 
     def test_needs_experience_first(self, client):
         r = client.post("/vacancies", headers=_h("nueva"), json={"text": "Vacante"})

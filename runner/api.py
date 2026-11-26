@@ -1,10 +1,12 @@
 """Cliente de la API de la app con el token del bot (solo la librería estándar, siempre con timeout)."""
 
+import base64
 import json
 import secrets
 import time
 import urllib.error
 import urllib.request
+from collections.abc import Sequence
 from dataclasses import dataclass
 from datetime import date
 from pathlib import Path
@@ -74,8 +76,10 @@ class Api:
     def usage(self) -> dict:
         return self.get("/usage")
 
-    def add_vacancy(self, *, text: str, url: str, posted: date | None) -> Vacancy:
+    def add_vacancy(self, *, text: str, url: str, posted: date | None, images: Sequence[tuple[bytes, str]] = ()) -> Vacancy:
         body = {"text": text[:20000], "url": url, "prepare": True, "posted_on": posted.isoformat() if posted else None}
+        if images:  # p. ej. el afiche de una publicación de LinkedIn: la app transcribe su texto
+            body["images"] = [{"mime": mime, "data": base64.b64encode(data).decode()} for data, mime in images]
         try:
             out, created = self.post("/vacancies", body), True
         except ApiError as e:

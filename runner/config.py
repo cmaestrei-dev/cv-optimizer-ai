@@ -28,6 +28,7 @@ generar_cv = true      # hacer el CV a la medida de cada vacante (usa cupo de IA
 sin_evidencia = "saltar"   # «¿tienes experiencia con X?» si tu perfil no muestra X: "saltar" la vacante, "cero" (No / 0) o "si"
 experiencia_por_defecto = 2   # con sin_evidencia = "si": años que se responden si tu perfil no muestra más
 pausa_entre_envios_seg = [120, 240]   # espera al azar entre dos envíos
+revisar_menciones = true   # leer las publicaciones de LinkedIn donde te etiquetan (vacantes en posts, texto o afiche)
 
 [[busqueda]]
 palabras = "analista de operaciones"
@@ -117,6 +118,7 @@ class Config:
     portal_caps: dict[str, int] = field(default_factory=dict)  # tope diario de cada portal (LinkedIn: daily_cap)
     min_scores: dict[str, int] = field(default_factory=dict)  # compatibilidad mínima de cada portal (0 = sin mínimo)
     general_cvs: dict[str, str] = field(default_factory=dict)  # PDF general fijo de cada portal (Computrabajo)
+    mentions: bool = True  # leer las publicaciones de LinkedIn donde te etiquetan (vacantes en posts normales)
 
     def cap(self, portal: str) -> int:
         return self.daily_cap if portal == "linkedin" else self.portal_caps.get(portal, 20)
@@ -235,4 +237,5 @@ def load(path: Path = CONFIG_FILE) -> Config:
         answers={**{str(k): str(v) for k, v in raw.get("respuestas", {}).items()}, **_extra_answers()},
         no_evidence=no_evidence.replace("sí", "si"), default_years=default_years, pause_seconds=(int(pause[0]), int(pause[1])),
         portal_caps=portal_caps, min_scores=min_scores, general_cvs=general_cvs,
+        mentions=bool(raw.get("revisar_menciones", True)),
     )

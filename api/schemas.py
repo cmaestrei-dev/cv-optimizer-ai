@@ -1,10 +1,12 @@
 """Contratos JSON de la API. Validan longitudes y valores permitidos antes de llegar al núcleo."""
 
+import base64
+import binascii
 from datetime import date, datetime
 from typing import Annotated, Literal
 from urllib.parse import urlsplit
 
-from pydantic import AfterValidator, BaseModel, Field, StringConstraints
+from pydantic import AfterValidator, BaseModel, Field, StringConstraints, model_validator
 
 from core.profile.links import with_scheme
 from core.tracking.models import PLATFORMS, STATUSES, TRIAGE_STATUSES
@@ -276,11 +278,39 @@ class MarketOut(BaseModel):
 # ── motor: vacantes, análisis, CV y ayudas ────────────────────────────
 
 
+MAX_IMAGE_BYTES = 1_200_000  # tres imágenes en base64 caben bajo el límite de 6 MB por petición
+_IMAGE_MAGIC = {"image/jpeg": (b"\xff\xd8\xff",), "image/png": (b"\x89PNG\r\n\x1a\n",), "image/webp": (b"RIFF",)}
+
+
+class ImageIn(BaseModel):
+    """Una imagen en base64 (p. ej. el afiche de una vacante en una publicación de LinkedIn)."""
+
+    mime: Literal["image/jpeg", "image/png", "image/webp"]
+    data: Annotated[str, StringConstraints(max_length=(MAX_IMAGE_BYTES * 4) // 3 + 4)]
+
+    @model_validator(mode="after")
+    def _check(self) -> "ImageIn":
+        try:
+            raw = base64.b64decode(self.data, validate=True)
+        except (binascii.Error, ValueError):
+            raise ValueError("La imagen no está en base64.") from None
+        if not raw or len(raw) > MAX_IMAGE_BYTES:
+            raise ValueError("Cada imagen debe pesar menos de 1,2 MB.")
+        if not raw.startswith(_IMAGE_MAGIC[self.mime]) or (self.mime == "image/webp" and raw[8:12] != b"WEBP"):
+            raise ValueError("El contenido no corresponde al tipo de imagen indicado.")
+        return self
+
+    def decoded(self) -> bytes:
+        return base64.b64decode(self.data)
+
+
 class VacancyIn(BaseModel):
     text: Annotated[str, StringConstraints(strip_whitespace=True, max_length=20000)] = ""
     url: Url = ""
     prepare: bool = Field(default=False, description="true: lista para postular; false: a la bandeja")
     posted_on: date | None = Field(default=None, description="Publicación de la vacante, si quien la envía la conoce")
+    images: list[ImageIn] = Field(default_factory=list, max_length=3,
+                                  description="Imágenes de la vacante: se transcribe su texto y se guarda con el texto")
 
 
 class EvidenceOut(BaseModel):

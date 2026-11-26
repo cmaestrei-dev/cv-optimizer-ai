@@ -68,6 +68,22 @@ presenta como plus, deseable, valorado o similar; si no, es "obligatorio".
 4. Si la entrada no es una oferta de empleo, devuelve is_vacancy=false y el resto vacío."""
 
 
+class ImageText(BaseModel):
+    text: str = Field(default="", description="Todo el texto visible en las imágenes, literal y en orden de lectura")
+
+
+_TRANSCRIBE = """Transcribe literalmente todo el texto visible en estas imágenes de una publicación (por ejemplo, el \
+afiche de una vacante), en orden de lectura. No resumas, no traduzcas, no corrijas ni agregues nada que no esté \
+escrito. Si una imagen no tiene texto, no escribas nada por ella."""
+
+
+def transcribe_images(llm: LLMClient, images: tuple[Image, ...]) -> str:
+    """El texto de las imágenes de una vacante (el afiche de una publicación), para guardarla y analizarla como texto."""
+    if not images:
+        return ""
+    return generate_structured(llm, _TRANSCRIBE, ImageText, images=images).text.strip()
+
+
 def analyze_vacancy(
     llm: LLMClient,
     text: str = "",
