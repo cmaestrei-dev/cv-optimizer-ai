@@ -630,7 +630,7 @@ def cmd_diario(_args) -> int:
             conf = cfg.load()
             state = State(cfg.DATA_DIR / "estado.json")
             paused = (until := state.pause_until(_key("cuenta", "linkedin"))) and until > datetime.now(UTC)
-            if conf.mentions and not paused and "linkedin" not in state.data.get("sesion_perdida", []):
+            if (conf.mentions or conf.post_searches) and not paused and "linkedin" not in state.data.get("sesion_perdida", []):
                 _linkedin_posts(Api(conf.api, conf.token), conf, state)  # antes de buscar: lo enlazado va a la bandeja
         except Exception:  # noqa: BLE001 — leer las menciones nunca tumba la vuelta
             traceback.print_exc()
@@ -738,11 +738,13 @@ POSTS_PER_ROUND = 8  # publicaciones nuevas donde te etiquetaron que se leen por
 
 
 def _linkedin_posts(api: Api | None, conf: cfg.Config, state: State, *, limit: int = POSTS_PER_ROUND) -> int:
-    """Las publicaciones de LinkedIn donde etiquetaron a la persona (una vacante en un post, con texto o afiche).
+    """Vacantes publicadas como posts normales de LinkedIn (texto o afiche): las publicaciones donde etiquetaron a la
+    persona y, con `[publicaciones] buscar`, las que el bot busca solo (recientes, las más nuevas primero).
 
     Si enlazan una oferta de un portal que el bot postula, la oferta va a la bandeja de la app (la toma `buscar`); si
     no, la publicación pasa por la app (texto e imágenes), recibe su CV si encaja y llega por Telegram con cómo
-    postular. Sin `api` (prueba) solo muestra lo que encontró. Devuelve cuántas publicaciones nuevas trató."""
+    postular. Las encontradas buscando se filtran antes sin IA (quien busca empleo, sin palabras de empleo o sin
+    ninguna de `[incluir]`). Sin `api` (prueba) solo muestra lo que encontró. Devuelve cuántas trató."""
     import random
     import time as _time
 
@@ -762,34 +764,78 @@ def _linkedin_posts(api: Api | None, conf: cfg.Config, state: State, *, limit: i
         page = context.pages[0] if context.pages else context.new_page()
         page.set_default_timeout(60_000)
         try:
-            found = lp.mentions(page)
-            new = [m for m in found if m.activity not in seen]
-            print(f"\nLinkedIn: {len(found)} publicaciones donde te etiquetaron; {len(new)} nuevas")
-            for mention in new[:limit]:
+            todo: list[tuple[str, str, bool]] = []  # (publicación, de dónde salió, si la encontró buscando)
+            if conf.mentions:
+                found = lp.mentions(page)
+                new = [m for m in found if m.activity not in seen]
+                print(f"\nLinkedIn: {len(found)} publicaciones donde te etiquetaron; {len(new)} nuevas")
+                todo += [(m.activity, m.who, False) for m in new[:limit]]
+            for words in conf.post_searches:
+                room = conf.post_max - sum(1 for *_, searched in todo if searched)
+                if room <= 0:
+                    break
+                _time.sleep(random.uniform(3, 7))
+                queued = {activity for activity, *_ in todo}
+                ids = [a for a in lp.search(page, words, period=conf.post_period) if a not in seen and a not in queued]
+                print(f"LinkedIn, publicaciones con «{words}»: {len(ids)} nuevas")
+                todo += [(a, f"La encontró el bot buscando «{words}» en publicaciones de LinkedIn", True) for a in ids[:room]]
+            for activity, who, searched in todo:
                 if handled:
                     _time.sleep(random.uniform(4, 9))  # al ritmo de una persona
                 try:
-                    post = lp.read_post(page, mention.activity)
+                    post = lp.read_post(page, activity)
                 except ValueError as e:
-                    print(f"  · {mention.url}: {e}")
+                    print(f"  · {lp.POST_URL.format(activity)}: {e}")
                     continue
                 if api is None:
                     print(f"  · {post.author or '—'}: {post.text[:90]!r} — {len(post.images)} imagen(es), "
-                          f"{len(post.links)} enlace(s), ofertas de portales: {post.job_links or 'ninguna'}")
+                          f"{len(post.links)} enlace(s), ofertas de portales: {post.job_links or 'ninguna'}"
+                          + (f" [omitida: {skip['estado']}]" if searched and (skip := _skip_post(post, conf)) else ""))
                     continue
-                record = _handle_post(api, conf, post, mention.who)
+                record = (_skip_post(post, conf) if searched else None) or _handle_post(api, conf, post, who)
                 if record is None:  # sin cupo de IA o la app ocupada: se retoma en la próxima vuelta
                     break
-                seen[mention.activity] = {"cuando": datetime.now(UTC).isoformat(timespec="seconds"), "quien": mention.who,
-                                          "autor": post.author, **record}
+                seen[activity] = {"cuando": datetime.now(UTC).isoformat(timespec="seconds"), "quien": who,
+                                  "autor": post.author, **record}
                 handled += 1
         except lp.SessionError as e:
-            print(f"LinkedIn: {e}; no se leyeron tus menciones.")
+            print(f"LinkedIn: {e}; no se leyeron las publicaciones.")
         finally:
             if api is not None:
                 state.save()
             context.close()
     return handled
+
+
+def _skip_post(post, conf: cfg.Config) -> dict | None:
+    """Filtros sin IA para las publicaciones que el bot encontró buscando (None si pasa)."""
+    if post.job_seeker():
+        return {"estado": "busca_empleo"}
+    if not post.looks_like_job():
+        return {"estado": "no_es_vacante"}
+    if reason := _not_included(post.text, conf):
+        return {"estado": "no_encaja", "motivo": reason.replace("el cargo no tiene", "no tiene")}
+    return None
+
+
+# Una vacante de una publicación fuera del país y no remota (las búsquedas de LinkedIn traen Ecuador, Perú, España…).
+_ABROAD = re.compile(r"\b(ecuador|guayaquil|quito|cuenca ecuador|peru|lima|mexico|cdmx|monterrey|guadalajara|chile|"
+                     r"santiago de chile|argentina|buenos aires|cordoba argentina|espana|madrid|barcelona|valencia espana|"
+                     r"estados unidos|usa|eeuu|united states|venezuela|caracas|panama|costa rica|san jose costa rica|uruguay|"
+                     r"montevideo|paraguay|bolivia|guatemala|honduras|el salvador|republica dominicana|santo domingo|brasil|"
+                     r"brazil|sao paulo|puerto rico)\b")
+
+
+def _abroad(detail: dict, conf: cfg.Config) -> str:
+    from runner import watch
+
+    if not conf.home_country:
+        return ""
+    vacancy = detail.get("vacancy") or {}
+    place = watch._norm(str(vacancy.get("location") or ""))
+    if not place or "remot" in watch._norm(str(vacancy.get("modality") or "")) or watch._norm(conf.home_country) in place:
+        return ""
+    return f"es en {vacancy.get('location')} y no es remota" if _ABROAD.search(place) else ""
 
 
 def _handle_post(api: Api, conf: cfg.Config, post, who: str) -> dict | None:
@@ -829,10 +875,11 @@ def _handle_post(api: Api, conf: cfg.Config, post, who: str) -> dict | None:
         return {"estado": "no_es_vacante" if e.status == 422 else "error", "motivo": e.detail[:200]}
     if not vacancy.created and not vacancy.unfinished:
         return {"estado": "ya_estaba", "app": vacancy.id}
-    text = api.get(f"/applications/{vacancy.id}").get("vacancy_text") or ""
+    detail = api.get(f"/applications/{vacancy.id}")
+    text = detail.get("vacancy_text") or ""
     card = SimpleNamespace(title=vacancy.role, company=vacancy.company)
     reason = (scam_reason(text) or _excluded(card, conf) or _not_included(vacancy.role, conf)
-              or _foreign(api, conf, vacancy.id))
+              or _foreign(api, conf, vacancy.id) or _abroad(detail, conf))
     minimum = conf.min_score("linkedin")
     if not reason and (vacancy.score is None or vacancy.score < minimum):
         reason = f"compatibilidad {vacancy.score if vacancy.score is not None else '—'} (mínimo {minimum})"
@@ -870,7 +917,7 @@ def _how_to_apply(post, vacancy_text: str, who: str) -> str:
 
 
 def cmd_menciones(args) -> int:
-    """Lee las publicaciones de LinkedIn donde te etiquetaron; con --prueba solo muestra lo que encontró."""
+    """Lee las publicaciones de LinkedIn donde te etiquetaron y busca las de `[publicaciones]`; con --prueba solo muestra."""
     conf = cfg.load()
     state = State(cfg.DATA_DIR / "estado.json")
     _linkedin_posts(None if args.prueba else Api(conf.api, conf.token), conf, state, limit=args.max or POSTS_PER_ROUND)
@@ -1396,7 +1443,7 @@ def main(argv: list[str] | None = None) -> int:
     postular.set_defaults(fn=cmd_postular)
     sub.add_parser("diario").set_defaults(fn=cmd_diario)
     sub.add_parser("vigilar").set_defaults(fn=cmd_vigilar)
-    menciones = sub.add_parser("menciones", help="publicaciones de LinkedIn donde te etiquetaron (vacantes en posts)")
+    menciones = sub.add_parser("menciones", help="vacantes en publicaciones de LinkedIn: donde te etiquetan y las que busca")
     menciones.add_argument("--prueba", action="store_true", help="solo leer y mostrar; no pasa nada a la app")
     menciones.add_argument("--max", type=int, default=0)
     menciones.set_defaults(fn=cmd_menciones)

@@ -3,6 +3,7 @@ menciones con `highlightedUpdateUrn`/`dashCommentUrn`, texto en `expandable-text
 /safety/go/?url=…, afiche de `media.licdn.com/…/feedshare…` y comentarios después del cuadro de comentarios. Los
 enlaces de los avisos miden 0 px de alto, como en la página real. Sin red."""
 
+import dataclasses
 import re
 import struct
 import zlib
@@ -288,3 +289,92 @@ def test_the_round_reads_each_post_once(conf, monkeypatch):
                                                                               "Antonia Macias")
     assert cli._linkedin_posts(FakeApi(), config, State(cfg.DATA_DIR / "estado.json")) == 0 and len(sent) == 1
     assert closed == [1, 1]
+
+
+SEARCH_PAGE = """<html><body><main><h2>Publicación en el feed</h2><p>En TP estamos contratando Desarrollador Avaya…</p></main>
+<script type="application/json">{"key":"reactionState-urn:li:activity:7531784612994260992"}
+{"key":"reactionState-urn:li:activity:7531777923356491776","share":"urn:li:share:7531784612260261888"}
+{"again":"reactionState-urn:li:activity:7531784612994260992"}</script>
+<div style="height:5000px"></div><script>
+  let asked = false;
+  window.addEventListener('scroll', () => { if (!asked) { asked = true;  // más resultados al bajar (como el real)
+    fetch('/flagship-web/rsc-action/actions/component?componentId=search', {method: 'POST'}); } });
+</script></body></html>"""
+
+
+def test_search_reads_the_post_ids_from_the_server_responses(chromium):
+    page = chromium.new_page()
+    page.route("**/*", lambda route, request: route.abort())
+    asked = []
+
+    def handle(route, request):
+        if "/search/results/content/" in request.url:
+            asked.append(request.url)
+            return route.fulfill(status=200, content_type="text/html; charset=utf-8", body=SEARCH_PAGE)
+        if "/flagship-web/rsc-action/" in request.url:
+            return route.fulfill(status=200, content_type="text/plain",
+                                 body='0:{"k":"reactionState-urn%3Ali%3Aactivity%3A7531529635902148608"}')
+        return route.fulfill(status=404, body="")
+
+    page.route(re.compile(r"https://www\.linkedin\.com/.*"), handle)
+    try:
+        ids = lp.search(page, "estamos contratando desarrollador", period="semana", scrolls=1)
+    finally:
+        page.close()
+    assert ids == ["7531784612994260992", "7531777923356491776", "7531529635902148608"]  # en orden, sin repetir
+    assert "keywords=estamos%20contratando%20desarrollador" in asked[0] and "past-week" in asked[0]
+
+
+def test_posts_found_by_searching_are_filtered_without_ai(conf):
+    config, _ = conf
+    seeker = lp.Post("1", text="¡Hola a todos! Estoy buscando un nuevo empleo como desarrollador. #OpenToWork")
+    assert seeker.job_seeker() and cli._skip_post(seeker, config) == {"estado": "busca_empleo"}
+    assert cli._skip_post(lp.Post("2", text="Feliz viernes, equipo"), config) == {"estado": "no_es_vacante"}
+    sales = lp.Post("3", text="Estamos contratando vendedores con experiencia comprobable")
+    assert cli._skip_post(sales, config)["estado"] == "no_encaja"  # ninguna palabra de [incluir]
+    assert cli._skip_post(lp.Post("4", text="Estamos contratando Desarrollador Avaya en Colombia, remoto"), config) is None
+
+
+@pytest.mark.parametrize("location, modality, reason", [
+    ("Guayaquil, Ecuador", "Presencial", "es en Guayaquil, Ecuador y no es remota"),
+    ("Lima, Perú", "Remoto", ""),           # remota: sirve desde Colombia
+    ("Bogotá", "Híbrido", ""),
+    ("Santiago de Cali", "Presencial", ""),  # «Santiago» solo no es Chile
+    ("", "", ""),
+])
+def test_vacancies_abroad_that_are_not_remote_are_discarded(conf, location, modality, reason):
+    config = dataclasses.replace(conf[0], home_country="Colombia")
+    assert cli._abroad({"vacancy": {"location": location, "modality": modality}}, config) == reason
+
+
+def test_the_round_also_hunts_posts_by_searching(conf, monkeypatch):
+    config, sent = conf
+    config = dataclasses.replace(config, mentions=False, post_max=2,
+                                 post_searches=["estamos contratando desarrollador", "vacante desarrollador junior"])
+    import playwright.sync_api as sync_api
+
+    from runner import browser
+
+    class Session:
+        def __enter__(self):
+            return SimpleNamespace()
+
+        def __exit__(self, *exc):
+            return False
+
+    page = SimpleNamespace(set_default_timeout=lambda ms: None)
+    monkeypatch.setattr(sync_api, "sync_playwright", lambda: Session())
+    monkeypatch.setattr(browser, "open_context", lambda p: SimpleNamespace(pages=[page], close=lambda: None))
+    import time as _time
+    monkeypatch.setattr(_time, "sleep", lambda s: None)
+    searched = []
+    monkeypatch.setattr(lp, "mentions", lambda page: pytest.fail("las menciones están apagadas"))
+    monkeypatch.setattr(lp, "search", lambda page, words, period: searched.append(words) or ["11", "22", "33"])
+    posts = {"11": lp.Post("11", "Ana", "Estoy buscando un nuevo empleo como desarrollador #OpenToWork"), "22": POSTED}
+    monkeypatch.setattr(lp, "read_post", lambda page, activity: posts[activity])
+    api = FakeApi()
+    assert cli._linkedin_posts(api, config, State(cfg.DATA_DIR / "estado.json")) == 2
+    assert searched == ["estamos contratando desarrollador"]  # con 2 de máximo, la segunda búsqueda no hace falta
+    saved = State(cfg.DATA_DIR / "estado.json").data["publicaciones"]
+    assert saved["11"]["estado"] == "busca_empleo" and saved["22"]["estado"] == "manual" and "33" not in saved
+    assert len(api.added) == 1 and sent[0]["nota"].startswith("La encontró el bot buscando «estamos contratando desarrollador»")
