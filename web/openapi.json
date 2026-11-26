@@ -4254,6 +4254,31 @@
     "type": "object",
     "title": "HTTPValidationError"
    },
+   "ImageIn": {
+    "properties": {
+     "mime": {
+      "type": "string",
+      "enum": [
+       "image/jpeg",
+       "image/png",
+       "image/webp"
+      ],
+      "title": "Mime"
+     },
+     "data": {
+      "type": "string",
+      "maxLength": 1600004,
+      "title": "Data"
+     }
+    },
+    "type": "object",
+    "required": [
+     "mime",
+     "data"
+    ],
+    "title": "ImageIn",
+    "description": "Una imagen en base64 (p. ej. el afiche de una vacante en una publicación de LinkedIn)."
+   },
    "ImportApplyIn": {
     "properties": {
      "experiences": {
@@ -5215,6 +5240,15 @@
       ],
       "title": "Posted On",
       "description": "Publicación de la vacante, si quien la envía la conoce"
+     },
+     "images": {
+      "items": {
+       "$ref": "#/components/schemas/ImageIn"
+      },
+      "type": "array",
+      "maxItems": 3,
+      "title": "Images",
+      "description": "Imágenes de la vacante: se transcribe su texto y se guarda con el texto"
      }
     },
     "type": "object",

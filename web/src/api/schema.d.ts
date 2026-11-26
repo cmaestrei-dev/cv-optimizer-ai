@@ -1625,6 +1625,19 @@ export interface components {
             /** Detail */
             detail?: components["schemas"]["ValidationError"][];
         };
+        /**
+         * ImageIn
+         * @description Una imagen en base64 (p. ej. el afiche de una vacante en una publicación de LinkedIn).
+         */
+        ImageIn: {
+            /**
+             * Mime
+             * @enum {string}
+             */
+            mime: "image/jpeg" | "image/png" | "image/webp";
+            /** Data */
+            data: string;
+        };
         /** ImportApplyIn */
         ImportApplyIn: {
             /**
@@ -1992,6 +2005,11 @@ export interface components {
              * @description Publicación de la vacante, si quien la envía la conoce
              */
             posted_on?: string | null;
+            /**
+             * Images
+             * @description Imágenes de la vacante: se transcribe su texto y se guarda con el texto
+             */
+            images?: components["schemas"]["ImageIn"][];
         };
         /** ValidationError */
         ValidationError: {

@@ -39,6 +39,7 @@ from core import llm as llm_module
 from core.errors import UserInputError
 from core.jobs import service as jobs
 from core.jobs.models import Job
+from core.llm.client import Image
 from core.profile import service as profiles
 from core.profile.snapshot import ProfileSnapshot
 from core.tracking import service as tracking
@@ -100,8 +101,9 @@ def _job(job: Job) -> JobOut:
 def add_vacancy(body: VacancyIn, account: CurrentAccount) -> ApplicationOut:
     """Trae (enlace) o recibe (texto) una vacante, la analiza y la guarda. 409 si ya la tienes."""
     usage.check(account.username)
+    images = tuple(Image(image.decoded(), image.mime) for image in body.images)
     application_id = applying.add_vacancy(account.username, _llm("extract", account), text=body.text, url=body.url,
-                                          prepare=body.prepare, posted=body.posted_on)
+                                          prepare=body.prepare, posted=body.posted_on, images=images)
     return _detail(account.username, application_id)
 
 

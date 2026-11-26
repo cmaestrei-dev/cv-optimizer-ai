@@ -627,6 +627,14 @@ def cmd_diario(_args) -> int:
             print(f"En pausa (pedida por Telegram) hasta {until.astimezone():%Y-%m-%d %H:%M}: no corro esta vuelta.")
             return 0
         try:
+            conf = cfg.load()
+            state = State(cfg.DATA_DIR / "estado.json")
+            paused = (until := state.pause_until(_key("cuenta", "linkedin"))) and until > datetime.now(UTC)
+            if conf.mentions and not paused and "linkedin" not in state.data.get("sesion_perdida", []):
+                _linkedin_posts(Api(conf.api, conf.token), conf, state)  # antes de buscar: lo enlazado va a la bandeja
+        except Exception:  # noqa: BLE001 — leer las menciones nunca tumba la vuelta
+            traceback.print_exc()
+        try:
             cmd_buscar(argparse.Namespace(sin_cv=False, max=0, portal=None))
         except (cfg.ConfigError, ApiError):
             raise
@@ -724,6 +732,149 @@ def _follow_up(api: Api, state: State) -> str:
     text = sg.notice(changes)
     print(text or f"Seguimiento: revisé {len(seen)} postulaciones; sin novedades.")
     return text
+
+
+POSTS_PER_ROUND = 8  # publicaciones nuevas donde te etiquetaron que se leen por vuelta (cada una usa IA)
+
+
+def _linkedin_posts(api: Api | None, conf: cfg.Config, state: State, *, limit: int = POSTS_PER_ROUND) -> int:
+    """Las publicaciones de LinkedIn donde etiquetaron a la persona (una vacante en un post, con texto o afiche).
+
+    Si enlazan una oferta de un portal que el bot postula, la oferta va a la bandeja de la app (la toma `buscar`); si
+    no, la publicación pasa por la app (texto e imágenes), recibe su CV si encaja y llega por Telegram con cómo
+    postular. Sin `api` (prueba) solo muestra lo que encontró. Devuelve cuántas publicaciones nuevas trató."""
+    import random
+    import time as _time
+
+    from playwright.sync_api import sync_playwright
+
+    from runner import browser
+    from runner import linkedin_posts as lp
+
+    seen = state.data.setdefault("publicaciones", {})
+    handled = 0
+    with sync_playwright() as p:
+        try:
+            context = browser.open_context(p)
+        except browser.BrowserUnavailableError as e:
+            print(e)
+            return 0
+        page = context.pages[0] if context.pages else context.new_page()
+        page.set_default_timeout(60_000)
+        try:
+            found = lp.mentions(page)
+            new = [m for m in found if m.activity not in seen]
+            print(f"\nLinkedIn: {len(found)} publicaciones donde te etiquetaron; {len(new)} nuevas")
+            for mention in new[:limit]:
+                if handled:
+                    _time.sleep(random.uniform(4, 9))  # al ritmo de una persona
+                try:
+                    post = lp.read_post(page, mention.activity)
+                except ValueError as e:
+                    print(f"  · {mention.url}: {e}")
+                    continue
+                if api is None:
+                    print(f"  · {post.author or '—'}: {post.text[:90]!r} — {len(post.images)} imagen(es), "
+                          f"{len(post.links)} enlace(s), ofertas de portales: {post.job_links or 'ninguna'}")
+                    continue
+                record = _handle_post(api, conf, post, mention.who)
+                if record is None:  # sin cupo de IA o la app ocupada: se retoma en la próxima vuelta
+                    break
+                seen[mention.activity] = {"cuando": datetime.now(UTC).isoformat(timespec="seconds"), "quien": mention.who,
+                                          "autor": post.author, **record}
+                handled += 1
+        except lp.SessionError as e:
+            print(f"LinkedIn: {e}; no se leyeron tus menciones.")
+        finally:
+            if api is not None:
+                state.save()
+            context.close()
+    return handled
+
+
+def _handle_post(api: Api, conf: cfg.Config, post, who: str) -> dict | None:
+    """Pasa una publicación por la app. Devuelve qué se hizo (para el estado) o None si hay que reintentar luego."""
+    from hashlib import sha256
+
+    from runner import telegram
+
+    if reason := scam_reason(post.text):
+        print(f"  · {post.url}: omitida, {reason}")
+        return {"estado": "estafa", "motivo": reason}
+    apps = []
+    for url in post.job_links:  # ofertas de portales que el bot postula: a la bandeja de la app
+        try:
+            out = api.post("/vacancies", {"url": url, "prepare": False})
+            print(f"  ✓ {out.get('role') or url} — {out.get('company') or ''}: a la bandeja (enlazada en la publicación)")
+            apps.append(out["id"])
+        except ApiError as e:
+            if e.status == 409 and e.body.get("application_id"):
+                apps.append(e.body["application_id"])
+            elif e.status == 429 or e.status >= 500:
+                return None
+            else:
+                print(f"  · la app no pudo traer {url}: {e.detail}")
+    if apps:
+        return {"estado": "bandeja", "apps": apps}
+    if not post.looks_like_job():
+        print(f"  · {post.url}: no parece una vacante")
+        return {"estado": "no_es_vacante"}
+    try:
+        vacancy = api.add_vacancy(text=post.vacancy_text(), url=post.url, posted=None, images=post.images)
+    except ApiError as e:
+        if e.status == 429 or e.status >= 500:
+            print(f"  · la app no pudo analizar {post.url} ahora: {e.detail}")
+            return None
+        print(f"  · {post.url}: {e.detail}")
+        return {"estado": "no_es_vacante" if e.status == 422 else "error", "motivo": e.detail[:200]}
+    if not vacancy.created and not vacancy.unfinished:
+        return {"estado": "ya_estaba", "app": vacancy.id}
+    text = api.get(f"/applications/{vacancy.id}").get("vacancy_text") or ""
+    card = SimpleNamespace(title=vacancy.role, company=vacancy.company)
+    reason = (scam_reason(text) or _excluded(card, conf) or _not_included(vacancy.role, conf)
+              or _foreign(api, conf, vacancy.id))
+    minimum = conf.min_score("linkedin")
+    if not reason and (vacancy.score is None or vacancy.score < minimum):
+        reason = f"compatibilidad {vacancy.score if vacancy.score is not None else '—'} (mínimo {minimum})"
+    if reason:
+        _discard(api, vacancy.id, f"El bot la descartó: {reason}.")
+        print(f"  · {vacancy.role} — {vacancy.company or post.author}: {reason}")
+        return {"estado": "descartada", "app": vacancy.id, "motivo": reason}
+    cv_path = ""
+    try:
+        cv = api.make_cv(vacancy.id)
+        cv_path = str(api.download_cv(cv["id"], cfg.DATA_DIR / "cvs" / str(vacancy.id) / cv["filename"]))
+    except ApiError as e:
+        print(f"        CV no generado: {e.detail}")
+    item = {"id": sha256(post.url.encode()).hexdigest()[:12], "url": post.url, "titulo": vacancy.role,
+            "empresa": vacancy.company or post.author, "cv": cv_path, "nota": _how_to_apply(post, text, who),
+            "motivo": "", "respuestas": "", "puntaje": vacancy.score}
+    telegram.add_manual(item)
+    print(f"  ✓ {vacancy.score:>3}  {vacancy.role} — {item['empresa']}: CV listo, enviado a Telegram (publicación)")
+    return {"estado": "manual", "app": vacancy.id}
+
+
+def _how_to_apply(post, vacancy_text: str, who: str) -> str:
+    """Cómo se postula según la publicación: correo, enlace o, si no lo dice, revisarla. Nunca se abre el enlace."""
+    from runner import linkedin_posts as lp
+
+    emails = lp.emails_in(f"{post.text}\n{vacancy_text}")  # también los del afiche (texto transcrito)
+    lines = [f"{who}." if who else "Te etiquetaron en esta publicación."]
+    if emails:
+        lines.append(f"Cómo postular: envía tu CV a {', '.join(emails[:3])} (mira en la publicación si piden un asunto).")
+    if links := post.other_links:
+        lines.append("Enlace de la publicación: " + " · ".join(links[:2]))
+    if not emails and not links:
+        lines.append("La publicación no dice cómo postular: ábrela (quizá piden escribir por mensaje o comentar).")
+    return " ".join(lines)
+
+
+def cmd_menciones(args) -> int:
+    """Lee las publicaciones de LinkedIn donde te etiquetaron; con --prueba solo muestra lo que encontró."""
+    conf = cfg.load()
+    state = State(cfg.DATA_DIR / "estado.json")
+    _linkedin_posts(None if args.prueba else Api(conf.api, conf.token), conf, state, limit=args.max or POSTS_PER_ROUND)
+    return 0
 
 
 def cmd_seguimiento(_args) -> int:
@@ -1237,6 +1388,10 @@ def main(argv: list[str] | None = None) -> int:
     postular.set_defaults(fn=cmd_postular)
     sub.add_parser("diario").set_defaults(fn=cmd_diario)
     sub.add_parser("vigilar").set_defaults(fn=cmd_vigilar)
+    menciones = sub.add_parser("menciones", help="publicaciones de LinkedIn donde te etiquetaron (vacantes en posts)")
+    menciones.add_argument("--prueba", action="store_true", help="solo leer y mostrar; no pasa nada a la app")
+    menciones.add_argument("--max", type=int, default=0)
+    menciones.set_defaults(fn=cmd_menciones)
     sub.add_parser("seguimiento", help="revisa en cada portal qué pasó con tus postulaciones y te avisa").set_defaults(
         fn=cmd_seguimiento)
     manual = sub.add_parser("manual", help="una postulación que envías tú; te llega por Telegram con su CV")

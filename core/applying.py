@@ -17,13 +17,13 @@ from core.engine.cover import CoverNote, write_cover_note
 from core.engine.document import CVDocument, render
 from core.engine.screening import ScreeningAnswer, answer_screening
 from core.errors import UserInputError
-from core.llm.client import LLMClient
+from core.llm.client import Image, LLMClient
 from core.profile import service as profiles
 from core.profile.completion import Candidate, split_into_achievements
 from core.profile.snapshot import ProfileSnapshot
 from core.tracking import service as tracking
 from core.tracking.models import Application
-from core.vacancy import VacancyAnalysis
+from core.vacancy import VacancyAnalysis, transcribe_images
 from models import UserProfile
 from services.pdf_generator import build_pdf_filename
 
@@ -69,14 +69,21 @@ def _save(username: str, application_id: int, analysis: pipeline.Analysis, snaps
 
 def add_vacancy(
     username: str, llm: LLMClient, *, text: str = "", url: str = "", prepare: bool = False, posted: date | None = None,
+    images: tuple[Image, ...] = (),
 ) -> int:
     """Trae (si solo hay enlace), analiza y guarda la vacante: en la bandeja o, con `prepare`, lista para postular.
-    Con texto y enlace se usa el texto tal cual y el enlace solo identifica la vacante (sin descargarla)."""
+    Con texto y enlace se usa el texto tal cual y el enlace solo identifica la vacante (sin descargarla).
+    Con imágenes (el afiche de una publicación), su texto se transcribe y se suma al texto: nunca se descarga el enlace."""
     url, platform = canonical_url(url) if url.strip() else "", ""
     posted_on = closes_on = None
     if url and (existing := tracking.find_by_url(username, url)) is not None:
         raise DuplicateVacancyError(existing)
     snapshot = _snapshot_with_experience(username)
+    if images:
+        if written := transcribe_images(llm, images):
+            text = f"{text.strip()}\n\nTexto de la imagen:\n{written}".strip()
+        if not text.strip():
+            raise UserInputError("La imagen no tiene texto legible de una vacante.")
     if url and not text.strip():  # solo el enlace: se trae la vacante
         captured = capture_vacancy(url)
         url, platform, text = canonical_url(captured.url), captured.platform, captured.text
