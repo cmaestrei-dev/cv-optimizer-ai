@@ -1,6 +1,7 @@
 """Configuración del bot: un TOML en ~/.config/cv-optimizer-bot/config.toml y el token aparte (0600)."""
 
 import os
+import re
 import stat
 import tomllib
 from dataclasses import dataclass, field
@@ -29,6 +30,10 @@ sin_evidencia = "saltar"   # «¿tienes experiencia con X?» si tu perfil no mue
 experiencia_por_defecto = 2   # con sin_evidencia = "si": años que se responden si tu perfil no muestra más
 pausa_entre_envios_seg = [120, 240]   # espera al azar entre dos envíos
 revisar_menciones = true   # leer las publicaciones de LinkedIn donde te etiquetan (vacantes en posts, texto o afiche)
+
+[correo]   # postular por correo cuando la vacante lo pide; la contraseña de aplicación: python -m runner correo
+remitente = ""    # tu Gmail; vacío = esas vacantes te llegan por Telegram para enviarlas tú
+tope_diario = 10
 
 [publicaciones]   # vacantes publicadas como posts de LinkedIn (texto o afiche), que pocos aprovechan
 buscar = ["estamos contratando analista", "vacante analista"]
@@ -127,6 +132,8 @@ class Config:
     post_searches: list[str] = field(default_factory=list)  # [publicaciones] buscar: vacantes publicadas como posts
     post_period: str = "dia"  # dia | semana | mes
     post_max: int = 10  # publicaciones nuevas de las búsquedas que se leen por vuelta
+    mail_from: str = ""  # [correo] remitente: el Gmail desde el que el bot postula por correo (vacío: no lo hace)
+    mail_cap: int = 10  # [correo] tope_diario de correos de postulación
 
     def cap(self, portal: str) -> int:
         return self.daily_cap if portal == "linkedin" else self.portal_caps.get(portal, 20)
@@ -239,6 +246,13 @@ def load(path: Path = CONFIG_FILE) -> Config:
     post_max = int(posts.get("maximo", 10))
     if not 0 <= post_max <= 30:
         raise ConfigError("[publicaciones] «maximo» debe estar entre 0 y 30.")
+    mail = raw.get("correo", {})
+    mail_from = str(mail.get("remitente", "")).strip()
+    if mail_from and not re.fullmatch(r"[^@\s]+@[^@\s]+\.[a-z]{2,}", mail_from, re.I):
+        raise ConfigError("[correo] «remitente» debe ser una dirección de correo.")
+    mail_cap = int(mail.get("tope_diario", 10))
+    if not 1 <= mail_cap <= 30:
+        raise ConfigError("[correo] «tope_diario» debe estar entre 1 y 30.")
     pause = raw.get("pausa_entre_envios_seg", [120, 240])
     if not (isinstance(pause, list) and len(pause) == 2 and 30 <= int(pause[0]) <= int(pause[1])):
         raise ConfigError("«pausa_entre_envios_seg» debe ser [mínimo, máximo] en segundos, desde 30.")
@@ -254,5 +268,5 @@ def load(path: Path = CONFIG_FILE) -> Config:
         portal_caps=portal_caps, min_scores=min_scores, general_cvs=general_cvs,
         mentions=bool(raw.get("revisar_menciones", True)),
         post_searches=[str(q).strip() for q in posts.get("buscar", []) if str(q).strip()],
-        post_period=post_period, post_max=post_max,
+        post_period=post_period, post_max=post_max, mail_from=mail_from, mail_cap=mail_cap,
     )
