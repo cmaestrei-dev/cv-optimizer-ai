@@ -174,7 +174,8 @@ def mentions(page, *, wait_ms: int = 15_000) -> list[Mention]:
     if challenged(page):
         raise SessionError("LinkedIn pidió iniciar sesión o una verificación")
     try:
-        page.wait_for_selector('main a[href*="highlightedUpdateUrn"]', timeout=wait_ms)
+        # «attached»: en la interfaz nueva el enlace del aviso no tiene caja visible propia (Playwright lo daría por oculto)
+        page.wait_for_selector('main a[href*="highlightedUpdateUrn"]', state="attached", timeout=wait_ms)
     except Exception:  # noqa: BLE001 — sin menciones recientes, o LinkedIn llevó a otra página después de cargar
         if challenged(page):
             raise SessionError("LinkedIn pidió iniciar sesión o una verificación") from None
@@ -204,7 +205,7 @@ def read_post(page, activity: str, *, wait_ms: int = 15_000) -> Post:
             raise SessionError("LinkedIn pidió iniciar sesión o una verificación")
         try:
             page.wait_for_selector('main [data-testid="expandable-text-box"], main [data-testid^="ReactionFacepileCollection"]',
-                                   timeout=wait_ms)
+                                   state="attached", timeout=wait_ms)
         except Exception:  # noqa: BLE001
             if challenged(page):
                 raise SessionError("LinkedIn pidió iniciar sesión o una verificación") from None

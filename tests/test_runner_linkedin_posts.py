@@ -1,6 +1,7 @@
 """Publicaciones de LinkedIn donde etiquetan a la persona, en un LinkedIn falso con la estructura real (2026-11-26):
 menciones con `highlightedUpdateUrn`/`dashCommentUrn`, texto en `expandable-text-box`, enlaces externos en
-/safety/go/?url=…, afiche de `media.licdn.com/…/feedshare…` y comentarios después del cuadro de comentarios. Sin red."""
+/safety/go/?url=…, afiche de `media.licdn.com/…/feedshare…` y comentarios después del cuadro de comentarios. Los
+enlaces de los avisos miden 0 px de alto, como en la página real. Sin red."""
 
 import re
 import struct
@@ -34,10 +35,12 @@ COMMENT_MENTION = ("https://www.linkedin.com/feed/?highlightedUpdateUrn=urn%3Ali
 POST_MENTION = ("https://www.linkedin.com/feed/?highlightedUpdateUrn=urn%3Ali%3Aactivity%3A7530000000000000000"
                 "&highlightedUpdateType=MENTIONED_YOU_IN_THIS")
 
+HIDDEN = "display: flex; height: 0; overflow: hidden"  # el enlace real del aviso mide 0 px de alto (2026-11-26)
 NOTIFICATIONS = f"""<html><body><main><h2>Menciones</h2>
-<div><div><a href="{COMMENT_MENTION}"><span>Daniela Maestre te ha mencionado en un comentario</span>
-  <p>🚀 ¡En Grupo Bruno Fritsch buscamos un/a Ingeniero/a de Automatización e IA!</p></a></div><span>1 sem</span></div>
-<div><a href="{POST_MENTION}">Ana Gómez te ha mencionado en una publicación</a></div>
+<div><div><a style="{HIDDEN}" href="{COMMENT_MENTION}"><span></span><span></span></a>
+  <span>Daniela Maestre te ha mencionado en un comentario</span>
+  <p>🚀 ¡En Grupo Bruno Fritsch buscamos un/a Ingeniero/a de Automatización e IA!</p></div><span>1 sem</span></div>
+<div><a style="{HIDDEN}" href="{POST_MENTION}"><span></span><span></span></a><p>Ana Gómez te ha mencionado en una publicación</p></div>
 <div><a href="{COMMENT_MENTION.replace('origin=inapp', 'origin=otro')}">Daniela Maestre te ha mencionado en un comentario</a></div>
 </main></body></html>"""
 
