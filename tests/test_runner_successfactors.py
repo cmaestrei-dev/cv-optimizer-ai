@@ -27,8 +27,9 @@ def radio(qid: int, label: str, options: list[str]) -> str:
 
 
 class FakeSF:
-    def __init__(self, *, logged: bool = True, job_section: bool = True, practice: bool = False):
+    def __init__(self, *, logged: bool = True, job_section: bool = True, practice: bool = False, button: str = "Aplicar"):
         self.logged, self.applied, self.posted, self.job_section, self.practice = logged, 1, [], job_section, practice
+        self.button = button
         self.profile_cv, self.saved = "Camilo_Maestre_Backend_Junior.pdf", []  # subir el CV en el formulario lo cambia también aquí
         self.ignore_saves = False
 
@@ -74,7 +75,7 @@ class FakeSF:
           <label for="837:_txtFld" class="rcmFormFieldLabel"><span class="requiredField">*</span>&nbsp;Si estás de acuerdo con la Declaración de Conformidad, por favor escribe tu nombre completo a continuación.</label>
           <input type="text" id="837:_txtFld" name="disclaimerAcknowledge" onchange="model.firma = this.value">
           <ul id="menu"></ul>
-          <span id="apply" onclick="send()">Aplicar</span>
+          <span id="apply" onclick="send()">{self.button}</span>
           <script>
             const model = {{}};
             function pick(group, id) {{
@@ -190,8 +191,8 @@ def test_applies_with_this_vacancys_cv_and_the_bank(chromium, tmp_path):
 
 
 def test_a_form_without_the_job_section_still_opens(chromium, tmp_path):
-    # Front Mobile (2026-11-26): el formulario no traía «Información específica del puesto» y el lote lo daba por no abierto
-    fake = FakeSF(job_section=False)
+    # Front Mobile (2026-11-26): sin «Información específica del puesto» y con «Solicitar» al final, en vez de «Aplicar»
+    fake = FakeSF(job_section=False, button="Solicitar")
     assert run(chromium, fake, tmp_path).status == "enviada" and len(fake.posted) == 1
 
 
