@@ -30,6 +30,7 @@ from runner.linkedin import ApplyResult, Question
 
 Answerer = Callable[[list[Question]], dict[str, str]]
 SECTION = "Información específica del puesto"  # aparece cuando el formulario terminó de cargar
+FORM_TITLE = re.compile(r"^\s*Puestos vacantes:")  # el formulario de una oferta sin preguntas propias no trae SECTION
 APPLIED = re.compile(r"Puestos solicitados\s*\((\d+)\)")
 ALREADY = re.compile(r"ya (ha|has) (solicitado|aplicado|postulado)|already applied", re.I)
 CURRENT_CV = re.compile(r"Curr[ií]culum\s+Descargar documento\s+(\S.*?\.(?:pdf|docx?|txt|rtf))\b", re.I)
@@ -128,6 +129,9 @@ def _open_form(page, offer_url: str) -> str:
         if page.locator("input[type=password]:visible").count():
             return "sin_sesion"
         if page.get_by_text(SECTION, exact=True).count() or ALREADY.search(page.inner_text("body")[:3000]):
+            break
+        # Sin preguntas del puesto (Front Mobile, 2026-11-26): el título del formulario y su «Aplicar» final
+        if page.get_by_text(FORM_TITLE).count() and _apply_button(page).count():
             break
     else:
         return "no abrió el formulario de postulación"

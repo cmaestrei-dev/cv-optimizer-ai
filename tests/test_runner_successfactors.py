@@ -26,8 +26,8 @@ def radio(qid: int, label: str, options: list[str]) -> str:
 
 
 class FakeSF:
-    def __init__(self, *, logged: bool = True):
-        self.logged, self.applied, self.posted = logged, 1, []
+    def __init__(self, *, logged: bool = True, job_section: bool = True):
+        self.logged, self.applied, self.posted, self.job_section = logged, 1, [], job_section
         self.profile_cv, self.saved = "Camilo_Maestre_Backend_Junior.pdf", []  # subir el CV en el formulario lo cambia también aquí
         self.ignore_saves = False
 
@@ -36,12 +36,13 @@ class FakeSF:
         # una lista redibuja (lo respondido se pierde y los campos del perfil se ven vacíos un momento), y «Detalles»
         # depende de «¿Cómo supo de este puesto?».
         return f"""<html><body><a>Salir</a><span>Ampliar todas las secciones</span>
+          <div>Puestos vacantes: Ingeniero/a de Software Backend (Junior) (66157)</div>
           <div>Mis documentos * Currículum Descargar documento <span id="cv-name">CV_viejo.pdf</span> Última modificación: 01/04/2026
             <span id="41:_attachIcon" onclick="document.getElementById('42:_file').style.display='block'">✎</span>
             <input type="file" id="42:_file" style="display:none" onchange="uploaded(this)"></div>
           <div><label for="87:_input" class="rcmFormFieldLabel"><span class="requiredField">*</span>&nbsp;País de nacimiento</label>
             <input id="87:_input" role="combobox" value="Colombia" onkeydown="menu(this, ['Colombia', 'Venezuela'])"></div>
-          <div><h3>Información específica del puesto</h3>
+          <div>{"<h3>Información específica del puesto</h3>" if self.job_section else ""}
             <label for="800:_input" class="rcmFormFieldLabel"><span class="requiredField">*</span>&nbsp;¿Cómo supo de este puesto?</label>
             <input id="800:_input" role="combobox" onkeydown="menu(this, ['Otros Portales de Empleo', 'Portal de Empleo Externo'])">
             <label for="810:_input" class="rcmFormFieldLabel"><span class="requiredField">*</span>&nbsp;Detalles</label>
@@ -174,6 +175,12 @@ def test_applies_with_this_vacancys_cv_and_the_bank(chromium, tmp_path):
         "720": "Si.", "730:": "2000000", "740:": "5-6 a 10 semestre carrera universitaria",
         "firma": "Camilo Andres Maestre Iglesias"}  # todo confirmado después de subir el CV; el país del perfil, intacto
     assert sent["cv"] == "Camilo_Maestre_Backend_Junior.pdf"
+
+
+def test_a_form_without_the_job_section_still_opens(chromium, tmp_path):
+    # Front Mobile (2026-11-26): el formulario no traía «Información específica del puesto» y el lote lo daba por no abierto
+    fake = FakeSF(job_section=False)
+    assert run(chromium, fake, tmp_path).status == "enviada" and len(fake.posted) == 1
 
 
 def test_dry_run_unanswered_and_no_session_never_send(chromium, tmp_path):
