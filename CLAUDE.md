@@ -56,7 +56,7 @@ python scripts/export_openapi.py web/openapi.json && (cd web && npm run api:type
 - Las cuentas del SaaS (`auth_subject` no vacío) nunca se listan en Streamlit: allí un perfil sin contraseña se abre sin pedirla.
 - La API nunca acepta tokens sin verificar firma, emisor y vencimiento; el secreto de desarrollo no funciona con Postgres. En la API, `NotFoundError` responde 404 igual exista o no el recurso en otra cuenta.
 - Los eventos de una postulación nunca se editan ni se borran (solo con la postulación completa).
-- Los tests nunca tocan bases reales: `tests/conftest.py` fuerza un SQLite temporal.
+- Los tests nunca tocan bases reales ni los archivos del bot: `tests/conftest.py` fuerza un SQLite temporal y carpetas temporales para la configuración, el estado, Telegram y el navegador del bot (`CVO_BOT_CONFIG_DIR`, `CVO_BOT_DATA_DIR`).
 - Nunca versionar datos personales ni secretos (`.streamlit/secrets.toml`, `.env`, `data/`).
 
 ## Reglas de producto

@@ -431,6 +431,20 @@ def test_waits_for_the_graphical_session_from_systemd(monkeypatch):
         browser.ensure_display(wait_seconds=0)
 
 
+def test_chrome_gets_the_display_found_after_playwright_started(monkeypatch, tmp_path):
+    """Vuelta del 25-11 al encender: el controlador de Playwright no tenía DISPLAY y Chrome no abría."""
+    from runner import browser
+
+    monkeypatch.delenv("DISPLAY", raising=False)
+    monkeypatch.setattr(browser, "ensure_display", lambda: browser.os.environ.__setitem__("DISPLAY", ":0"))
+    monkeypatch.setattr(browser, "wait_free", lambda wait_seconds: None)
+    monkeypatch.setattr(browser, "_prepare_profile", lambda: None)
+    launched = {}
+    chromium = SimpleNamespace(launch_persistent_context=lambda path, **kwargs: launched.update(kwargs) or "ctx")
+    assert browser.open_context(SimpleNamespace(chromium=chromium)) == "ctx"
+    assert launched["env"]["DISPLAY"] == ":0"
+
+
 class TestAnswerer:
     """Las preguntas de experiencia sin respaldo en el perfil, según `sin_evidencia` (el resto no cambia)."""
 
