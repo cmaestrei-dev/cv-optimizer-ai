@@ -1,4 +1,5 @@
-"""Publicaciones de LinkedIn donde etiquetan a la persona: vacantes en posts normales, con texto o con un afiche.
+"""Vacantes en publicaciones normales de LinkedIn (texto o afiche): las que etiquetan a la persona y las que el bot
+busca solo («estamos contratando desarrollador», últimas 24 horas). Pocos candidatos las aprovechan.
 
 Con la sesión del navegador del bot lee el filtro «Menciones» de las notificaciones y cada publicación: su texto, los
 enlaces que trae y sus imágenes. Solo lectura: no comenta, no reacciona y nunca abre los enlaces de la publicación
@@ -8,15 +9,22 @@ publicación van antes del cuadro de comentarios y de las reacciones; los coment
 
 import re
 from dataclasses import dataclass, field
-from urllib.parse import parse_qs, unquote, urlparse
+from urllib.parse import parse_qs, quote, unquote, urlparse
 
 MENTIONS_URL = "https://www.linkedin.com/notifications/?filter=mentions_all"
+SEARCH_URL = "https://www.linkedin.com/search/results/content/?keywords={}&datePosted=%22{}%22&sortBy=%22date_posted%22"
+PERIODS = {"dia": "past-24h", "semana": "past-week", "mes": "past-month"}
 POST_URL = "https://www.linkedin.com/feed/update/urn:li:activity:{}/"
 MAX_IMAGES = 3
 MAX_IMAGE_BYTES = 1_200_000  # lo que acepta la app por imagen
 IMAGE_TYPES = ("image/jpeg", "image/png", "image/webp")
 
 _ACTIVITY = re.compile(r"urn:li:activity:(\d+)")
+_IN_RESULTS = re.compile(r"urn(?::|%3A)li(?::|%3A)activity(?::|%3A)(\d{15,})")
+# Quien busca empleo publica con las mismas palabras («estoy buscando un nuevo empleo… #OpenToWork»): no es una vacante.
+_SEEKER = re.compile(r"(#?open ?to ?work|busco (empleo|trabajo)|estoy buscando (un |una )?(nuevo |nueva )?(empleo|trabajo|"
+                     r"oportunidad|puesto|rol)|me encuentro en b[uú]squeda|en b[uú]squeda (activa )?de (empleo|trabajo|nuevas)|"
+                     r"looking for (a )?(new )?(job|role|opportunit))", re.I)
 _EMAIL = re.compile(r"[\w.+-]+@[\w-]+(?:\.[\w-]+)*\.[a-z]{2,}", re.I)
 _JOB = re.compile(r"(contrat|vacante|buscamos|estamos buscando|empleo|oportunidad laboral|oferta laboral|hiring|"
                   r"postula|postular|aplica|hoja de vida|\bh\.?v\b|\bcv\b|curr[ií]cul|requisitos|cargo|se busca|"
@@ -97,6 +105,10 @@ class Post:
     @property
     def other_links(self) -> list[str]:
         return [url for url, _ in self.links if not portal_offer(url)]
+
+    def job_seeker(self) -> bool:
+        """La publicación es de alguien que busca empleo, no de quien contrata."""
+        return bool(_SEEKER.search(self.text))
 
     def looks_like_job(self) -> bool:
         """Sin imágenes ni ofertas enlazadas, una publicación sin palabras de empleo no se manda a la IA."""
@@ -187,6 +199,38 @@ def mentions(page, *, wait_ms: int = 15_000) -> list[Mention]:
                                                                                         line, re.I)), "")
             out[activity] = Mention(activity, who[:200])
     return list(out.values())
+
+
+def search(page, keywords: str, *, period: str = "dia", scrolls: int = 2) -> list[str]:
+    """Publicaciones recientes con esas palabras (las más nuevas primero). La interfaz de 2026-11 no pone el id en la
+    página: viene en la respuesta del servidor (`urn:li:activity:…`), la del documento y las que cargan al bajar."""
+    loaded: list = []
+
+    def keep(response) -> None:
+        url = response.url
+        if url.startswith("https://www.linkedin.com/search/results/content/") or "/flagship-web/rsc-action/" in url:
+            loaded.append(response)
+
+    page.on("response", keep)
+    try:
+        page.goto(SEARCH_URL.format(quote(keywords), PERIODS.get(period, "past-24h")), wait_until="domcontentloaded")
+        if challenged(page):
+            raise SessionError("LinkedIn pidió iniciar sesión o una verificación")
+        page.wait_for_timeout(3000)
+        for _ in range(scrolls):  # más resultados al bajar, como una persona
+            page.mouse.wheel(0, 2500)
+            page.wait_for_timeout(2500)
+    finally:
+        page.remove_listener("response", keep)
+    found: dict[str, None] = {}
+    for response in loaded:
+        try:
+            body = response.text()
+        except Exception:  # noqa: BLE001 — una respuesta que ya no se puede leer no detiene la búsqueda
+            continue
+        for match in _IN_RESULTS.finditer(body):
+            found.setdefault(match.group(1))
+    return list(found)
 
 
 def read_post(page, activity: str, *, wait_ms: int = 15_000) -> Post:

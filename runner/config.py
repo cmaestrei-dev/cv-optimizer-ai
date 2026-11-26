@@ -30,6 +30,11 @@ experiencia_por_defecto = 2   # con sin_evidencia = "si": años que se responden
 pausa_entre_envios_seg = [120, 240]   # espera al azar entre dos envíos
 revisar_menciones = true   # leer las publicaciones de LinkedIn donde te etiquetan (vacantes en posts, texto o afiche)
 
+[publicaciones]   # vacantes publicadas como posts de LinkedIn (texto o afiche), que pocos aprovechan
+buscar = ["estamos contratando analista", "vacante analista"]
+periodo = "dia"   # dia (últimas 24 horas), semana o mes
+maximo = 10       # publicaciones nuevas que se leen por vuelta
+
 [[busqueda]]
 palabras = "analista de operaciones"
 lugar = "Colombia"     # Colombia, Bogotá, Cartagena, «Medellín, Antioquia, Colombia» o un geoId
@@ -119,6 +124,9 @@ class Config:
     min_scores: dict[str, int] = field(default_factory=dict)  # compatibilidad mínima de cada portal (0 = sin mínimo)
     general_cvs: dict[str, str] = field(default_factory=dict)  # PDF general fijo de cada portal (Computrabajo)
     mentions: bool = True  # leer las publicaciones de LinkedIn donde te etiquetan (vacantes en posts normales)
+    post_searches: list[str] = field(default_factory=list)  # [publicaciones] buscar: vacantes publicadas como posts
+    post_period: str = "dia"  # dia | semana | mes
+    post_max: int = 10  # publicaciones nuevas de las búsquedas que se leen por vuelta
 
     def cap(self, portal: str) -> int:
         return self.daily_cap if portal == "linkedin" else self.portal_caps.get(portal, 20)
@@ -224,6 +232,13 @@ def load(path: Path = CONFIG_FILE) -> Config:
     default_years = int(raw.get("experiencia_por_defecto", 2))
     if not 0 <= default_years <= 10:
         raise ConfigError("«experiencia_por_defecto» debe estar entre 0 y 10 años.")
+    posts = raw.get("publicaciones", {})
+    post_period = str(posts.get("periodo", "dia")).strip().lower()
+    if post_period not in ("dia", "semana", "mes"):
+        raise ConfigError("[publicaciones] «periodo» debe ser \"dia\", \"semana\" o \"mes\".")
+    post_max = int(posts.get("maximo", 10))
+    if not 0 <= post_max <= 30:
+        raise ConfigError("[publicaciones] «maximo» debe estar entre 0 y 30.")
     pause = raw.get("pausa_entre_envios_seg", [120, 240])
     if not (isinstance(pause, list) and len(pause) == 2 and 30 <= int(pause[0]) <= int(pause[1])):
         raise ConfigError("«pausa_entre_envios_seg» debe ser [mínimo, máximo] en segundos, desde 30.")
@@ -238,4 +253,6 @@ def load(path: Path = CONFIG_FILE) -> Config:
         no_evidence=no_evidence.replace("sí", "si"), default_years=default_years, pause_seconds=(int(pause[0]), int(pause[1])),
         portal_caps=portal_caps, min_scores=min_scores, general_cvs=general_cvs,
         mentions=bool(raw.get("revisar_menciones", True)),
+        post_searches=[str(q).strip() for q in posts.get("buscar", []) if str(q).strip()],
+        post_period=post_period, post_max=post_max,
     )

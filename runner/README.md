@@ -70,8 +70,21 @@ publicación. LinkedIn los envuelve en `/safety/go/?url=…`, y de ahí se toma 
   si no lo dice. Para enviar tu CV a un correo, lo haces tú: el bot no manda correos por ti.
 - **Lo que no parece una vacante** (sin palabras de empleo ni imágenes) no gasta IA.
 
-Para ver qué encontraría sin pasar nada a la app: `python -m runner menciones --prueba`. Para apagarlo:
-`revisar_menciones = false`.
+Además, el bot caza solo vacantes publicadas como posts, un nicho que pocos aprovechan. Con `[publicaciones]` busca
+cada frase en las publicaciones recientes de LinkedIn, las más nuevas primero, y lee las nuevas hasta `maximo` por
+vuelta. Antes de gastar IA omite a quien busca empleo (#OpenToWork, «estoy buscando un nuevo empleo»), lo que no
+tiene palabras de empleo y lo que no tiene ninguna palabra de `[incluir]`. Después de la app, también descarta lo que
+es en otro país y no es remoto (Guayaquil, Lima, Madrid…).
+
+```toml
+[publicaciones]
+buscar = ["estamos contratando desarrollador", "vacante desarrollador junior", "vacante practicante sistemas"]
+periodo = "dia"   # dia (últimas 24 horas), semana o mes
+maximo = 10       # publicaciones nuevas que se leen por vuelta
+```
+
+Para ver qué encontraría sin pasar nada a la app: `python -m runner menciones --prueba`. Para apagar las menciones:
+`revisar_menciones = false`; para no buscar, quita `[publicaciones]`.
 
 ## Computrabajo
 
