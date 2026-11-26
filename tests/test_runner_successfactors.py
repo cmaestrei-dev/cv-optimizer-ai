@@ -27,9 +27,10 @@ def radio(qid: int, label: str, options: list[str]) -> str:
 
 
 class FakeSF:
-    def __init__(self, *, logged: bool = True, job_section: bool = True, practice: bool = False, button: str = "Aplicar"):
+    def __init__(self, *, logged: bool = True, job_section: bool = True, practice: bool = False, button: str = "Aplicar",
+                 picklist_rows: bool = False, reject: bool = False):
         self.logged, self.applied, self.posted, self.job_section, self.practice = logged, 1, [], job_section, practice
-        self.button = button
+        self.button, self.picklist_rows, self.reject = button, picklist_rows, reject
         self.profile_cv, self.saved = "Camilo_Maestre_Backend_Junior.pdf", []  # subir el CV en el formulario lo cambia también aquí
         self.ignore_saves = False
 
@@ -43,6 +44,24 @@ class FakeSF:
         return radio(760, "¿Tienes autorización por parte de la universidad para iniciar la práctica profesional?, ¿por cuánto tiempo?",
                      ["NO", "6 MESES", "12 MESES"]) + codes
 
+    def _source(self) -> str:
+        """«¿Cómo supo de este puesto?» y «Detalles», en cascada. En Front Mobile (2026-11-26) van en filas de tabla: la
+        etiqueta sin clase, con «*» en `span.required`, apunta a un campo oculto `appFieldRequired` que guarda lo elegido
+        en el combobox de su fila."""
+        primary = "menu(this, ['Otros Portales de Empleo', 'Portal de Empleo Externo'])"
+        secondary = "menu(this, model['800:_input'] === 'Portal de Empleo Externo' ? ['empleo.grupobancolombia.com'] : ['Indeed'])"
+        if not self.picklist_rows:
+            return (f'<label for="800:_input" class="rcmFormFieldLabel"><span class="requiredField">*</span>&nbsp;¿Cómo supo de este '
+                    f'puesto?</label><input id="800:_input" role="combobox" onkeydown="{primary}">'
+                    f'<label for="810:_input" class="rcmFormFieldLabel"><span class="requiredField">*</span>&nbsp;Detalles</label>'
+                    f'<input id="810:_input" role="combobox" onkeydown="{secondary}">')
+        return "<table>" + "".join(
+            f'<tr><th class="formFieldLabel"><label for="tor__f{name}">{label}<span class="required">*</span></label></th>'
+            f'<td><input id="{box}" role="combobox" placeholder="Sin selección" onkeydown="{script}">'
+            f'<input id="tor__f{name}" type="hidden" class="appFieldRequired" value=""></td></tr>'
+            for name, label, box, script in (("customSourcePrimary", "¿Cómo supo de este puesto?", "800:_input", primary),
+                                             ("customSourceSecondary", "Detalles", "810:_input", secondary))) + "</table>"
+
     def _form(self) -> str:
         # Como el real: los valores cuentan cuando el formulario los recibe (change o clic), subir el CV o elegir en
         # una lista redibuja (lo respondido se pierde y los campos del perfil se ven vacíos un momento), y «Detalles»
@@ -55,11 +74,7 @@ class FakeSF:
           <div><label for="87:_input" class="rcmFormFieldLabel"><span class="requiredField">*</span>&nbsp;País de nacimiento</label>
             <input id="87:_input" role="combobox" value="Colombia" onkeydown="menu(this, ['Colombia', 'Venezuela'])"></div>
           <div>{"<h3>Información específica del puesto</h3>" if self.job_section else ""}
-            <label for="800:_input" class="rcmFormFieldLabel"><span class="requiredField">*</span>&nbsp;¿Cómo supo de este puesto?</label>
-            <input id="800:_input" role="combobox" onkeydown="menu(this, ['Otros Portales de Empleo', 'Portal de Empleo Externo'])">
-            <label for="810:_input" class="rcmFormFieldLabel"><span class="requiredField">*</span>&nbsp;Detalles</label>
-            <input id="810:_input" role="combobox"
-                   onkeydown="menu(this, model['800:_input'] === 'Portal de Empleo Externo' ? ['empleo.grupobancolombia.com'] : ['Indeed'])">
+            {self._source()}
             {radio(700, "¿Tienes algún pariente, cónyuge o persona con relación análoga que trabaje actualmente con Bancolombia?",
                    ["1 familiar", "Mas de 3 familiares", "No tengo familiares en Bancolombia"])}
             {radio(710, "¿Cómo te enteraste de esta vacante?",
@@ -85,7 +100,9 @@ class FakeSF:
             function menu(input, items) {{
               const ul = document.getElementById('menu'); ul.innerHTML = '';
               for (const it of items) {{ const li = document.createElement('li'); li.className = 'globalMenuItem'; li.innerText = it;
-                li.onclick = () => {{ input.value = it; model[input.id] = it; ul.innerHTML = ''; redraw(); }}; ul.appendChild(li); }} }}
+                li.onclick = () => {{ input.value = it; model[input.id] = it; ul.innerHTML = '';
+                  const hidden = input.parentElement.querySelector('input[type=hidden]'); if (hidden) hidden.value = it;
+                  redraw(); }}; ul.appendChild(li); }} }}
             function redraw() {{  // un campo del perfil se ve vacío mientras se redibuja (aquí: sus dos primeras lecturas)
               let reads = 0;
               Object.defineProperty(document.getElementById('87:_input'), 'value',
@@ -97,6 +114,8 @@ class FakeSF:
               document.querySelectorAll('textarea, input[type=text], input[role=combobox]').forEach(e => e.value = '');
               redraw(); }}
             async function send() {{
+              if ({str(self.reject).lower()}) {{  // el portal se niega: avisa en la página y no registra nada
+                document.body.insertAdjacentHTML('beforeend', '<div>¿Cómo supo de este puesto? es un campo obligatorio.</div>'); return; }}
               await fetch('/apply', {{method: 'POST', body: JSON.stringify({{model, cv: document.getElementById('cv-name').innerText}})}});
               document.body.insertAdjacentHTML('beforeend', '<p>Gracias por postularte</p>'); }}
           </script></body></html>"""
@@ -191,9 +210,17 @@ def test_applies_with_this_vacancys_cv_and_the_bank(chromium, tmp_path):
 
 
 def test_a_form_without_the_job_section_still_opens(chromium, tmp_path):
-    # Front Mobile (2026-11-26): sin «Información específica del puesto» y con «Solicitar» al final, en vez de «Aplicar»
-    fake = FakeSF(job_section=False, button="Solicitar")
+    # Front Mobile (2026-11-26): sin «Información específica del puesto», «Solicitar» al final y las listas de «¿Cómo supo…?»
+    # en filas de tabla (el lote no las veía y el portal rechazó el envío)
+    fake = FakeSF(job_section=False, button="Solicitar", picklist_rows=True)
     assert run(chromium, fake, tmp_path).status == "enviada" and len(fake.posted) == 1
+    (sent,) = fake.posted
+    assert (sent["model"]["800:_input"], sent["model"]["810:_input"]) == ("Portal de Empleo Externo", "empleo.grupobancolombia.com")
+
+
+def test_a_rejected_send_is_never_reported_as_sent(chromium, tmp_path):
+    result = run(chromium, FakeSF(reject=True), tmp_path)
+    assert result.status == "error" and "es un campo obligatorio" in result.detail, result
 
 
 def test_the_same_question_several_times_gets_one_answer_each(chromium, tmp_path):
