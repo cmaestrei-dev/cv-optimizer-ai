@@ -244,8 +244,17 @@ def _settle(page, *, rounds: int = 8, pause: float = 2) -> None:
 
 def _pending(page) -> list[dict]:
     """Obligatorias y vacías. Las etiquetas sin control (o de un tipo que no se maneja, como las fechas) se omiten:
-    el perfil ya las trae llenas y el portal avisa si falta algo."""
-    return [q for q in page.evaluate(_QUESTIONS) if q["required"] and q["id"] and q["kind"] != "otro" and not q["value"].strip()]
+    el perfil ya las trae llenas y el portal avisa si falta algo. Una misma pregunta puede repetirse (los cinco «código
+    de la práctica» de las prácticas de Bancolombia): `n` es su lugar entre las de igual etiqueta y `count` cuántas hay
+    (los ids cambian al redibujar; el orden no)."""
+    questions = page.evaluate(_QUESTIONS)
+    seen: dict[str, int] = {}
+    for q in questions:
+        q["n"] = seen.get(q["label"], 0)
+        seen[q["label"]] = q["n"] + 1
+    for q in questions:
+        q["count"] = seen[q["label"]]
+    return [q for q in questions if q["required"] and q["id"] and q["kind"] != "otro" and not q["value"].strip()]
 
 
 def apply(page, offer_url: str, cv_pdf: Path, answerer: Answerer, *, submit: bool, full_name: str,
@@ -267,9 +276,9 @@ def apply(page, offer_url: str, cv_pdf: Path, answerer: Answerer, *, submit: boo
         return ApplyResult("saltada", "No quedó adjunto el CV de esta vacante (no se envía con otro)")
     _settle(page)
     missing: list[str] = []
-    asked: set[str] = set()
+    asked: set[tuple[str, int]] = set()
     for _ in range(40):  # una pregunta a la vez: la siguiente lista puede depender de la anterior
-        todo = [q for q in _pending(page) if q["label"] not in asked and "Declaración de Conformidad" not in q["label"]]
+        todo = [q for q in _pending(page) if (q["label"], q["n"]) not in asked and "Declaración de Conformidad" not in q["label"]]
         if not todo:
             break
         q = todo[0]
@@ -277,12 +286,15 @@ def apply(page, offer_url: str, cv_pdf: Path, answerer: Answerer, *, submit: boo
             _settle(page, rounds=3)
             if all(p["label"] != q["label"] for p in _pending(page)):
                 continue
-        asked.add(q["label"])
+        asked.add((q["label"], q["n"]))
         if q["kind"] == "lista":
             q["options"] = [[o, o] for o in _list_options(page, q["id"])]
         question = Question("radio" if q["options"] else ("textarea" if q["kind"] == "textarea" else "text"),
                             q["label"], True, "", [o for o, _ in q["options"]], [q["id"]])
         value = (bank_answer(question.label, overrides) or answerer([question]).get(question.label) or "").strip()
+        if q["count"] > 1 and "|" in value:  # «SIS29|SIS22» en cinco campos iguales: uno por campo, en orden y repitiendo
+            parts = [v.strip() for v in value.split("|") if v.strip()]
+            value = parts[q["n"] % len(parts)]
         if q["options"]:
             option = pick_option(value, question.options) if value else None
             wrong = not option or (negative(option) and not value.lower().startswith("no"))  # nunca un «no» que no se dijo

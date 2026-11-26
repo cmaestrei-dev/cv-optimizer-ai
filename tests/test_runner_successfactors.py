@@ -10,6 +10,7 @@ import pytest
 
 playwright = pytest.importorskip("playwright.sync_api")
 
+from runner import __main__ as cli  # noqa: E402
 from runner import successfactors_apply as sf  # noqa: E402
 
 OFFER = "https://empleo.grupobancolombia.com/bancolombia/job/Etipani-Ingenieroa-Software-Backend-COL/1451777800/"
@@ -26,10 +27,20 @@ def radio(qid: int, label: str, options: list[str]) -> str:
 
 
 class FakeSF:
-    def __init__(self, *, logged: bool = True, job_section: bool = True):
-        self.logged, self.applied, self.posted, self.job_section = logged, 1, [], job_section
+    def __init__(self, *, logged: bool = True, job_section: bool = True, practice: bool = False):
+        self.logged, self.applied, self.posted, self.job_section, self.practice = logged, 1, [], job_section, practice
         self.profile_cv, self.saved = "Camilo_Maestre_Backend_Junior.pdf", []  # subir el CV en el formulario lo cambia también aquí
         self.ignore_saves = False
+
+    @staticmethod
+    def _practice() -> str:
+        """Como la práctica de Bancolombia del 2026-11-26: la duración en opciones y cinco campos «código» iguales."""
+        codes = "".join(
+            f'<label for="8{i}:_txtArea" class="rcmFormQuestionLabel"><span class="requiredField">*</span>&nbsp;¿Cuál es el código '
+            f'de la práctica a la que deseas aplicar?</label><textarea id="8{i}:_txtArea" onchange="model[this.id] = this.value">'
+            f'</textarea>' for i in range(5))
+        return radio(760, "¿Tienes autorización por parte de la universidad para iniciar la práctica profesional?, ¿por cuánto tiempo?",
+                     ["NO", "6 MESES", "12 MESES"]) + codes
 
     def _form(self) -> str:
         # Como el real: los valores cuentan cuando el formulario los recibe (change o clic), subir el CV o elegir en
@@ -58,6 +69,7 @@ class FakeSF:
             <label for="740:" class="rcmFormQuestionLabel"><span class="requiredField">*</span>&nbsp;¿Cuál es tu nivel de formación académica?</label>
             <select id="740:" onchange="model[this.id] = this.value"><option>1-Bachiller</option><option>5-6 a 10 semestre carrera universitaria</option></select>
             <label for="750:" class="rcmFormQuestionLabel">¿Algo más que quieras contarnos?</label><textarea id="750:"></textarea>
+            {self._practice() if self.practice else ""}
           </div>
           <label for="837:_txtFld" class="rcmFormFieldLabel"><span class="requiredField">*</span>&nbsp;Si estás de acuerdo con la Declaración de Conformidad, por favor escribe tu nombre completo a continuación.</label>
           <input type="text" id="837:_txtFld" name="disclaimerAcknowledge" onchange="model.firma = this.value">
@@ -148,7 +160,7 @@ def open_page(chromium, fake):
     return page
 
 
-def run(chromium, fake, tmp_path, *, submit=True, answers=None):
+def run(chromium, fake, tmp_path, *, submit=True, answers=None, extra=None):
     page = open_page(chromium, fake)
     cv = tmp_path / "Camilo_Maestre_Backend_Junior.pdf"
     cv.write_bytes(b"%PDF-1.4")
@@ -156,7 +168,7 @@ def run(chromium, fake, tmp_path, *, submit=True, answers=None):
     overrides = {"pariente, conyuge|relacion analoga": "No tengo familiares en Bancolombia",
                  "como supo de este puesto": "Portal de Empleo Externo", "detalles": "empleo.grupobancolombia.com",
                  "como te enteraste": "Portal de empleo de Bancolombia", "nivel de formacion academica": "5-6 a 10 semestre carrera universitaria",
-                 "salario actual|ultimo salario": "2000000"}
+                 "salario actual|ultimo salario": "2000000", **(extra or {})}
     try:
         return sf.apply(page, OFFER, cv, lambda qs: {q.label: known[q.label] for q in qs if q.label in known}, submit=submit,
                         full_name="Camilo Andres Maestre Iglesias", overrides=overrides, login_url=LOGIN)
@@ -181,6 +193,17 @@ def test_a_form_without_the_job_section_still_opens(chromium, tmp_path):
     # Front Mobile (2026-11-26): el formulario no traía «Información específica del puesto» y el lote lo daba por no abierto
     fake = FakeSF(job_section=False)
     assert run(chromium, fake, tmp_path).status == "enviada" and len(fake.posted) == 1
+
+
+def test_the_same_question_several_times_gets_one_answer_each(chromium, tmp_path):
+    fake = FakeSF(practice=True)
+    answers = cli._offer_answers({"codigo de la practica": "OTRA01"}, {"respuestas": {
+        "codigo de la practica": "SIS29|SIS22", "autorizacion por parte de la universidad": "6 MESES"}})
+    assert answers["codigo de la practica"] == "SIS29|SIS22"  # las de la oferta mandan sobre las del portal
+    assert run(chromium, fake, tmp_path, extra=answers).status == "enviada"
+    (sent,) = fake.posted
+    assert [sent["model"][f"8{i}:_txtArea"] for i in range(5)] == ["SIS29", "SIS22", "SIS29", "SIS22", "SIS29"]
+    assert sent["model"]["760"] == "6 MESES"
 
 
 def test_dry_run_unanswered_and_no_session_never_send(chromium, tmp_path):

@@ -186,6 +186,11 @@ firma = "Tu nombre completo"   # con esto autorizas aceptar la declaración de c
 respuestas = { "como te enteraste" = "Portal de empleo de Bancolombia" }
 ```
 
+Si una pregunta se repite con la misma etiqueta, como los cinco «¿Cuál es el código de la práctica…?» de las prácticas
+de Bancolombia, una respuesta con «|» se reparte en orden, un valor por campo, repitiendo si faltan: «SIS29|SIS22».
+Lo que solo vale para una oferta, como los códigos que vienen en el PDF de esa práctica, va en `respuestas` del
+registro de esa oferta en `estado.json`, con la vuelta parada. Esas respuestas mandan sobre las del portal.
+
 ## Vigilar portales de empresas
 
 Algunas empresas publican solo en su propio portal, que pide una cuenta por empresa: Bancolombia y Ecopetrol usan

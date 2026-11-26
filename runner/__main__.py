@@ -1145,6 +1145,14 @@ def _not_sent_yet(api: Api, state: State, todo: list, limit: int) -> list:
     return out
 
 
+def _offer_answers(site_answers: dict[str, str], rec: dict) -> dict[str, str]:
+    """Las respuestas de un portal más las de una oferta (`respuestas` en su registro del estado), que van primero: p. ej.
+    los códigos de una práctica de Bancolombia, que solo valen para esa oferta (sacados de su PDF)."""
+    answers = dict(rec.get("respuestas") or {})
+    answers.update({k: v for k, v in site_answers.items() if k not in answers})
+    return answers
+
+
 def _batch_pending(state: State, site) -> list[tuple[str, dict]]:
     """Las ofertas de un portal con «postular» que la app ya analizó, encajan y aún no se enviaron."""
     from runner import watch
@@ -1224,7 +1232,7 @@ def cmd_lote(args) -> int:
                 print(f"\n· {rec.get('cargo', '')}  (compatibilidad {rec.get('puntaje')})")
                 answerer = _answerer(api, conf, rec["app"], units=True)
                 result = sf.apply(page, rec["url"], Path(rec["cv"]), answerer, submit=submit, full_name=site.signature,
-                                  overrides=site.answers, login_url=site.login_url)
+                                  overrides=_offer_answers(site.answers, rec), login_url=site.login_url)
                 print(f"  → {result.status}{': ' + result.detail if result.detail else ''}")
                 if result.unanswered:
                     print("    Sin respuesta:", "; ".join(result.unanswered[:4]))
