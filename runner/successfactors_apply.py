@@ -130,7 +130,7 @@ def _open_form(page, offer_url: str) -> str:
             return "sin_sesion"
         if page.get_by_text(SECTION, exact=True).count() or ALREADY.search(page.inner_text("body")[:3000]):
             break
-        # Sin preguntas del puesto (Front Mobile, 2026-11-26): el título del formulario y su «Aplicar» final
+        # Sin la sección del puesto (Front Mobile, 2026-11-26): el título del formulario y su botón final
         if page.get_by_text(FORM_TITLE).count() and _apply_button(page).count():
             break
     else:
@@ -217,8 +217,9 @@ def _sign(page, full_name: str) -> bool:
 
 
 def _apply_button(page):
+    """El botón final del formulario: «Aplicar» o, en algunas ofertas (Front Mobile, 2026-11-26), «Solicitar»."""
     return page.locator("span:visible, button:visible, a:visible, input[type=button]:visible").filter(
-        has_text=re.compile(r"^\s*Aplicar\s*$"))
+        has_text=re.compile(r"^\s*(Aplicar|Solicitar)\s*$"))
 
 
 def _type(page, field_id: str, value: str) -> None:
@@ -316,10 +317,10 @@ def apply(page, offer_url: str, cv_pdf: Path, answerer: Answerer, *, submit: boo
         return ApplyResult("revisada", "Modo prueba: formulario lleno y no se envió")
     button = _apply_button(page)
     if not button.count():
-        return ApplyResult("error", "No encontré el botón «Aplicar» del formulario")
+        return ApplyResult("error", "No encontré el botón «Aplicar» o «Solicitar» del formulario")
     button.last.click()
     time.sleep(6)
-    confirm = page.get_by_role("button", name=re.compile(r"^(Aceptar|Sí|Si|Aplicar|Confirmar|Enviar)$", re.I))
+    confirm = page.get_by_role("button", name=re.compile(r"^(Aceptar|Sí|Si|Aplicar|Solicitar|Confirmar|Enviar)$", re.I))
     if confirm.count():
         confirm.first.click()
         time.sleep(6)
