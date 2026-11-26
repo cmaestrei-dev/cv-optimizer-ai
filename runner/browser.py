@@ -165,8 +165,9 @@ def open_context(playwright, *, headless: bool = False, wait_seconds: int = 1800
         ensure_display()
     wait_free(wait_seconds)
     _prepare_profile()
+    # El entorno va explícito: Playwright arrancó antes de `ensure_display` y Chrome heredaría el suyo, sin pantalla.
     return playwright.chromium.launch_persistent_context(
-        str(PROFILE_DIR), channel="chrome", headless=headless, chromium_sandbox=True,
+        str(PROFILE_DIR), channel="chrome", headless=headless, chromium_sandbox=True, env=dict(os.environ),
         ignore_default_args=["--password-store=basic"], viewport={"width": 1280, "height": 860}, locale="es-CO",
     )
 

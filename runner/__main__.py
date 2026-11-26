@@ -645,7 +645,14 @@ def cmd_diario(_args) -> int:
                                 submit=conf.mode == "auto")
         except Exception:  # noqa: BLE001 — los portales de empresas nunca tumban la vuelta
             traceback.print_exc()
-        code = cmd_postular(argparse.Namespace(prueba=False, max=0, portal=None))
+        failed = ""
+        try:
+            code = cmd_postular(argparse.Namespace(prueba=False, max=0, portal=None))
+        except (cfg.ConfigError, ApiError):
+            raise
+        except Exception as e:  # noqa: BLE001 — si postular falla, igual hay seguimiento y resumen
+            traceback.print_exc()
+            code, failed = 1, f" La postulación falló ({type(e).__name__}): la próxima vuelta lo intenta."
         try:
             conf = cfg.load()
             news = _follow_up(Api(conf.api, conf.token), State(cfg.DATA_DIR / "estado.json"))
@@ -653,7 +660,7 @@ def cmd_diario(_args) -> int:
             traceback.print_exc()
             news = ""
         state = State(cfg.DATA_DIR / "estado.json")
-        notice = f"Hoy: {state.today('enviadas')} enviadas y {state.today('preparadas')} preparadas."
+        notice = f"Hoy: {state.today('enviadas')} enviadas y {state.today('preparadas')} preparadas.{failed}"
         if companies := state.today(_key("enviadas", "empresas")):
             notice += f" Portales de empresas: {companies} enviadas."
         for portal, name in cfg.PORTALS.items():

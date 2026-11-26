@@ -1,4 +1,14 @@
+import os
+import tempfile
+
 import pytest
+
+# El bot (`runner`) nunca lee la configuración, el estado, el token de Telegram ni el navegador reales: en este
+# computador eso hizo que una prueba de la vuelta diaria revisara los portales, creara una postulación en la app y
+# abriera el navegador del bot. Se fija antes de que se importe `runner.config`, que lee estas variables al cargarse.
+_BOT_DIRS = tempfile.mkdtemp(prefix="cvo-bot-tests-")
+os.environ["CVO_BOT_CONFIG_DIR"] = os.path.join(_BOT_DIRS, "config")
+os.environ["CVO_BOT_DATA_DIR"] = os.path.join(_BOT_DIRS, "datos")
 
 
 @pytest.fixture(autouse=True)

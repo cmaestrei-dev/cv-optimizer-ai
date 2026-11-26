@@ -330,6 +330,8 @@ Entregas:
 - [x] **Primera vuelta automática (2026-11-20): 9 enviadas** (una ya «HdV Vista» a los 44 minutos). Dos fallas, corregidas:
   - 13 ofertas tenían preguntas de selección en `/candidate/kq`, no en `apply-kq` como decía la analítica del sitio. El texto de cada pregunta va en un campo oculto `KillerQuestions[i].Title`. Ahora el bot las lee y responde (banco y perfil verificado), o salta la vacante si una queda sin respuesta.
   - La vuelta al encender el computador arrancó antes que la sesión gráfica (`Missing X server`): ahora espera hasta 10 min a que systemd conozca la pantalla.
+  - 2026-11-26: esa espera no bastaba. Playwright arranca su controlador antes de `ensure_display` y Chrome heredaba su entorno, sin pantalla (la vuelta del 25-11 a las 20:25 no envió nada). Ahora `open_context` le pasa el entorno a Chrome. Si postular falla, la vuelta igual hace el seguimiento y manda el resumen con el aviso.
+  - Las pruebas de la vuelta diaria leían la configuración real en el computador del dueño: revisaron los portales, crearon una postulación en la app (la 1075, con CV), anotaron estados del seguimiento real y mandaron un Telegram. Ahora `tests/conftest.py` apunta `CVO_BOT_CONFIG_DIR` y `CVO_BOT_DATA_DIR` a carpetas temporales antes de importar `runner`, y una prueba verifica que ninguna ruta del bot cae en las reales.
   - El banco ya no responde «Inmediata» a «¿disponibilidad para trabajar presencial…?»: «disponibilidad» sola era demasiado amplia.
 - [x] **Menos vacantes saltadas (#42, 2026-11-20):**
   - Preguntas de experiencia sin respaldo en el perfil («¿Tienes experiencia con Azure?», «¿Cuántos años con X?»): con `sin_evidencia = "cero"` responde «No», «0» o «Aún no tengo experiencia con eso.». Nunca inventa un «Sí».

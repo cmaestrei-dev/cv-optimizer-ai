@@ -13,6 +13,14 @@ from runner.state import State
 PY = "/usr/bin/python3"
 
 
+def test_tests_never_see_the_real_bot_files():
+    from runner import browser, telegram
+
+    real = Path.home() / ".config" / "cv-optimizer-bot", Path.home() / ".local" / "share" / "cv-optimizer-bot"
+    for path in (cfg.CONFIG_FILE, cfg.DATA_DIR, telegram.TOKEN_FILE, browser.PROFILE_DIR):
+        assert not any(path.is_relative_to(r) for r in real), path
+
+
 def test_unit_files_run_one_round_at_each_time(tmp_path):
     files = schedule.unit_files(PY, tmp_path / "codigo", ["15:47", "9:17"], tmp_path / "registro.log")
     service, timer = files["cv-optimizer-bot.service"], files["cv-optimizer-bot.timer"]
@@ -84,6 +92,26 @@ def test_round_searches_then_applies_even_if_the_search_breaks(data_dir, monkeyp
     assert order == ["buscar", "postular"]
     assert notices == ["Hoy: 1 enviadas y 0 preparadas. Computrabajo: 0 enviadas y 1 preparadas."]
     assert "RuntimeError" in capsys.readouterr().err
+
+
+def test_round_still_follows_up_and_reports_if_applying_breaks(data_dir, monkeypatch, capsys):
+    _, notices = data_dir
+    monkeypatch.setattr(cli, "cmd_buscar", lambda _args: 0)
+    followed = []
+    monkeypatch.setattr(cli.cfg, "load", lambda: argparse.Namespace(api="http://127.0.0.1:9", token="t", mode="auto"))
+    monkeypatch.setattr(cli, "_auto_apply_watched", lambda *a, **k: None)
+    from runner import telegram
+
+    monkeypatch.setattr(telegram, "pending_questions", lambda state: [])
+    monkeypatch.setattr(cli, "_follow_up", lambda api, state: followed.append(1) or "")
+
+    def postular(_args):
+        raise RuntimeError("Missing X server or $DISPLAY")
+
+    monkeypatch.setattr(cli, "cmd_postular", postular)
+    assert cli.cmd_diario(None) == 1
+    assert followed == [1] and "La postulación falló (RuntimeError)" in notices[-1]
+    assert "Missing X server" in capsys.readouterr().err
 
 
 def test_round_warns_about_a_lost_session_and_a_paused_account(data_dir, monkeypatch):
