@@ -38,8 +38,20 @@ CURRENT_CV = re.compile(r"Curr[ií]culum\s+Descargar documento\s+(\S.*?\.(?:pdf|
 # Las preguntas obligatorias del formulario (las del puesto, `rcmFormQuestionLabel`, y las de la sección
 # «Información específica del puesto», `rcmFormFieldLabel`), con su tipo, opciones y valor actual, en orden.
 _QUESTIONS = """() => {
-  const clean = t => (t || '').replace(/\\u00a0/g, ' ').replace(/\\s+/g, ' ').replace(/^\\*\\s*/, '').trim();
-  return [...document.querySelectorAll('label.rcmFormQuestionLabel, label.rcmFormFieldLabel')].filter(l => l.offsetParent !== null).map(l => {
+  const clean = t => (t || '').replace(/\\u00a0/g, ' ').replace(/\\s+/g, ' ').replace(/^\\*\\s*/, '').replace(/\\s*\\*$/, '').trim();
+  const classed = l => l.classList.contains('rcmFormQuestionLabel') || l.classList.contains('rcmFormFieldLabel');
+  // Listas obligatorias en filas de tabla (Front Mobile, 2026-11-26): la etiqueta, sin esas clases, apunta a un campo
+  // oculto `appFieldRequired`, que guarda lo elegido en el combobox de su fila.
+  const hiddenOf = l => { const t = document.getElementById(l.htmlFor);
+                          return t && t.type === 'hidden' && t.classList.contains('appFieldRequired') ? t : null; };
+  return [...document.querySelectorAll('label.rcmFormQuestionLabel, label.rcmFormFieldLabel, label[for]')]
+      .filter(l => (classed(l) || hiddenOf(l)) && l.offsetParent !== null).map(l => {
+    const hidden = classed(l) ? null : hiddenOf(l);
+    if (hidden) {
+      const box = (l.closest('tr') || l.parentElement).querySelector('[role=combobox]');
+      return {label: clean(l.innerText), required: true, id: box ? box.id : '', kind: box ? 'lista' : 'otro', options: [],
+              value: hidden.value, job: false};
+    }
     const el = document.getElementById(l.htmlFor);
     const q = {label: clean(l.innerText), required: !!l.querySelector('.requiredField'), id: l.htmlFor, kind: 'otro', options: [], value: '',
                job: l.classList.contains('rcmFormQuestionLabel')};
@@ -325,11 +337,14 @@ def apply(page, offer_url: str, cv_pdf: Path, answerer: Answerer, *, submit: boo
         confirm.first.click()
         time.sleep(6)
     errors = [t.strip() for t in page.locator(".rcmValidationMsgArea:visible, [role=alert]:visible").all_inner_texts() if t.strip()]
+    errors += [line.strip() for line in page.inner_text("body").splitlines() if re.search(r"es un campo obligatorio", line)]
     if any(re.search(r"corrija|obligatori|error", t, re.I) for t in errors):
-        return ApplyResult("error", "El portal no aceptó el formulario: " + "; ".join(errors)[:600])
+        return ApplyResult("error", "El portal no aceptó el formulario: " + "; ".join(dict.fromkeys(errors))[:600])
     after = applied_count(page, login_url)
     if before is not None and after is not None and after > before:
         return ApplyResult("enviada", f"Confirmada: «Puestos solicitados» pasó de {before} a {after}")
+    if before is not None and after is not None:  # contado y no subió: no se envió (Front Mobile, 2026-11-26)
+        return ApplyResult("error", f"«Puestos solicitados» siguió en {after} después de enviar: el portal no la registró")
     return ApplyResult("enviada", "El portal aceptó el envío, pero no pude confirmarlo en «Puestos solicitados»: revísalo tú")
 
 
