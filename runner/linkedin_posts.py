@@ -208,7 +208,10 @@ def search(page, keywords: str, *, period: str = "dia", scrolls: int = 2) -> lis
 
     def keep(response) -> None:
         url = response.url
-        if url.startswith("https://www.linkedin.com/search/results/content/") or "/flagship-web/rsc-action/" in url:
+        # Nunca `server-stream-request`: es la conexión en tiempo real de LinkedIn, que no termina, y leerla colgaba
+        # la búsqueda (2026-11-26).
+        if url.startswith("https://www.linkedin.com/search/results/content/") or (
+                "/flagship-web/rsc-action/" in url and "stream" not in url):
             loaded.append(response)
 
     page.on("response", keep)

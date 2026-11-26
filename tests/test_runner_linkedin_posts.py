@@ -299,6 +299,8 @@ SEARCH_PAGE = """<html><body><main><h2>Publicación en el feed</h2><p>En TP esta
   let asked = false;
   window.addEventListener('scroll', () => { if (!asked) { asked = true;  // más resultados al bajar (como el real)
     fetch('/flagship-web/rsc-action/actions/component?componentId=search', {method: 'POST'}); } });
+  // la conexión en tiempo real de LinkedIn (en la real no termina nunca): no se lee
+  fetch('/flagship-web/rsc-action/actions/server-stream-request?sduiid=com.linkedin.sdui.realtimeDefaultHandler');
 </script></body></html>"""
 
 
@@ -311,6 +313,8 @@ def test_search_reads_the_post_ids_from_the_server_responses(chromium):
         if "/search/results/content/" in request.url:
             asked.append(request.url)
             return route.fulfill(status=200, content_type="text/html; charset=utf-8", body=SEARCH_PAGE)
+        if "server-stream-request" in request.url:
+            return route.fulfill(status=200, content_type="text/plain", body='{"k":"urn:li:activity:7599999999999999999"}')
         if "/flagship-web/rsc-action/" in request.url:
             return route.fulfill(status=200, content_type="text/plain",
                                  body='0:{"k":"reactionState-urn%3Ali%3Aactivity%3A7531529635902148608"}')
