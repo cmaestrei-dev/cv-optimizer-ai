@@ -108,6 +108,46 @@ def _foreign(api: Api, conf: cfg.Config, app_id: int) -> str:
     return f"vacante en «{language}» fuera de {conf.home_country or 'tu país'}"
 
 
+# Una postulación por empresa y cargo (2026-11-27: Stefanini recibió 10 «Help Desk Analyst N1» y 6 «On-Site Technical
+# Support L1», la misma vacante en varias ciudades; para un reclutador eso parece spam). Con empresas genéricas
+# («Confidencial», «Importante empresa del sector») no se compara: pueden ser empleadores distintos.
+_GENERIC_COMPANY = re.compile(r"^(confidencial|empresa confidencial|(importante|reconocida|prestigiosa) empresa\b.*|empresa del sector.*)?$")
+_LEGAL_FORM = re.compile(r"\b(s ?a ?s|s ?a|ltda|inc|llc|corp|sucursal|latam|latinoamerica|colombia)\b")
+_SENT_OR_READY = ("postulada", "en_revision", "entrevista", "oferta", "rechazada", "retirada", "guardada", "cv_generado")
+
+
+def _job_key(company: str, title: str) -> tuple[str, str] | None:
+    from runner.answers import normalize
+
+    plain = lambda text: " ".join(re.sub(r"[^\w ]", " ", normalize(text or "")).split())  # noqa: E731
+    firm = " ".join(_LEGAL_FORM.sub(" ", plain(company)).split())
+    role = plain(title)
+    return None if not role or _GENERIC_COMPANY.match(firm) else (firm, role)
+
+
+def _taken_jobs(api: Api) -> list[tuple[str, str, int]]:
+    """(empresa, cargo, postulación) de lo ya enviado o preparado en la app."""
+    try:
+        apps = api.get("/applications?view=todas")
+        apps = apps["items"] if isinstance(apps, dict) else list(apps)
+    except Exception:  # noqa: BLE001 — sin la lista solo se pierde este filtro, nunca la vuelta
+        return []
+    return [(*key, a["id"]) for a in apps if isinstance(a, dict) and a.get("status") in _SENT_OR_READY
+            and (key := _job_key(a.get("company") or "", a.get("role") or ""))]
+
+
+def _repeated(taken: list[tuple[str, str, int]], company: str, title: str, app_id: int | None = None) -> str:
+    """Motivo si ya hay una postulación a ese cargo en esa empresa (otra que esta), o «»."""
+    key = _job_key(company, title)
+    if key is None:
+        return ""
+    firm, role = key
+    for other_firm, other_role, other_id in taken:
+        if other_role == role and other_id != app_id and (firm in other_firm or other_firm in firm):
+            return f"ya te postulaste a «{title}» en {company}"
+    return ""
+
+
 # Nivel de inglés que exige un requisito obligatorio (decisión del dueño, 2026-11-26: «su inglés es básico»; Sutherland,
 # SGS y Rappi pedían B2 o más y la compatibilidad no lo pesaba).
 _ENGLISH = re.compile(r"\b(ingles|english)\b")
@@ -278,6 +318,7 @@ def cmd_buscar(args) -> int:
         return 1
     print(f"Modo {conf.mode}.")
     prepared_now, told = 0, set()
+    taken = _taken_jobs(api)
 
     def full(portal: str) -> bool:
         return state.today(_key("preparadas", portal)) >= conf.cap(portal) or bool(args.max and prepared_now >= args.max)
@@ -297,7 +338,7 @@ def cmd_buscar(args) -> int:
                 state.mark(job_id, "cerrada", portal=portal, app=item["id"])
                 continue
             role, company = item.get("role") or "", item.get("company") or ""
-            if reason := _excluded(SimpleNamespace(title=role, company=company), conf):
+            if reason := _excluded(SimpleNamespace(title=role, company=company), conf) or _repeated(taken, company, role, item["id"]):
                 _discard(api, item["id"], f"El bot la omitió: {reason}.")
                 state.mark(job_id, "excluida", portal=portal, app=item["id"], motivo=reason)
                 print(f"  · {role} — {company}: omitida ({reason})")
@@ -307,6 +348,8 @@ def cmd_buscar(args) -> int:
             if _prepare(api, conf, state, args, portal=portal, job_id=job_id, app_id=item["id"], score=score,
                         url=item["url"]):
                 prepared_now += 1
+                if job := _job_key(company, role):
+                    taken.append((*job, item["id"]))
         state.save()
         for search in conf.searches:
             if args.portal and search.portal != args.portal:
@@ -330,7 +373,7 @@ def cmd_buscar(args) -> int:
                         break
                     if state.seen(card.job_id):
                         continue
-                    if reason := _excluded(card, conf) or _not_included(card.title, conf):
+                    if reason := _excluded(card, conf) or _not_included(card.title, conf) or _repeated(taken, card.company, card.title):
                         state.mark(card.job_id, "excluida", portal=portal, motivo=reason, cargo=card.title[:120])
                         print(f"  · {card.title} — {card.company}: omitida ({reason})")
                         continue
@@ -363,6 +406,8 @@ def cmd_buscar(args) -> int:
                     if _prepare(api, conf, state, args, portal=portal, job_id=card.job_id, app_id=vacancy.id,
                                 score=vacancy.score, url=card.url):
                         prepared_now += 1
+                        if job := _job_key(vacancy.company or card.company, vacancy.role or card.title):
+                            taken.append((*job, vacancy.id))
             except discover.BlockedError as e:
                 state.pause(6, str(e), kind=paused)
                 print(f"\nParo la búsqueda en {name}: {e} Pausa de 6 horas (tu cuenta no se toca).")
@@ -920,7 +965,8 @@ def _handle_post(api: Api, conf: cfg.Config, post, who: str, state: State | None
     text = detail.get("vacancy_text") or ""
     card = SimpleNamespace(title=vacancy.role, company=vacancy.company)
     reason = (scam_reason(text) or _excluded(card, conf) or _not_included(vacancy.role, conf)
-              or _foreign(api, conf, vacancy.id) or _abroad(detail, conf) or _english_gap(detail, conf))
+              or _foreign(api, conf, vacancy.id) or _abroad(detail, conf) or _english_gap(detail, conf)
+              or _repeated(_taken_jobs(api), vacancy.company, vacancy.role, vacancy.id))
     minimum = conf.min_score("linkedin")
     if not reason and (vacancy.score is None or vacancy.score < minimum):
         reason = f"compatibilidad {vacancy.score if vacancy.score is not None else '—'} (mínimo {minimum})"
@@ -1206,6 +1252,7 @@ def _prepare_watched(api: Api, state: State, sites, *, limit: int = WATCH_PER_RO
     from runner import telegram, watch
 
     by_name, handled, sent = {s.name: s for s in sites}, 0, 0
+    taken: list | None = None  # se pide a la app solo si hay algo que revisar
     for_batch: dict[str, int] = {}
     blocked: set[str] = set()  # portales que frenaron en esta vuelta: sus ofertas esperan y no gastan cupo
     # Primero las de los portales donde el bot postula (rinden más que las que van a Telegram para que postule la persona)
@@ -1214,6 +1261,12 @@ def _prepare_watched(api: Api, state: State, sites, *, limit: int = WATCH_PER_RO
     for key, rec in queue:
         site = by_name.get(key.split(":", 1)[0])
         if not site or not rec.get("encaja") or "app" in rec or rec.get("listo") or site.name in blocked:
+            continue
+        if taken is None:
+            taken = _taken_jobs(api)
+        if reason := _repeated(taken, site.name, rec.get("cargo", "")):
+            rec["listo"] = "repetida"
+            print(f"  · {site.name}: {rec.get('cargo', '')} — {reason}")
             continue
         if not watch.matches(site, rec.get("cargo", "")):  # anotada con reglas viejas
             rec["listo"] = "no_encaja"
@@ -1247,6 +1300,8 @@ def _prepare_watched(api: Api, state: State, sites, *, limit: int = WATCH_PER_RO
         rec["app"], rec["puntaje"] = vacancy.id, vacancy.score
         if not vacancy.created and not vacancy.unfinished:
             continue  # ya estaba en la app
+        if job := _job_key(site.name, vacancy.role or rec.get("cargo", "")):
+            taken.append((*job, vacancy.id))
         if vacancy.role and not watch.matches(site, vacancy.role):  # la oferta completa dice «Senior» aunque la lista no
             rec["listo"] = "no_encaja"
             _discard(api, vacancy.id, f"El bot la descartó: el cargo de la oferta («{vacancy.role}») no encaja con tus reglas.")
