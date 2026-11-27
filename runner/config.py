@@ -30,6 +30,7 @@ sin_evidencia = "saltar"   # «¿tienes experiencia con X?» si tu perfil no mue
 experiencia_por_defecto = 2   # con sin_evidencia = "si": años que se responden si tu perfil no muestra más
 pausa_entre_envios_seg = [120, 240]   # espera al azar entre dos envíos
 revisar_menciones = true   # leer las publicaciones de LinkedIn donde te etiquetan (vacantes en posts, texto o afiche)
+nombre_completo = ""   # tus nombres y apellidos como en tu documento (los formularios de Buk los piden por separado)
 
 [correo]   # postular por correo cuando la vacante lo pide; la contraseña de aplicación: python -m runner correo
 remitente = ""    # tu Gmail; vacío = esas vacantes te llegan por Telegram para enviarlas tú
@@ -133,6 +134,7 @@ class Config:
     post_searches: list[str] = field(default_factory=list)  # [publicaciones] buscar: vacantes publicadas como posts
     post_period: str = "dia"  # dia | semana | mes
     post_max: int = 10  # publicaciones nuevas de las búsquedas que se leen por vuelta
+    legal_name: str = ""  # nombre_completo: nombres y apellidos tal como en el documento (formularios de Buk)
     mail_from: str = ""  # [correo] remitente: el Gmail desde el que el bot postula por correo (vacío: no lo hace)
     mail_cap: int = 10  # [correo] tope_diario de correos de postulación
 
@@ -274,4 +276,5 @@ def load(path: Path = CONFIG_FILE) -> Config:
         mentions=bool(raw.get("revisar_menciones", True)),
         post_searches=[str(q).strip() for q in posts.get("buscar", []) if str(q).strip()],
         post_period=post_period, post_max=post_max, mail_from=mail_from, mail_cap=mail_cap,
+        legal_name=str(raw.get("nombre_completo", "")).strip(),
     )

@@ -13,6 +13,7 @@ import re
 import secrets
 import shutil
 import subprocess
+import sys
 import time
 import urllib.error
 import urllib.request
@@ -41,7 +42,8 @@ HELP = """Comandos:
 /preguntas: preguntas de filtro que el bot no supo responder
 /responder N texto: tu respuesta a la pregunta N (queda en tu banco y esas vacantes se reintentan)
 /manuales: postulaciones que debes enviar tú (captcha, cédula o cuenta en su sitio)
-/hecha N: marcar como enviada la postulación manual N"""
+/hecha N: marcar como enviada la postulación manual N
+/buk enlace: tras pulsar «Postular» en Buk, el enlace del formulario; el bot lo llena, lo envía y confirma el correo"""
 
 
 class TelegramError(RuntimeError):
@@ -327,6 +329,24 @@ def _start_round() -> str:
     return "Vuelta iniciada: te aviso al terminar." if done.returncode == 0 else "No pude iniciar la vuelta (¿está programado el bot?)."
 
 
+def _queue_buk(rest: str) -> str:
+    """Pone en cola el formulario de Buk y lanza `python -m runner buk` aparte (no detiene la escucha de Telegram)."""
+    from runner import buk_apply as buk
+
+    parts = rest.split()
+    form = next((x for x in parts if buk.FORM_URL.match(x)), "")
+    offer = next((x for x in parts if buk.OFFER_URL.match(x)), "")
+    if not form:
+        return ("Mándame /buk y el enlace del formulario de Buk: el que queda en la barra de direcciones después de pulsar "
+                "«Postular» (termina en …/edit_attempt).")
+    if not buk.enqueue(form, offer):
+        return "Ese formulario ya está en cola: te aviso al enviarlo."
+    log = open(cfg.DATA_DIR / "registro.log", "a", encoding="utf-8")  # noqa: SIM115 — lo hereda el proceso
+    subprocess.Popen([sys.executable, "-m", "runner", "buk"], cwd=str(Path(__file__).resolve().parent.parent),
+                     stdout=log, stderr=subprocess.STDOUT, start_new_session=True)
+    return "Recibido: lleno el formulario de Buk, lo envío y confirmo el correo. Te aviso en unos minutos."
+
+
 def handle(text: str, state: State, listed: list[str]) -> tuple[str, list[str]]:
     """La respuesta a un mensaje del dueño y la lista de preguntas mostrada (para /responder N)."""
     text = (text or "").strip()
@@ -355,6 +375,8 @@ def handle(text: str, state: State, listed: list[str]) -> tuple[str, list[str]]:
         return _today_sent(state), listed
     if command == "/vuelta":
         return _start_round(), listed
+    if command == "/buk":
+        return _queue_buk(rest), listed
     if command == "/pausar":
         hours = int(rest) if rest.strip().isdigit() else 24
         hours = max(1, min(hours, 24 * 14))

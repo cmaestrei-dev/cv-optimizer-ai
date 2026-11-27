@@ -1001,6 +1001,118 @@ def _apply_by_email(api: Api, conf: cfg.Config, state: State, vacancy, emails: l
     return to
 
 
+def _buk_app(api: Api, form, offer: str) -> int | None:
+    """La postulación de la app para un formulario de Buk: la de esa empresa (mismo subdominio) cuyo cargo más se
+    parece, aún sin enviar; o, con el enlace de la oferta, una nueva."""
+    from runner.answers import normalize
+
+    apps = api.get("/applications?view=todas")
+    apps = apps["items"] if isinstance(apps, dict) else apps
+    host = f"https://{form.host}.buk.co/"
+    sent = {"postulada", "en_revision", "entrevista", "oferta", "rechazada", "retirada"}
+    candidates = [a for a in apps if (a.get("url") or "").startswith(host) and a.get("status") not in sent]
+    words = set(re.findall(r"\w{3,}", normalize(form.role)))
+
+    def overlap(app) -> float:
+        other = set(re.findall(r"\w{3,}", normalize(app.get("role") or "")))
+        return len(words & other) / max(1, len(words | other))
+
+    best = max(candidates, key=overlap, default=None)
+    if best and (overlap(best) >= 0.3 or len(candidates) == 1):
+        return best["id"]
+    if offer:
+        try:
+            return api.post("/vacancies", {"url": offer, "prepare": True})["id"]
+        except ApiError as e:
+            if e.status == 409 and e.body.get("application_id"):
+                return e.body["application_id"]
+            raise
+    return None
+
+
+def _buk_one(api: Api, conf: cfg.Config, page, item: dict, contact: dict, secret: str) -> str:
+    """Un formulario de la cola: lo llena, lo envía y confirma el correo. Devuelve el aviso para Telegram."""
+    from runner import buk_apply as buk
+
+    form = buk.read_form(page, item["form"])
+    title = f"{form.role or 'la vacante'} — {form.company or form.host}"
+    app_id = _buk_app(api, form, item.get("offer", ""))
+    if app_id is None:
+        item["estado"] = "sin_vacante"
+        return (f"Buk: no encontré «{title}» entre tus vacantes preparadas. Mándame /buk con el enlace del formulario y, "
+                "separado por un espacio, el de la oferta, y la preparo.")
+    detail = api.get(f"/applications/{app_id}")
+    cvs = detail.get("cvs") or []
+    cv = cvs[-1] if cvs else api.make_cv(app_id)
+    cv_path = api.download_cv(cv["id"], cfg.DATA_DIR / "cvs" / str(app_id) / cv["filename"])
+    since = buk.since_now()
+    result = buk.apply(page, item["form"], cv_path, _answerer(api, conf, app_id), submit=conf.mode == "auto",
+                       contact=contact, overrides=conf.answers, bank=conf.answers, legal_name=conf.legal_name)
+    item["app"] = app_id
+    if result.status == "saltada":
+        item["estado"] = "faltan_respuestas"
+        return (f"Buk, {title}: no la envié, faltan respuestas: " + "; ".join(result.unanswered)
+                + ". Agrégalas a tu banco y vuelve a mandarme el /buk.")
+    if result.status != "enviada":
+        item["estado"] = result.status
+        return f"Buk, {title}: {result.detail}."
+    problem = buk.confirm_by_email(page, conf.mail_from, secret, form.host, since) if secret and conf.mail_from else (
+        "falta la contraseña de correo (python -m runner correo)")
+    try:
+        api.post(f"/applications/{app_id}/sent", {"cv_id": cv["id"], "platform": "Página de la empresa"})
+        api.post(f"/applications/{app_id}/notes", {"note": "Enviada en Buk por el bot (formulario por /buk)"
+                                                           + ("; correo confirmado." if not problem else f"; {problem}.")})
+    except ApiError as e:
+        print(f"        La app no registró el envío: {e.detail}")
+    item["estado"] = "enviada" if not problem else "enviada_sin_confirmar"
+    if problem:
+        return f"Buk, {title}: enviada, pero {problem}. Abre el correo «Confirma tu correo» de Buk y confírmalo tú."
+    return f"✓ Postulado en Buk: {title}, con su CV ({cv['filename']}). Correo de confirmación aprobado."
+
+
+def cmd_buk(_args) -> int:
+    """Los formularios de Buk que la persona mandó por Telegram (/buk): llena, envía y confirma el correo."""
+    import fcntl
+
+    from playwright.sync_api import sync_playwright
+
+    from runner import buk_apply as buk
+    from runner import mailer, telegram
+
+    lock = open(cfg.DATA_DIR / "buk.lock", "w")  # noqa: SIM115 — se mantiene abierto mientras corre
+    try:
+        fcntl.flock(lock, fcntl.LOCK_EX | fcntl.LOCK_NB)
+    except BlockingIOError:
+        print("Ya hay un envío a Buk en curso.")
+        return 0
+    items = buk.read_queue()
+    todo = [x for x in items if x.get("estado") == "pendiente"]
+    if not todo:
+        print("No hay formularios de Buk pendientes.")
+        return 0
+    conf = cfg.load()
+    api = Api(conf.api, conf.token)
+    contact = (api.get("/profile") or {}).get("contact") or {}
+    with sync_playwright() as p:
+        b = p.chromium.launch(channel="chrome", headless=True)  # navegador aparte: el formulario no pide sesión
+        try:
+            for item in todo:
+                page = b.new_page(locale="es-CO", viewport={"width": 1280, "height": 900})
+                try:
+                    notice = _buk_one(api, conf, page, item, contact, mailer.password())
+                except Exception as e:  # noqa: BLE001 — un formulario raro no detiene los demás
+                    item["estado"] = "error"
+                    notice = f"Buk: no pude con un formulario ({type(e).__name__}). Revísalo tú."
+                finally:
+                    page.close()
+                print(notice)
+                telegram.notify(notice)
+                buk.write_queue(items)
+        finally:
+            b.close()
+    return 0
+
+
 def cmd_correo(args) -> int:
     """Guarda la contraseña de aplicación de Google para postular por correo (la escribe la persona; no se muestra)."""
     from runner import mailer
@@ -1574,6 +1686,7 @@ def main(argv: list[str] | None = None) -> int:
     postular.set_defaults(fn=cmd_postular)
     sub.add_parser("diario").set_defaults(fn=cmd_diario)
     sub.add_parser("vigilar").set_defaults(fn=cmd_vigilar)
+    sub.add_parser("buk", help="envía los formularios de Buk que mandaste por Telegram con /buk").set_defaults(fn=cmd_buk)
     correo = sub.add_parser("correo", help="guarda la contraseña de aplicación de Google para postular por correo")
     correo.add_argument("--probar", action="store_true", help="además, te envía un correo de prueba a ti mismo")
     correo.set_defaults(fn=cmd_correo)
