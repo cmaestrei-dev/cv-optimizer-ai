@@ -86,6 +86,28 @@ maximo = 10       # publicaciones nuevas que se leen por vuelta
 Para ver qué encontraría sin pasar nada a la app: `python -m runner menciones --prueba`. Para apagar las menciones:
 `revisar_menciones = false`; para no buscar, quita `[publicaciones]`.
 
+## Buk (Nequi, Ceiba, Quipux, La Pipol…), semiautomático
+
+Desde el navegador del bot, Buk muestra un captcha visible al pulsar «Postular», y el bot no los resuelve. Por eso
+el primer paso es tuyo y el resto lo hace el bot (autorizado por el dueño el 2026-11-27):
+
+1. Abres la oferta, pones tu correo y pulsas «Postular». Buk te lleva al formulario, o te manda un correo con él.
+2. Mandas al bot de Telegram `/buk` y el enlace del formulario: el de la barra de direcciones, que termina en
+   `…/edit_attempt`. Si es una vacante que el bot no tenía preparada, agrega el enlace de la oferta separado por un
+   espacio.
+3. El bot, con un navegador aparte, hace el resto:
+   - Llena el formulario: tus datos (con `nombre_completo` para nombres y apellidos), tu banco de respuestas
+     (cédula y fecha de nacimiento, si las pusiste tú) y lo demás con la app.
+   - Adjunta el CV de esa vacante y envía («Enviar Respuesta» → «Enviar» → «Éxito»).
+   - Lee en tu correo, en solo lectura, el «Confirma tu correo para completar tu postulación» y pulsa «Confirmar
+     correo».
+   - Lo registra en la app y te avisa por Telegram.
+
+Solo confía en el correo de Buk si cumple tres cosas: el primer `Authentication-Results` (el de Gmail) dice que
+buk.co lo firmó, viene de la misma empresa del formulario, y el botón lleva a buk.co. Si falta una respuesta
+obligatoria (por ejemplo, la fecha de nacimiento), no envía nada y te dice cuál. En modo prueba, llena el formulario
+pero no lo envía. También se puede correr a mano: `python -m runner buk`.
+
 ## Postular por correo
 
 Muchas vacantes (sobre todo en publicaciones) dicen «envía tu hoja de vida a seleccion@…». Con `[correo]`, el bot
