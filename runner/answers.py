@@ -41,18 +41,19 @@ def asks_months(question: str) -> bool:
 
 
 def to_integer(answer: str) -> str | None:
-    """«2,5 años» → «2»: hacia abajo, para nunca declarar más de lo que hay."""
+    """«2,5 años» → «3»: la experiencia se redondea hacia arriba (decisión del dueño, 2026-11-27: «siempre redondea hacia
+    arriba cuando se trate de experiencia»; antes era hacia abajo)."""
     match = _NUMBER.search(answer or "")
     if not match:
         return None
-    return str(math.floor(float(match.group(0).replace(",", "."))))
+    return str(math.ceil(float(match.group(0).replace(",", "."))))
 
 
 _DURATION = re.compile(r"(\d+(?:[.,]\d+)?)\s*(anos?|years?|mes(?:es)?|months?)\b")
 
 
 def to_period(answer: str, *, months: bool = False) -> str | None:
-    """Cuánto tiempo dice la respuesta, en años (o en `months`), hacia abajo: «4 meses» son 0 años, no 4; «1 año» son 12
+    """Cuánto tiempo dice la respuesta, en años (o en `months`), hacia arriba: «4 meses» es 1 año, no 4; «1 año» son 12
     meses. Sin unidad, el número tal cual (`to_integer`)."""
     match = _DURATION.search(normalize(answer or ""))
     if not match:
@@ -60,8 +61,8 @@ def to_period(answer: str, *, months: bool = False) -> str | None:
     amount = float(match.group(1).replace(",", "."))
     in_months = match.group(2).startswith(("mes", "month"))
     if months:
-        return str(math.floor(amount if in_months else amount * 12))
-    return str(math.floor(amount / 12 if in_months else amount))
+        return str(math.ceil(amount if in_months else amount * 12))
+    return str(math.ceil(amount / 12 if in_months else amount))
 
 
 _LESS = re.compile(r"\b(menos de|menor a|less than|under)\b|^<")

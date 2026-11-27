@@ -349,7 +349,7 @@ python -m runner telegram probar       # te envía un mensaje de prueba
 2. Lo obligatorio que falte se busca primero en tu banco `[respuestas]` de la configuración (salario,
    disponibilidad, inglés…): la clave son partes de la pregunta separadas por `|`, sin tildes.
 3. Lo demás lo responde la app con tu perfil, verificado contra él. «¿Cuántos años con X?» usa las fechas de tus
-   empleos y se redondea hacia abajo. Si tu perfil no muestra X, en las preguntas de experiencia decide
+   empleos y se redondea hacia arriba (1 año y 11 meses → 2; decisión del dueño, 2026-11-27). Si tu perfil no muestra X, en las preguntas de experiencia decide
    `sin_evidencia`:
    - `"saltar"`: salta la vacante;
    - `"cero"`: «No», «0» o «Aún no tengo experiencia con eso»;

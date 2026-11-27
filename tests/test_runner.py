@@ -699,7 +699,8 @@ def test_months_in_the_profiles_answer_are_never_declared_as_years():
     label = "¿Cuántos años de experiencia tienes con herramientas de análisis de seguridad?"
     api = SimpleNamespace(post=lambda path, body: [{"question": label, "answer": "4 meses en Equimat Solutions", "needs_you": False}])
     numeric = Question("text", label, True, "", [], [], numeric=True)
-    for policy, expected in (("cero", "0"), ("si", "2")):  # «si»: lo que decidió el dueño para junior (2 años)
+    # «4 meses» es 1 año (hacia arriba, decisión del dueño del 2026-11-27), nunca 4; con «si», al menos los 2 de junior
+    for policy, expected in (("cero", "1"), ("si", "2")):
         conf = cfg.Config(api="https://x", token="t", no_evidence=policy, default_years=2)
         assert cli._answerer(api, conf, 1)([numeric])[label] == expected
 
