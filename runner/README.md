@@ -197,6 +197,11 @@ vacantes escritas en otro idioma, salvo las de ese país: una oferta en inglés 
 Alemania se descarta en la app con el motivo; una en inglés en Medellín sigue. El idioma y el lugar salen del
 análisis de la app.
 
+Con `ingles_exigido_desde = "B2"` en `[excluir]`, el bot también omite, antes de hacer el CV, las vacantes con un
+requisito obligatorio de inglés de ese nivel o más: B2, «avanzado», «upper intermediate», C1, «fluido» o
+«bilingüe». Un inglés que la vacante solo pide como deseable no cuenta. Sirve para todos los caminos: portales,
+bandeja, portales de empresas y publicaciones.
+
 ## El navegador del bot ocupado
 
 Si al empezar una vuelta el navegador del bot está abierto (otra vuelta, o una ventana que abriste con

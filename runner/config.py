@@ -121,6 +121,7 @@ class Config:
     include_words: list[str] = field(default_factory=list)  # si hay, el cargo debe tener alguna (antes de gastar IA)
     languages: list[str] = field(default_factory=list)  # idiomas de vacante aceptados («es»); vacío = todos
     home_country: str = ""  # en este país se acepta cualquier idioma (p. ej. una vacante en inglés en Colombia)
+    english_from: str = ""  # [excluir] ingles_exigido_desde: descartar vacantes que exigen este nivel de inglés o más («B2»)
     answers: dict[str, str] = field(default_factory=dict)  # banco: «patrón|patrón» → respuesta
     no_evidence: str = "saltar"  # experiencia que el perfil no muestra: "saltar" la vacante, "cero" o "si"
     default_years: int = 2  # con "si": años que se responden si el perfil no muestra más
@@ -246,6 +247,9 @@ def load(path: Path = CONFIG_FILE) -> Config:
     post_max = int(posts.get("maximo", 10))
     if not 0 <= post_max <= 30:
         raise ConfigError("[publicaciones] «maximo» debe estar entre 0 y 30.")
+    english_from = str(raw.get("excluir", {}).get("ingles_exigido_desde", "")).strip().upper()
+    if english_from and english_from not in ("B1", "B2", "C1"):
+        raise ConfigError("[excluir] «ingles_exigido_desde» debe ser \"B1\", \"B2\" o \"C1\".")
     mail = raw.get("correo", {})
     mail_from = str(mail.get("remitente", "")).strip()
     if mail_from and not re.fullmatch(r"[^@\s]+@[^@\s]+\.[a-z]{2,}", mail_from, re.I):
@@ -263,6 +267,7 @@ def load(path: Path = CONFIG_FILE) -> Config:
         include_words=[str(w).strip().lower() for w in include.get("palabras", []) if str(w).strip()],
         languages=[str(x).strip().lower()[:2] for x in exclude.get("solo_idiomas", []) if str(x).strip()],
         home_country=str(exclude.get("salvo_pais", "")).strip(),
+        english_from=english_from,
         answers={**{str(k): str(v) for k, v in raw.get("respuestas", {}).items()}, **_extra_answers()},
         no_evidence=no_evidence.replace("sí", "si"), default_years=default_years, pause_seconds=(int(pause[0]), int(pause[1])),
         portal_caps=portal_caps, min_scores=min_scores, general_cvs=general_cvs,

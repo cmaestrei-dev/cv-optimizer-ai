@@ -108,6 +108,47 @@ def _foreign(api: Api, conf: cfg.Config, app_id: int) -> str:
     return f"vacante en «{language}» fuera de {conf.home_country or 'tu país'}"
 
 
+# Nivel de inglés que exige un requisito obligatorio (decisión del dueño, 2026-11-26: «su inglés es básico»; Sutherland,
+# SGS y Rappi pedían B2 o más y la compatibilidad no lo pesaba).
+_ENGLISH = re.compile(r"\b(ingles|english)\b")
+_ENGLISH_LEVELS = [(5, r"\bc2\b|nativ|bilingu"), (4, r"\bc1\b|fluen|fluid"),
+                   (3, r"\bb2\b|avanzad|advanced|upper[ -]?intermediate|intermedio[ -]?(alto|avanzado)|profesional"),
+                   (2, r"\bb1\b|intermedi"), (1, r"\ba[12]\b|basic|basico")]
+_LEVEL_FROM = {"B1": 2, "B2": 3, "C1": 4}
+
+
+def english_required(requirements: list[dict]) -> int:
+    """El nivel de inglés más alto que pide un requisito obligatorio (0: no lo pide). 1 A1-A2 … 3 B2 … 5 nativo."""
+    from runner.answers import normalize
+
+    level = 0
+    for req in requirements or []:
+        if req.get("kind") != "obligatorio":
+            continue
+        text = normalize(str(req.get("text") or ""))
+        if not _ENGLISH.search(text):
+            continue
+        level = max(level, next((n for n, pattern in _ENGLISH_LEVELS if re.search(pattern, text)), 0))
+    return level
+
+
+def _english_gap(detail: dict, conf: cfg.Config) -> str:
+    if not conf.english_from:
+        return ""
+    if english_required((detail.get("vacancy") or {}).get("requirements") or []) >= _LEVEL_FROM[conf.english_from]:
+        return f"exige inglés {conf.english_from} o más"
+    return ""
+
+
+def _english(api: Api, conf: cfg.Config, app_id: int) -> str:
+    if not conf.english_from:
+        return ""
+    try:
+        return _english_gap(api.get(f"/applications/{app_id}"), conf)
+    except ApiError:
+        return ""
+
+
 # Señales de estafa de empleo (caso real, 2026-11-25: una falsa convocatoria «de RTVC» en elempleo pidió por WhatsApp
 # cédula, correo y 150.000 pesos por cursos de SST y primeros auxilios «con devolución»). Una oferta real no cobra.
 _SCAM_PAY = re.compile(r"(consignar|consignacion|cancelar el valor|pagar (el|un|los) (curso|certificado|examen)|"
@@ -198,7 +239,7 @@ def _refresh_alerts(api: Api, *, wait_seconds: int = 300, poll_seconds: int = 15
 def _prepare(api: Api, conf: cfg.Config, state: State, args, *, portal: str, job_id: str, app_id: int,
              score: int | None, url: str) -> bool:
     """Descarta por idioma o compatibilidad, o hace el CV y deja la vacante lista para postular. True si quedó preparada."""
-    if reason := _foreign(api, conf, app_id) or _scam(api, app_id):
+    if reason := _foreign(api, conf, app_id) or _scam(api, app_id) or _english(api, conf, app_id):
         _discard(api, app_id, f"El bot la omitió: {reason}.")
         state.mark(job_id, "excluida", portal=portal, app=app_id, motivo=reason, puntaje=score)
         print(f"        Omitida: {reason}.")
@@ -879,7 +920,7 @@ def _handle_post(api: Api, conf: cfg.Config, post, who: str, state: State | None
     text = detail.get("vacancy_text") or ""
     card = SimpleNamespace(title=vacancy.role, company=vacancy.company)
     reason = (scam_reason(text) or _excluded(card, conf) or _not_included(vacancy.role, conf)
-              or _foreign(api, conf, vacancy.id) or _abroad(detail, conf))
+              or _foreign(api, conf, vacancy.id) or _abroad(detail, conf) or _english_gap(detail, conf))
     minimum = conf.min_score("linkedin")
     if not reason and (vacancy.score is None or vacancy.score < minimum):
         reason = f"compatibilidad {vacancy.score if vacancy.score is not None else '—'} (mínimo {minimum})"
@@ -1039,13 +1080,13 @@ def _watch_sites(*, prepare: bool = True) -> list[dict]:
     if prepare:
         conf = cfg.load()
         try:
-            _prepare_watched(Api(conf.api, conf.token), state, sites)
+            _prepare_watched(Api(conf.api, conf.token), state, sites, conf=conf)
         finally:
             state.save()
     return new
 
 
-def _prepare_watched(api: Api, state: State, sites, *, limit: int = WATCH_PER_ROUND) -> int:
+def _prepare_watched(api: Api, state: State, sites, *, limit: int = WATCH_PER_ROUND, conf: cfg.Config | None = None) -> int:
     """Las vigiladas que encajan y aún no pasan por la app: análisis, CV y Telegram. Devuelve cuántas se enviaron."""
     import urllib.error
     from hashlib import sha256
@@ -1098,6 +1139,11 @@ def _prepare_watched(api: Api, state: State, sites, *, limit: int = WATCH_PER_RO
             rec["listo"] = "no_encaja"
             _discard(api, vacancy.id, f"El bot la descartó: el cargo de la oferta («{vacancy.role}») no encaja con tus reglas.")
             print(f"  · {site.name}: {vacancy.role} — el cargo de la oferta no encaja: descartada")
+            continue
+        if conf is not None and (reason := _english(api, conf, vacancy.id)):
+            rec["listo"] = "ingles"
+            _discard(api, vacancy.id, f"El bot la descartó: {reason}.")
+            print(f"  · {site.name}: {vacancy.role} — {reason}: descartada")
             continue
         if vacancy.score is None or vacancy.score < site.min_score:
             _discard(api, vacancy.id, f"El bot la descartó: compatibilidad {vacancy.score if vacancy.score is not None else '—'} "
