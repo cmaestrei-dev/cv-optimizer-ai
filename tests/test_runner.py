@@ -314,7 +314,9 @@ class TestRun:
         assert client.get(f"/applications/{senior['id']}", headers=h).json()["status"] == "descartada"
         assert "(bandeja)" in capsys.readouterr().out
         assert cli.main(["buscar", "--portal", "linkedin"]) == 0  # una segunda vuelta no la repite
-        assert State(tmp_path / "estado.json").today("preparadas") == 2  # la de la bandeja + la de la búsqueda
+        state = State(tmp_path / "estado.json")
+        assert state.today("preparadas") == 1  # la búsqueda trae el mismo cargo en la misma empresa: una sola postulación
+        assert "ya te postulaste a «Auxiliar Administrativo» en Logística Andina" in state.data["vistas"]["4012345678"]["motivo"]
 
     def test_portal_flag_searches_only_that_portal(self, bot, monkeypatch):
         client, h, tmp_path = bot
