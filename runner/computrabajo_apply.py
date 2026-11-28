@@ -11,6 +11,9 @@ Lo verificado con la cuenta del dueño, sin postular (2026-11-18):
   general. Para hacer espacio borra el PDF más viejo que subió él; nunca el general ni uno que no subió él.
 - En modo prueba deja listo el CV y vuelve al general sin pulsar «Aplicar».
 - Ante captcha o verificación se detiene; nunca la resuelve.
+- Solo se pulsa el «Aplicar» que lleva el código de ESTA oferta (`oi=<código>`, el final de su dirección). Una oferta
+  cerrada muestra «ofertas similares», cada una con su «Aplicar» (`lc=OfferInactive-Similars`). El 27 y el 28-11 el
+  bot pulsó el primero que encontró, y así postuló a ofertas que nadie eligió, con el CV de otra.
 """
 
 import re
@@ -152,6 +155,24 @@ def ensure_default(page, pdf: Path, uploaded: list[str], general: str) -> Doc:
     return doc
 
 
+_OFFER_ID = re.compile(r"-([0-9A-F]{16,})/?$", re.I)
+
+
+def offer_id(url: str) -> str:
+    """El código de la oferta al final de su dirección («…-en-medellin-8A0FDB32…») o «» si no lo trae."""
+    match = _OFFER_ID.search(url.split("?")[0].split("#")[0])
+    return match.group(1).upper() if match else ""
+
+
+def _own_apply(page, offer_url: str):
+    """El «Aplicar» de esta oferta, o None si no tiene uno propio (cerrada: solo los de las ofertas similares)."""
+    code = offer_id(offer_url)
+    if not code:
+        return None
+    link = page.locator(f"a[data-href-offer-apply*='oi={code}' i]")
+    return link.first if link.count() else None
+
+
 def _applied(page) -> bool:
     button = page.locator("[already-applied-btn]")
     return bool(button.count() and button.first.is_visible())
@@ -213,16 +234,18 @@ def apply(page, offer_url: str, cv_pdf: Path, answerer: Answerer, *, submit: boo
         return ApplyResult("sin_sesion", "El navegador del bot no tiene sesión de Computrabajo")
     if _applied(page):
         return ApplyResult("ya_postulada")
-    if not page.locator("a[data-href-offer-apply]").count():
-        return ApplyResult("saltada", "La oferta no tiene «Aplicar» (¿cerrada?)")
+    if _own_apply(page, offer_url) is None:  # nunca el «Aplicar» de una oferta similar
+        return ApplyResult("saltada", "La oferta ya no recibe postulaciones (cerrada o sin «Aplicar» propio)")
     try:
         ensure_default(page, cv_pdf, uploaded, general.name)
         if not submit:
             return ApplyResult("revisada", "Modo prueba: el CV quedó listo y no se pulsó «Aplicar»")
         page.goto(offer_url, wait_until="domcontentloaded")
         time.sleep(3)
+        if (own := _own_apply(page, offer_url)) is None:
+            return ApplyResult("saltada", "La oferta ya no recibe postulaciones (cerrada o sin «Aplicar» propio)")
         with page.expect_navigation(wait_until="domcontentloaded", timeout=90_000):
-            page.locator("a[data-href-offer-apply]").first.click()
+            own.click()
         time.sleep(3)
         for _ in range(3):
             if _challenge(page):
