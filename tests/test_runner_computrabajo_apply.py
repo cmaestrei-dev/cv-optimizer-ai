@@ -16,13 +16,15 @@ from runner import computrabajo_apply as ct  # noqa: E402
 
 OFFER = "https://co.computrabajo.com/ofertas-de-trabajo/oferta-de-trabajo-de-auxiliar-contable-AB12CD34EF56AB78"
 OI = "AB12CD34EF56AB78"
+SIMILAR = "99FF00EE11DD22CC"
 
 
 class FakeComputrabajo:
-    def __init__(self, docs: list[str], *, questions: bool = False, logged: bool = True):
+    def __init__(self, docs: list[str], *, questions: bool = False, logged: bool = True, closed: bool = False):
         self.docs = [{"id": f"D{i}", "name": n} for i, n in enumerate(docs)]
         self.default, self.next_id, self.applied, self.logged = "0", len(docs), False, logged
         self.questions, self.answers, self.attached, self.outside = questions, {}, None, []
+        self.closed, self.matched = closed, []
 
     def _docs_page(self, error: str = "") -> str:
         rows = "".join(
@@ -46,6 +48,13 @@ class FakeComputrabajo:
           </script></body></html>"""
 
     def _offer_page(self) -> str:
+        if self.closed:  # como la real (2026-11-28): aviso y ofertas similares, cada una con su «Aplicar»
+            return f"""<html><body><h1>Auxiliar contable</h1><p>Esta oferta ya no está disponible</p>
+              <div><h3>Ofertas similares</h3>
+              <a data-href-offer-apply="https://candidato.co.computrabajo.com/match/?oi={SIMILAR}&p=280&lc=OfferInactive-Similars-0-Base-null" class="b_primary tiny">Aplicar</a></div>
+              <script>window._IsUserLogged = () => true;
+                document.querySelector('[data-href-offer-apply]').onclick = function() {{ location.href = this.dataset.hrefOfferApply; }};
+              </script></body></html>"""
         return f"""<html><body><h1>Auxiliar contable</h1>
           <a data-href-offer-apply="https://candidato.co.computrabajo.com/match/?oi={OI}&p=57" class="b_primary">Aplicar</a>
           <a already-applied-btn style="display:{'inline' if self.applied else 'none'}">Postulado</a>
@@ -96,6 +105,7 @@ class FakeComputrabajo:
                 self.default = "0" if self.default == query["dlf"] else self.default
             html = html or self._docs_page()
         elif url.path.startswith("/match/"):
+            self.matched.append(query.get("oi"))
             if self.questions and not self.answers:
                 return self._redirect(route, f"/candidate/kq?oi={OI}")
             self.applied = True
@@ -209,3 +219,24 @@ def test_already_applied_and_no_session(browser, pdfs):
     assert ct.apply(_page(browser, fake), OFFER, cv, answerer, submit=True, general=general, uploaded=[]).status == "ya_postulada"
     out = FakeComputrabajo([general.name], logged=False)
     assert ct.apply(_page(browser, out), OFFER, cv, answerer, submit=True, general=general, uploaded=[]).status == "sin_sesion"
+
+
+def test_a_closed_offer_never_applies_to_a_similar_one(browser, pdfs):
+    # Caso real (27 y 28-11): la oferta cerrada mostraba «ofertas similares» con su «Aplicar», el bot pulsó el primero y
+    # postuló a otra oferta con el CV de esta.
+    general, cv = pdfs
+    fake = FakeComputrabajo([general.name], closed=True)
+    result = ct.apply(_page(browser, fake), OFFER, cv, answerer, submit=True, general=general, uploaded=[])
+    assert result.status == "saltada" and "ya no recibe postulaciones" in result.detail
+    assert fake.matched == [] and fake.applied is False
+    open_offer = FakeComputrabajo([general.name])
+    assert ct.apply(_page(browser, open_offer), OFFER, cv, answerer, submit=True, general=general, uploaded=[]).status == "enviada"
+    assert open_offer.matched == [OI]  # solo el «Aplicar» de esta oferta
+
+
+def test_offer_id_comes_from_the_address():
+    real = ("https://co.computrabajo.com/ofertas-de-trabajo/oferta-de-trabajo-de-practicante-de-ciberseguridad-tecnico-"
+            "tecnologo-en-medellin-8A0FDB32BEC3D70161373E686DCF3405")
+    assert ct.offer_id(real) == "8A0FDB32BEC3D70161373E686DCF3405"
+    assert ct.offer_id(real + "?utm=x#lc=Similars") == "8A0FDB32BEC3D70161373E686DCF3405"
+    assert ct.offer_id("https://co.computrabajo.com/empresas/acme") == ""
