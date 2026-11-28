@@ -91,16 +91,28 @@ def test_sends_the_cv_with_the_requested_subject_and_records_it(mail):
     assert "Te postulé por correo: Desarrollador Junior — Acme SAS" in notices[0]
     saved = State(cfg.DATA_DIR / "estado.json")
     assert saved.today("correos") == 1 and saved.data["correos_enviados"] == {"talento@acme.co": date.today().isoformat()}
+    assert saved.data["correos_vacantes"] == {"talento@acme.co|acme|desarrollador junior": date.today().isoformat()}
 
 
-def test_never_twice_to_the_same_address_and_respects_the_daily_cap(mail):
+def test_one_email_per_vacancy_and_per_address_per_day(mail):
+    # Decisión del dueño (2026-11-28): Perceptual publicó otra vacante con el mismo reclutador y la regla de 30 días
+    # por dirección la mandó a Telegram. Ahora: nunca la misma vacante dos veces; otra sí, máximo una al día.
     conf, state, cv, _ = mail
+    other = Vacancy(10, True, "Desarrollador Mobile", "Acme SAS", 70, [], "guardada")
     assert cli._apply_by_email(FakeApi(), conf, state, VACANCY, ["talento@acme.co"], TEXT, cv, 31)
-    assert cli._apply_by_email(FakeApi(), conf, state, VACANCY, ["Talento@acme.co"], TEXT, cv, 31) == ""  # 30 días
-    state.data["correos_enviados"]["talento@acme.co"] = (date.today() - timedelta(days=31)).isoformat()
-    assert cli._apply_by_email(FakeApi(), conf, state, VACANCY, ["talento@acme.co"], TEXT, cv, 31)  # ya pasó el plazo
-    assert cli._apply_by_email(FakeApi(), conf, state, VACANCY, ["otra@empresa.co"], TEXT, cv, 31) == ""  # tope de 2
-    assert len(FakeSMTP.sent) == 2
+    why: list[str] = []
+    assert cli._apply_by_email(FakeApi(), conf, state, VACANCY, ["Talento@acme.co"], TEXT, cv, 31, why=why) == ""
+    assert "misma vacante" in why[0]
+    why.clear()
+    assert cli._apply_by_email(FakeApi(), conf, state, other, ["talento@acme.co"], TEXT, cv, 32, why=why) == ""
+    assert "hoy ya le escribí" in why[0]  # otra vacante, el mismo día: mañana sí
+    state.data["correos_enviados"]["talento@acme.co"] = (date.today() - timedelta(days=1)).isoformat()
+    assert cli._apply_by_email(FakeApi(), conf, state, other, ["talento@acme.co"], TEXT, cv, 32) == "talento@acme.co"
+    state.data["correos_enviados"]["talento@acme.co"] = (date.today() - timedelta(days=90)).isoformat()
+    assert cli._apply_by_email(FakeApi(), conf, state, VACANCY, ["talento@acme.co"], TEXT, cv, 31) == ""  # nunca la misma
+    why.clear()
+    assert cli._apply_by_email(FakeApi(), conf, state, VACANCY, ["otra@empresa.co"], TEXT, cv, 31, why=why) == ""
+    assert "tope diario" in why[0] and len(FakeSMTP.sent) == 2  # tope de 2
 
 
 def test_without_setup_in_test_mode_or_rejected_nothing_is_sent(mail):
@@ -147,3 +159,29 @@ def test_a_post_that_asks_for_email_is_applied_by_email(mail, monkeypatch):
     monkeypatch.setattr(telegram, "add_manual", lambda item: pytest.fail("no debía ir a Telegram como manual"))
     conf = dataclasses.replace(conf, min_scores={"linkedin": 50})
     assert cli._handle_post(Api(), conf, post, "Daniela te mencionó", state) == {"estado": "correo", "app": 9, "para": "talento@acme.co"}
+
+
+def test_when_the_email_is_not_sent_telegram_says_why(mail, monkeypatch):
+    conf, state, cv, _ = mail
+    state.data["correos_enviados"] = {"talento@acme.co": date.today().isoformat()}  # hoy ya se le escribió por otra
+    post = lp.Post("1", "Ana", TEXT)
+    manual = []
+
+    class Api(FakeApi):
+        def add_vacancy(self, *, text, url, posted, images=()):
+            return VACANCY
+
+        def get(self, path):
+            return {"vacancy_text": TEXT} if path == "/applications/9" else super().get(path)
+
+        def make_cv(self, app_id):
+            return {"id": 31, "filename": cv.name}
+
+        def download_cv(self, cv_id, dest):
+            return cv
+
+    monkeypatch.setattr(cli, "_foreign", lambda api, conf, app_id: "")
+    monkeypatch.setattr(telegram, "add_manual", lambda item: manual.append(item))
+    conf = dataclasses.replace(conf, min_scores={"linkedin": 50})
+    assert cli._handle_post(Api(), conf, post, "Daniela te mencionó", state)["estado"] == "manual"
+    assert manual[0]["motivo"].startswith("no la envié por correo: hoy ya le escribí a talento@acme.co")

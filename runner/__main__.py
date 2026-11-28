@@ -17,7 +17,7 @@ import contextlib
 import getpass
 import re
 import sys
-from datetime import UTC, date, datetime, timedelta
+from datetime import UTC, date, datetime
 from pathlib import Path
 from types import SimpleNamespace
 
@@ -1009,36 +1009,55 @@ def _handle_post(api: Api, conf: cfg.Config, post, who: str, state: State | None
     from runner import linkedin_posts as lp
 
     emails = lp.emails_in(f"{post.text}\n{text}")
+    why: list[str] = []
     if state is not None and emails and cv_path and (to := _apply_by_email(
-            api, conf, state, vacancy, emails, text, Path(cv_path), cv_id)):
+            api, conf, state, vacancy, emails, text, Path(cv_path), cv_id, why=why)):
         return {"estado": "correo", "app": vacancy.id, "para": to}
     item = {"id": sha256(post.url.encode()).hexdigest()[:12], "url": post.url, "titulo": vacancy.role,
             "empresa": vacancy.company or post.author, "cv": cv_path, "nota": _how_to_apply(post, text, who),
-            "motivo": "", "respuestas": "", "puntaje": vacancy.score}
+            "motivo": f"no la envié por correo: {why[0]}" if why else "", "respuestas": "", "puntaje": vacancy.score}
     telegram.add_manual(item)
     print(f"  ✓ {vacancy.score:>3}  {vacancy.role} — {item['empresa']}: CV listo, enviado a Telegram (publicación)")
     return {"estado": "manual", "app": vacancy.id}
 
 
-MAIL_REPEAT_DAYS = 30  # a una misma dirección no se le vuelve a escribir antes de esto
+def _mail_key(to: str, vacancy) -> str:
+    """La misma vacante a la misma dirección (empresa y cargo normalizados): nunca dos veces."""
+    firm, role = _job_key(vacancy.company or "", vacancy.role) or ("", " ".join(vacancy.role.lower().split()))
+    return f"{to.lower()}|{firm}|{role}"
 
 
 def _apply_by_email(api: Api, conf: cfg.Config, state: State, vacancy, emails: list[str], vacancy_text: str,
-                    cv_pdf: Path, cv_id: int | None) -> str:
+                    cv_pdf: Path, cv_id: int | None, *, why: list[str] | None = None) -> str:
     """Postula por correo (autorizado por el dueño el 2026-11-26) cuando la vacante lo pide: desde su Gmail, con el CV de
     esa vacante y el mensaje que escribe la app. Devuelve a quién se envió, o «» si no se envió (sin configurar, tope
-    del día, modo prueba, error): entonces la vacante sigue por Telegram para enviarla a mano."""
+    del día, ya enviada, modo prueba, error): entonces la vacante sigue por Telegram para enviarla a mano, y `why`
+    recibe el motivo para decírselo a la persona.
+
+    Regla (decisión del dueño, 2026-11-28; antes: una dirección cada 30 días): nunca la misma vacante dos veces a la
+    misma dirección; un cargo distinto sí puede ir al mismo reclutador, con máximo un correo al día por dirección."""
     from runner import mailer, telegram
 
+    why = why if why is not None else []
     if not conf.mail_from or not (secret := mailer.password()):
+        why.append("el correo del bot no está configurado (python -m runner correo)")
         return ""
     if state.today("correos") >= conf.mail_cap:
         print(f"        Tope de {conf.mail_cap} correos por hoy: esta va por Telegram.")
+        why.append(f"ya van {conf.mail_cap} correos hoy, el tope diario")
         return ""
-    recent = state.data.setdefault("correos_enviados", {})
-    limit = (date.today() - timedelta(days=MAIL_REPEAT_DAYS)).isoformat()
-    to = next((e for e in mailer.recipients(emails) if recent.get(e.lower(), "") < limit), "")
+    recent = state.data.setdefault("correos_enviados", {})  # dirección → último día
+    vacancies = state.data.setdefault("correos_vacantes", {})  # dirección|empresa|cargo → día
+    today = date.today().isoformat()
+    candidates = mailer.recipients(emails)
+    to = next((e for e in candidates if _mail_key(e, vacancy) not in vacancies and recent.get(e.lower()) != today), "")
     if not to:
+        if not candidates:
+            why.append("la vacante solo trae direcciones de «no responder»")
+        elif all(_mail_key(e, vacancy) in vacancies for e in candidates):
+            why.append(f"ya enviaste esta misma vacante a {candidates[0]}")
+        else:
+            why.append(f"hoy ya le escribí a {candidates[0]} por otra vacante (máximo un correo al día por dirección)")
         return ""
     contact = (api.get("/profile") or {}).get("contact") or {}
     name = contact.get("full_name") or conf.mail_from
@@ -1051,15 +1070,18 @@ def _apply_by_email(api: Api, conf: cfg.Config, state: State, vacancy, emails: l
     body = f"{letter.strip()}\n\nCordialmente,\n{signature}\n"
     if conf.mode != "auto":
         print(f"        Modo prueba: el correo a {to} («{subject}») no se envió.")
+        why.append("el bot está en modo prueba")
         return ""
     msg = mailer.build(sender=conf.mail_from, name=name, to=to, subject=subject, body=body, attachment=cv_pdf)
     try:
         mailer.send(conf.mail_from, secret, msg)
     except mailer.MailError as e:
         print(f"        Correo no enviado: {e}")
+        why.append(str(e))
         return ""
     state.count("correos")
-    recent[to.lower()] = date.today().isoformat()
+    recent[to.lower()] = today
+    vacancies[_mail_key(to, vacancy)] = today
     state.save()
     try:
         api.post(f"/applications/{vacancy.id}/sent", {"cv_id": cv_id, "platform": "Correo o referido"})
