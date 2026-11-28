@@ -5,6 +5,7 @@ escapa. El ajuste a N páginas se hace midiendo el PDF real y quitando lo menos 
 """
 
 import html
+from collections.abc import Callable
 from dataclasses import asdict, dataclass, field
 
 from weasyprint import HTML
@@ -201,29 +202,43 @@ def render_html(doc: CVDocument, contact: UserProfile) -> str:
     )
 
 
-def _drop_bullet(doc: CVDocument, keep: int) -> str | None:
+@dataclass
+class _Trim:
+    """Lo que se quitó para caber en la página, y cómo devolverlo (`undo`) o volver a quitarlo (`redo`)."""
+
+    message: str
+    undo: Callable[[], None]
+    redo: Callable[[], None]
+
+
+def _drop_bullet(doc: CVDocument, keep: int) -> _Trim | None:
     """La viñeta de menor puntaje entre las experiencias que tienen más de `keep`."""
     candidates = [(b, exp) for exp in doc.visible_experiences() if len(exp.included) > keep for b in exp.included]
     if not candidates:
         return None
     bullet, exp = min(candidates, key=lambda pair: pair[0].score)
     bullet.included = False
-    return f"Viñeta de {exp.role}: {bullet.text[:60]}…"
+    return _Trim(f"Viñeta de {exp.role}: {bullet.text[:60]}…", lambda: setattr(bullet, "included", True),
+                 lambda: setattr(bullet, "included", False))
 
 
-def _drop_course(doc: CVDocument, keep: int) -> str | None:
+def _pop_education(doc: CVDocument, index: int) -> _Trim:
+    line = doc.education.pop(index)
+    return _Trim(f"Educación: {line}", lambda: doc.education.insert(min(index, len(doc.education)), line),
+                 lambda: doc.education.remove(line))
+
+
+def _drop_course(doc: CVDocument, keep: int) -> _Trim | None:
     """El último curso o certificado (van del más al menos relevante, después de los títulos)."""
     courses = [i for i, line in enumerate(doc.education) if not is_degree_title(line.split(" - ")[0])]
-    if len(courses) <= keep:
-        return None
-    return f"Educación: {doc.education.pop(courses[-1])}"
+    return _pop_education(doc, courses[-1]) if len(courses) > keep else None
 
 
-def _drop_education(doc: CVDocument, keep: int) -> str | None:
-    return f"Educación: {doc.education.pop()}" if len(doc.education) > keep else None
+def _drop_education(doc: CVDocument, keep: int) -> _Trim | None:
+    return _pop_education(doc, len(doc.education) - 1) if len(doc.education) > keep else None
 
 
-def _drop_skill(doc: CVDocument, keep: int) -> str | None:
+def _drop_skill(doc: CVDocument, keep: int) -> _Trim | None:
     """La última habilidad del último grupo (los grupos van de lo que pide la vacante a lo demás)."""
     if sum(len(items) for _, items in doc.skill_groups) <= keep:
         return None
@@ -231,27 +246,47 @@ def _drop_skill(doc: CVDocument, keep: int) -> str | None:
     removed = items.pop()
     if not items:
         doc.skill_groups.pop()
-    return f"Habilidad: {removed} ({label})"
+
+    def undo() -> None:
+        group = next((g for g in doc.skill_groups if g[0] == label), None)
+        if group:
+            group[1].append(removed)
+        else:
+            doc.skill_groups.append((label, [removed]))
+
+    def redo() -> None:
+        group = next(g for g in doc.skill_groups if g[0] == label)
+        group[1].remove(removed)
+        if not group[1]:
+            doc.skill_groups.remove(group)
+
+    return _Trim(f"Habilidad: {removed} ({label})", undo, redo)
 
 
-def _denser(doc: CVDocument) -> str | None:
+def _denser(doc: CVDocument) -> _Trim | None:
     if doc.density >= len(DENSITY_CSS) - 1:
         return None
     doc.density += 1
-    return "Letra un poco más pequeña" if doc.density == 1 else "Márgenes más estrechos"
+    return _Trim("Letra un poco más pequeña" if doc.density == 1 else "Márgenes más estrechos",
+                 lambda: setattr(doc, "density", doc.density - 1), lambda: setattr(doc, "density", doc.density + 1))
 
 
-def _drop_oldest(doc: CVDocument) -> str | None:
+def _drop_oldest(doc: CVDocument) -> _Trim | None:
     visible = doc.visible_experiences()
     if len(visible) <= 1:
         return None
-    for b in visible[-1].bullets:
-        b.included = False
-    return f"Experiencia: {visible[-1].role}"
+    shown = visible[-1].included
+
+    def show(value: bool) -> None:
+        for b in shown:
+            b.included = value
+
+    show(False)
+    return _Trim(f"Experiencia: {visible[-1].role}", lambda: show(True), lambda: show(False))
 
 
-def _trim_once(doc: CVDocument) -> str | None:
-    """Quita lo menos relevante. Devuelve qué se quitó, o None si ya no hay nada razonable que quitar.
+def _trim_step(doc: CVDocument) -> _Trim | None:
+    """Quita lo menos relevante, o None si ya no hay nada razonable que quitar.
 
     Orden (v3, 2026-11-28: cada experiencia lleva 4 o 5 viñetas y la hoja es una sola): viñetas por encima de 5, cursos
     hasta dejar los 2 más relevantes, habilidades hasta 12, la 5.ª viñeta, letra y márgenes más compactos, el resto de
@@ -264,9 +299,15 @@ def _trim_once(doc: CVDocument) -> str | None:
         lambda: _drop_oldest(doc), lambda: _drop_bullet(doc, 2), lambda: _drop_bullet(doc, 1),
     )
     for step in steps:
-        if removed := step():
-            return removed
+        if trim := step():
+            return trim
     return None
+
+
+def _trim_once(doc: CVDocument) -> str | None:
+    """Quita lo menos relevante y dice qué (ver `_trim_step`)."""
+    trim = _trim_step(doc)
+    return trim.message if trim else None
 
 
 @dataclass
@@ -277,19 +318,35 @@ class RenderResult:
     trimmed: list[str]
 
 
+def _layout(doc: CVDocument, contact: UserProfile):
+    return HTML(string=render_html(doc, contact), url_fetcher=deny_all_url_fetcher).render()
+
+
 def render(doc: CVDocument, contact: UserProfile, max_pages: int = 1) -> RenderResult:
-    trimmed: list[str] = []
+    trims: list[_Trim] = []
     for _ in range(80):
-        rendered = HTML(string=render_html(doc, contact), url_fetcher=deny_all_url_fetcher).render()
+        rendered = _layout(doc, contact)
         if len(rendered.pages) <= max_pages:
             break
-        removed = _trim_once(doc)
-        if removed is None:
+        trim = _trim_step(doc)
+        if trim is None:
             break
-        trimmed.append(removed)
+        trims.append(trim)
+    kept = list(trims)
+    if len(rendered.pages) <= max_pages:
+        # Lo último que se quitó a veces libera más de lo necesario y queda espacio al final: se devuelve lo que vuelva
+        # a caber, de lo más reciente (lo más importante de lo quitado) a lo más antiguo. Lo último no: sin eso no cabía.
+        for trim in reversed(trims[:-1]):
+            trim.undo()
+            candidate = _layout(doc, contact)
+            if len(candidate.pages) <= max_pages:
+                rendered = candidate
+                kept.remove(trim)
+            else:
+                trim.redo()
     return RenderResult(
         pdf=rendered.write_pdf(),
         docx=generate_docx(doc.to_markdown(), contact),
         pages=len(rendered.pages),
-        trimmed=trimmed,
+        trimmed=[t.message for t in kept],
     )
