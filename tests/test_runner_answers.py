@@ -139,3 +139,20 @@ def test_real_options_that_were_skipped_on_2026_11_28():
     assert answers.pick_years(1, ["0-1", "1-3", "3-5"]) == "1-3"
     assert answers.pick_years(2, ["12 a 24 meses", "Más de 24 meses"]) == "12 a 24 meses"  # «más de» no incluye el borde
     assert answers.pick_option("5 años", audit) == "4 años o mas"
+
+
+def test_internship_period_is_the_nearest_to_today():
+    # El dueño (2026-11-28): puede hacer prácticas desde ya; «coloca la que esté más cerca del tiempo actual».
+    from datetime import date
+
+    assert answers.nearest_period(["2026 I", "2026II"], date(2026, 11, 28)) == "2026II"  # caso real de Grupo emi
+    assert answers.nearest_period(["2026 II", "2027 I", "2027 II"], date(2027, 1, 15)) == "2027 I"
+    assert answers.nearest_period(["Primer semestre 2027", "Segundo semestre 2027"], date(2026, 11, 28)) == "Primer semestre 2027"
+    assert answers.nearest_period(["2027-1", "2026-2"], date(2026, 8, 1)) == "2026-2"
+    assert answers.nearest_period(["2025 I", "2025 II"], date(2026, 11, 28)) == "2025 II"  # todas pasaron: la última
+    assert answers.nearest_period(["Sí", "No"], date(2026, 11, 28)) is None
+    assert answers.pick_option("Desde ya: el periodo más cercano", ["2099 II", "2099 I"]) == "2099 I"
+    assert answers.pick_option("Desde ya: el periodo más cercano", ["Sí", "No"]) is None
+    assert answers.pick_option("Bueno", ["Sí", "No"]) is None  # antes: «No», porque «no» está dentro de «bueno»
+    owner = "Sí, desde ya: el periodo más cercano"  # el valor del banco del dueño
+    assert answers.pick_option(owner, ["Sí", "No"]) == "Sí" and answers.pick_option(owner, ["2099 I", "2099 II"]) == "2099 I"

@@ -7,6 +7,7 @@ la vacante se salta, salvo las preguntas de experiencia, que `sin_evidencia` dec
 import math
 import re
 import unicodedata
+from datetime import date
 
 YEARS = re.compile(r"\b(cu[aá]nt[oa]s?|how many)\b.*\b(a[nñ]os|years?|meses|months?)\b"
                    r"|\b(cu[aá]nto tiempo|how long)\b.*\b(experiencia|experience|trabaj|llevas)", re.I)
@@ -104,6 +105,34 @@ _CEFR = {"a1": ("basico|basic|elemental|principiante|beginner",), "a2": ("basico
          "c1": ("avanzado|advanced",), "c2": ("nativo|native|bilingue|bilingual|fluent", "avanzado|advanced")}
 
 
+# Periodos académicos: «2026 I», «2026II», «2027-1», «Primer semestre 2027», «II-2026».
+_YEAR_FIRST = re.compile(r"\b(20\d\d)\s*[-/]?\s*(ii|i|2|1)\b")
+_TERM_FIRST = re.compile(r"\b(primer|segundo|ii|i|1|2)(?:er|do|o)?\s*(?:semestre|periodo|sem)?\s*(?:del?)?\s*[-/]?\s*(20\d\d)\b")
+NEAREST_PERIOD = "periodo mas cercano"  # en el banco: «el periodo más cercano» elige la opción más próxima a hoy
+
+
+def _period(option: str) -> tuple[int, int] | None:
+    o = normalize(option)
+    if match := _YEAR_FIRST.search(o):
+        return int(match.group(1)), 2 if match.group(2) in ("ii", "2") else 1
+    if match := _TERM_FIRST.search(o):
+        return int(match.group(2)), 2 if match.group(1) in ("segundo", "ii", "2") else 1
+    return None
+
+
+def nearest_period(options: list[str], today: date | None = None) -> str | None:
+    """Entre opciones que son periodos académicos, la del periodo actual o el siguiente más cercano (el dueño puede
+    hacer prácticas desde ya, 2026-11-28: «coloca la que esté más cerca del tiempo actual»). Si todas pasaron, la
+    última. None si no hay al menos dos periodos."""
+    today = today or date.today()
+    now = (today.year, 1 if today.month <= 6 else 2)
+    periods = [(p, o) for o in options if (p := _period(o))]
+    if len(periods) < 2:
+        return None
+    upcoming = [x for x in periods if x[0] >= now]
+    return min(upcoming)[1] if upcoming else max(periods)[1]
+
+
 _OTHER = re.compile(r"^(otr[oa]s?|other|ninguna de las anteriores|otr[oa] (ciudad|municipio|departamento|pais|lugar))$")
 
 
@@ -129,6 +158,8 @@ def pick_option(answer: str, options: list[str]) -> str | None:
             return original
     if a.isdigit() and any(_NUMBER.search(o) for _, o in clean):
         return pick_years(int(a), [original for original, _ in clean])
+    if NEAREST_PERIOD in a and (period := nearest_period([original for original, _ in clean])):
+        return period
     ranges = [original for original, o in clean if _NUMBER.search(o) and _span(o) is not None]
     if len(ranges) >= 2 and (years := _years_of(a)) is not None:  # «1 año» con «De 1 a 3 años», «0-6 meses»…
         return pick_years(years, ranges)
@@ -149,8 +180,9 @@ def _pick_text(a: str, clean: list[tuple[str, str]]) -> str | None:
                 return original
         if a in _YES or a in _NO:
             return None  # un «sí» o «no» solo no se parece a ninguna otra opción
+    within = lambda x, y: re.search(rf"(?<!\w){re.escape(x)}(?!\w)", y)  # noqa: E731 — palabras enteras: «no» no está en «cercano»
     for original, o in clean:
-        if a in o or o in a:
+        if within(a, o) or within(o, a):
             return original
     if level := _CEFR.get(a):  # «A2» cuando las opciones son «Básico / Intermedio / Avanzado…»
         for words in level:
