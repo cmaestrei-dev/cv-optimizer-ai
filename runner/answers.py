@@ -67,6 +67,8 @@ def to_period(answer: str, *, months: bool = False) -> str | None:
 
 _LESS = re.compile(r"\b(menos de|menor a|less than|under)\b|^<")
 _MORE = re.compile(r"\b(mas de|mayor a|more than|over)\b|\+|^>")
+_OR_MORE = re.compile(r"\b(o mas|y mas|en adelante|or more|and above)\b")
+_EDGE = 1e-6  # «Más de 2 años» no incluye 2; «Menos de 1 año» no incluye 1
 
 
 def _span(option: str) -> tuple[float, float] | None:
@@ -77,19 +79,22 @@ def _span(option: str) -> tuple[float, float] | None:
     if re.search(r"\b(mes|meses|months?)\b", option) and not re.search(r"\b(ano|anos|years?)\b", option):
         numbers = [n / 12 for n in numbers]
     if _LESS.search(option):
-        return 0.0, numbers[0]
-    if _MORE.search(option):
+        return 0.0, numbers[0] - _EDGE
+    if _OR_MORE.search(option):  # «4 años o más»
         return numbers[0], math.inf
+    if _MORE.search(option):
+        return numbers[0] + _EDGE, math.inf
     return min(numbers), max(numbers)
 
 
-def pick_years(years: int, options: list[str]) -> str | None:
-    """La opción de años que contiene `years` («1 a 2 años» para 2); si ninguna, la más cercana."""
+def pick_years(years: float, options: list[str]) -> str | None:
+    """La opción de años que contiene `years` («1 a 2 años» para 2); si ninguna, la más cercana. Si dos la contienen
+    (1 año: «6-12 meses» y «1-3 años»), la mayor: la experiencia se redondea hacia arriba (decisión del dueño)."""
     spans = [(original, _span(o)) for original, o in ((x, normalize(x)) for x in options) if o]
     spans = [(original, s) for original, s in spans if s is not None]
-    inside = [original for original, (low, high) in spans if low <= years <= high]
+    inside = [(low, original) for original, (low, high) in spans if low <= years <= high]
     if inside:
-        return inside[0]
+        return max(inside, key=lambda x: x[0])[1]
     return min(spans, key=lambda x: min(abs(years - x[1][0]), abs(years - x[1][1])))[0] if spans else None
 
 
@@ -99,8 +104,22 @@ _CEFR = {"a1": ("basico|basic|elemental|principiante|beginner",), "a2": ("basico
          "c1": ("avanzado|advanced",), "c2": ("nativo|native|bilingue|bilingual|fluent", "avanzado|advanced")}
 
 
+_OTHER = re.compile(r"^(otr[oa]s?|other|ninguna de las anteriores|otr[oa] (ciudad|municipio|departamento|pais|lugar))$")
+
+
+def _years_of(answer: str) -> float | None:
+    """«1 año» → 1, «6 meses» → 0,5, «Más de 1 año» → un poco más de 1. None si no dice un tiempo."""
+    match = _DURATION.search(answer)
+    if not match:
+        return None
+    amount = float(match.group(1).replace(",", "."))
+    years = amount / 12 if match.group(2).startswith(("mes", "month")) else amount
+    return years + 0.01 if _MORE.search(answer[:match.start()]) else years
+
+
 def pick_option(answer: str, options: list[str]) -> str | None:
-    """La opción que corresponde a la respuesta (exacta, sí/no, rango de años o que la contiene). None si ninguna calza."""
+    """La opción que corresponde a la respuesta (exacta, sí/no, rango de años o que la contiene; si no está entre las
+    opciones y hay una sola «Otra», esa). None si ninguna calza."""
     a = normalize(answer)
     if not a:
         return None
@@ -110,6 +129,18 @@ def pick_option(answer: str, options: list[str]) -> str | None:
             return original
     if a.isdigit() and any(_NUMBER.search(o) for _, o in clean):
         return pick_years(int(a), [original for original, _ in clean])
+    ranges = [original for original, o in clean if _NUMBER.search(o) and _span(o) is not None]
+    if len(ranges) >= 2 and (years := _years_of(a)) is not None:  # «1 año» con «De 1 a 3 años», «0-6 meses»…
+        return pick_years(years, ranges)
+    found = _pick_text(a, clean)
+    if found is None and not (a in _YES or a in _NO or a.isdigit()):
+        others = [original for original, o in clean if _OTHER.match(o)]
+        if len(others) == 1:  # «Cartagena» con «Cali / Palmira / Jamundí / Otra»: lo cierto es «Otra»
+            return others[0]
+    return found
+
+
+def _pick_text(a: str, clean: list[tuple[str, str]]) -> str | None:
     first = lambda s: re.split(r"[\s,.;:]+", s, maxsplit=1)[0]  # noqa: E731 — «Sí, tengo…» → «si»
     if a in _YES or a in _NO or first(a) in (_YES | _NO) - {"1", "0"}:
         wanted = _YES if (a in _YES or first(a) in _YES) else _NO

@@ -122,3 +122,20 @@ def test_language_levels_map_to_the_forms_words():
     assert answers.pick_option("A2", softtek) == "Básico" and answers.pick_option("B1", softtek) == "Intermedio"
     assert answers.pick_option("B2", softtek) == "Intermedio alto" and answers.pick_option("C1", softtek) == "Avanzado"
     assert answers.pick_option("A2", ["A1", "A2", "B1"]) == "A2"  # si el formulario usa el marco europeo, tal cual
+
+
+def test_real_options_that_were_skipped_on_2026_11_28():
+    # Vuelta del 28-11: cuatro vacantes de Computrabajo saltadas porque la respuesta no calzaba con las opciones.
+    security = ["0-6 meses", "6-12 meses", "1-3 años", "3-5 años", "más de 5 años"]
+    assert answers.pick_option("Más de 1 año", security) == "1-3 años"
+    assert answers.pick_option("1 año", security) == "1-3 años"  # en el borde, el mayor: se redondea hacia arriba
+    assert answers.pick_option("4 meses", security) == "0-6 meses"
+    audit = ["4 años o mas", "De 1 a 3 años", "Tengo experiencia en sistemas e informática pero no en auditoria, con…"]
+    assert answers.pick_option("1 año", audit) == "De 1 a 3 años"
+    assert answers.pick_option("Cartagena de Indias, Bolívar, Colombia", ["Cali", "Palmira", "Jamundí", "Otra"]) == "Otra"
+    assert answers.pick_option("Cali", ["Cali", "Palmira", "Otra"]) == "Cali"
+    assert answers.pick_option("Sí", ["Cali", "Otra"]) is None  # un sí/no nunca cae en «Otra»
+    assert answers.pick_option("Cartagena", ["Cali", "Otra", "Otro municipio"]) is None  # dos «otra»: no se adivina
+    assert answers.pick_years(1, ["0-1", "1-3", "3-5"]) == "1-3"
+    assert answers.pick_years(2, ["12 a 24 meses", "Más de 24 meses"]) == "12 a 24 meses"  # «más de» no incluye el borde
+    assert answers.pick_option("5 años", audit) == "4 años o mas"

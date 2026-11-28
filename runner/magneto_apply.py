@@ -99,6 +99,8 @@ def _fill(data: dict, answerer: Answerer) -> tuple[list[dict], list[str]]:
             if option := pick_option(value, q.options):
                 chosen = raw["possibleAnswers"][q.options.index(option)]
                 entry = {"id": raw["id"], "type": kind, "answer": [chosen["id"]]}
+            else:
+                print(f"        «{q.label[:70]}»: «{value[:40]}» no calza con {q.options[:8]}")  # para ajustar el banco
         elif value:
             entry = {"id": raw["id"], "type": kind, "openAnswer": _shorten(value, LIMITS.get(kind, 140))}
         if entry is None:
