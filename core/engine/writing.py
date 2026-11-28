@@ -42,8 +42,14 @@ class SummaryDraft(BaseModel):
 class WrittenCV:
     summary: str
     bullets: dict[int, str]
-    reverted: dict[int, list[str]] = field(default_factory=dict)  # id -> motivos
+    reverted: dict[int, list[str]] = field(default_factory=dict)  # id -> motivos (datos sin respaldo)
     summary_problems: list[str] = field(default_factory=list)
+    # Viñetas que quedaron con el texto del usuario porque la IA insistía en sonar a IA (no inventaban nada).
+    restyled: dict[int, list[str]] = field(default_factory=dict)
+
+
+BULLET_CHARS = 100  # lo que cabe en una línea de viñeta a 10 pt (medido: entre 105 y 110 caracteres)
+BULLET_MAX = 105
 
 
 _PROMPT = """Eres un redactor experto de CVs para cualquier profesión. Reescribe el contenido del \
@@ -69,22 +75,30 @@ REGLAS:
 lo mismo con el término que usa la vacante (sinónimo exacto), nada más. Adáptala a ESTA vacante: \
 empieza por la parte del logro que respalda sus requisitos (la columna de requisitos) y deja de lado \
 los detalles que a esta vacante no le importan.
-2. PROHIBIDO agregar herramientas, software, empresas, cifras, porcentajes, resultados o \
+2. PROHIBIDO agregar herramientas, software, empresas, cifras, porcentajes, resultados, propósitos o \
 responsabilidades que no estén en el texto original. Conserva las cifras tal cual: son lo que más vale.
-3. Cada viñeta: una oración corta, idealmente de una línea (unos 100 caracteres y nunca más de 130), \
-que empieza con un verbo de acción en pasado (primera persona en español). Sin la etiqueta inicial \
-del original («Pagos:», «Calidad:»). No termines con punto.
-4. Devuelve una viñeta por cada id recibido, con el mismo id.
-5. Resumen (perfil profesional): 2 o 3 oraciones, entre 40 y 70 palabras, que suenen escritas por \
+3. Cada viñeta en UNA línea: entre 60 y {max_chars} caracteres, nunca más. Escríbela como la contaría la persona, \
+con palabras simples y concretas y frases completas (con sus artículos: «una API», «el sitio»; nada de estilo \
+telegrama): verbo en pasado (primera persona en español) + qué hizo + para qué o con qué resultado, solo si el \
+original lo dice. Si no cabe todo, quita detalles: nunca amontones datos ni cambies el sentido. Si suena más \
+natural, puede abrir con un contexto breve del original («Cuando hubo una intrusión en la red, la contuve…») o con \
+«Me encargué de…». Sin la etiqueta inicial del original («Pagos:», «Calidad:»). No termines con punto. No empieces \
+dos viñetas seguidas con el mismo verbo y evita los verbos vacíos («Realicé», «Utilicé», «Ejecuté») si hay uno preciso.
+4. Que no suene a IA: nada de «garantizando», «optimizando», «impulsando», «potenciando», «aportando valor», \
+«sinergia», «de manera eficiente», «robusto», «de alta calidad», «exitosamente», ni rayas largas (—). No cierres \
+una frase con un gerundio («…, mejorando la calidad»): usa «para» + verbo o deja solo lo que hizo.
+5. Devuelve una viñeta por cada id recibido, con el mismo id.
+6. Resumen (perfil profesional): 2 o 3 oraciones, entre 40 y 70 palabras, que suenen escritas por \
 una persona para ESTA vacante, en primera persona implícita (sin «yo»):
    - Quién es: sus cargos reales, sus años y su formación. NUNCA empieces con el cargo de la vacante \
 ni lo presentes como un cargo que tuvo; si lo nombras, solo como objetivo («para aportar como…»).
    - Qué aporta aquí: 3 a 5 habilidades reales que la vacante pide (no listes todas) y un logro \
 concreto de los LOGROS que lo respalde, con su cifra tal cual si la tiene.
    - No copies frases de la vacante ni uses relleno: «apasionado», «proactivo», «orientado a \
-resultados», «altamente motivado», «sólidos conocimientos», «amplia experiencia».
+resultados», «altamente motivado», «sólidos conocimientos», «amplia experiencia», «domino», «experto», ni las \
+muletillas de la regla 4 (tampoco gerundios al final de una frase).
    - Solo datos de los DATOS PARA EL RESUMEN y de los logros: nada inventado.
-6. Todo en {language}."""
+7. Todo en {language}."""
 
 _SUMMARY_REPAIR = """Corrige este perfil profesional de un CV para la vacante «{role}» (idioma: {language}).
 
@@ -96,11 +110,27 @@ habilidades {skills}; logros: {achievements}
 
 Escribe 2 o 3 oraciones naturales (40 a 70 palabras), en primera persona implícita: quién es (cargos, \
 años, formación), 3 a 5 habilidades que la vacante pide y un logro concreto con su cifra tal cual. No empieces \
-con el cargo de la vacante, no listes todas las habilidades, no copies frases de la vacante ni uses relleno."""
+con el cargo de la vacante, no listes todas las habilidades, no copies frases de la vacante ni uses relleno, \
+muletillas de IA («impulsando», «de manera eficiente», «aportando valor»…), rayas largas ni gerundios al final."""
 
-_FILLER = ("apasionad", "proactiv", "orientado a resultados", "orientada a resultados", "altamente motivad",
-           "solidos conocimientos", "amplia experiencia", "passionate", "results-driven", "highly motivated",
-           "experto", "experta", "domino ", "expert ")  # «experto» exagera para un perfil junior (pasó el 2026-11-22)
+# Relleno y muletillas que delatan un texto hecho con IA (v3, 2026-11-28: el dueño pidió hojas de vida que suenen
+# escritas por una persona). Se comparan sin tildes ni mayúsculas, desde el inicio de una palabra; en una viñeta solo
+# cuentan si no estaban en el texto del usuario. «experto» exagera para un perfil junior (pasó el 2026-11-22).
+_FILLER = (
+    "apasionad", "proactiv", "orientado a resultados", "orientada a resultados", "altamente motivad",
+    "solidos conocimientos", "amplia experiencia", "experto", "experta", "domino", "sinergia", "impulsando", "impulsar",
+    "impulse", "potenciando", "potenciar", "potencie", "aportando valor", "aportar valor", "valor agregado",
+    "de manera eficiente", "de forma eficiente", "de manera efectiva", "de forma efectiva", "eficaz y eficiente",
+    "robust", "de alta calidad", "exitosamente", "con exito", "innovador", "vanguardia", "excepcional", "meticulos",
+    "garantizando", "asegurando", "optimizando", "fomentando", "aprovechando", "maximizando", "contribuyendo",
+    "passionate", "results driven", "highly motivated", "expert", "synerg", "leverag", "spearhead", "seamless",
+    "cutting edge", "detail oriented", "proven track record", "ensuring", "fostering", "showcasing", "blindar",
+    "blindando", "integral",
+)
+_DASHES = ("—", " – ")
+_GERUND_TAIL = re.compile(r",\s+([a-záéíóúñ]+(?:ando|iendo|yendo))\b")
+_GERUND_CLAUSE = re.compile(r",\s+([a-záéíóúñ]+(?:ando|iendo|yendo))\b[^.;:]*")
+_DOMINO = re.compile(r"\b([Dd])omino\b")
 _MIN_WORDS, _MAX_LISTED = 25, 7
 
 
@@ -123,7 +153,46 @@ def _education_text(profile: ProfileSnapshot, language_code: str) -> str:
     return "; ".join(items) or "-"
 
 
-def summary_style_problems(summary: str, vacancy_role: str, real_roles: list[str], vacancy_texts: list[str]) -> list[str]:
+def _filler(text: str, original: str = "") -> list[str]:
+    plain, source = f" {_plain(text)} ", f" {_plain(original)} "
+    return [f for f in _FILLER if f" {f}" in plain and f" {f}" not in source]
+
+
+def style_problems(text: str, original: str = "", language: str = "es") -> list[str]:
+    """Lo que hace sonar a IA un texto del CV y no estaba en el del usuario: relleno o muletillas, rayas largas y frases
+    que cierran con un gerundio («…, garantizando la calidad»)."""
+    problems = []
+    if found := _filler(text, original):
+        problems.append(f"usa relleno o muletillas de IA ({', '.join(found)})")
+    if any(d in text for d in _DASHES) and not any(d in original for d in _DASHES):
+        problems.append("usa rayas largas (—)")
+    if language == "es":
+        tails = [g for g in _GERUND_TAIL.findall(text.lower()) if g not in original.lower()]
+        if tails:
+            problems.append(f"cierra con un gerundio («…, {tails[0]}…»): usa «para» + verbo o deja solo lo que hizo")
+    return problems
+
+
+def tidy(text: str, original: str = "", language: str = "es") -> str:
+    """Arreglos sin IA que solo quitan o cambian una palabra, para lo que la corrección no arregló: la frase en gerundio
+    que agregó la IA (si no trae cifras: esas valen), las rayas largas y «Domino» (exagera: «Manejo»)."""
+    if language != "es":
+        return text
+    low = original.lower()
+
+    def cut(m: re.Match) -> str:
+        return m.group(0) if m.group(1) in low or any(c.isdigit() for c in m.group(0)) else ""
+
+    text = _GERUND_CLAUSE.sub(cut, text)
+    if not any(d in original for d in _DASHES):
+        text = re.sub(r"\s*(—|\s–\s)\s*", ", ", text)
+    if "domino" not in _plain(original):
+        text = _DOMINO.sub(lambda m: "Manejo" if m.group(1) == "D" else "manejo", text)
+    return re.sub(r"\s+([.,;])", r"\1", text).strip(" ,")
+
+
+def summary_style_problems(summary: str, vacancy_role: str, real_roles: list[str], vacancy_texts: list[str],
+                           language: str = "es", source: str = "") -> list[str]:
     """Lo que hace sonar robótico o inútil un perfil (aparte de la verificación de datos): empezar con el cargo de
     la vacante como si fuera propio, ser muy corto, listar demasiadas habilidades, relleno o frases copiadas."""
     problems, text = [], _plain(summary)
@@ -134,8 +203,7 @@ def summary_style_problems(summary: str, vacancy_role: str, real_roles: list[str
         problems.append("es demasiado corto: no dice qué aporta el candidato")
     if max((len(part.split(",")) for part in re.split(r"[.;:](?:\s|$)", summary)), default=0) > _MAX_LISTED:
         problems.append("es una lista larga de habilidades: elige las 3 a 5 que pide la vacante")
-    if filler := [f for f in _FILLER if f in text]:
-        problems.append(f"usa relleno ({', '.join(filler)})")
+    problems += style_problems(summary, source, language)
     words = text.split()
     sources = [f" {_plain(t)} " for t in vacancy_texts if t]
     for i in range(len(words) - 5):
@@ -156,7 +224,8 @@ _IRREGULAR_E = {
     "quise", "vine", "convine", "intervine", "previne", "provine", "hube",
 }
 # Palabras con que a veces empieza una viñeta y no son verbos.
-_NOT_VERBS = {"desde", "durante", "mediante", "entre", "siempre", "sobre", "este", "base", "clave", "cliente", "parte"}
+_NOT_VERBS = {"desde", "durante", "mediante", "entre", "siempre", "sobre", "este", "base", "clave", "cliente", "parte",
+              "ante", "donde", "frente", "aunque", "porque", "pese", "mientras"}
 
 
 _LABEL = re.compile(r"^[A-ZÁÉÍÓÚÑ][\wáéíóúñü ()/-]{1,30}:\s+(?=\S)")
@@ -185,10 +254,17 @@ def _fix_verbs(text: str, language: str = "es") -> str:
     return f"{fixed} {rest}".rstrip() if fixed else text
 
 
-_REPAIR = """Estas viñetas reescritas contienen datos que NO están en su texto original. \
-Reescríbelas de nuevo usando SOLO el texto original (idioma: {language}). Mismo formato y reglas.
+_REPAIR = """Corrige estas viñetas de un CV (idioma: {language}). Cada una trae su texto original, tu versión y sus \
+problemas. Reescríbelas usando SOLO los hechos del texto original: nada de herramientas, cifras, resultados ni \
+propósitos que no estén ahí. Una línea por viñeta (máximo {max_chars} caracteres), con el verbo en pasado, como la \
+contaría la persona: qué hizo y, si el original lo dice, para qué. Sin etiqueta inicial, sin muletillas de IA, sin \
+rayas largas y sin cerrar con un gerundio. No termines con punto. Devuelve cada una con su mismo id.
 
 {items}"""
+
+
+def _clean(text: str, language: str) -> str:
+    return _fix_verbs(_without_label(text.strip().rstrip(".").strip()), language)
 
 
 def _years_text(match: MatchResult) -> str:
@@ -232,6 +308,7 @@ def write_cv(
         language=language,
         focus=extra_focus.strip() or "ninguno",
         bullets="\n".join(lines),
+        max_chars=BULLET_CHARS,
         years=_years_text(match),
         roles=", ".join(roles) or "-",
         education=education,
@@ -241,28 +318,53 @@ def write_cv(
     draft = generate_structured(llm, prompt, Draft, cache=False)
 
     strict = language_code == SOURCE_LANGUAGE
-    written = {b.id: _fix_verbs(b.text.strip().rstrip("."), language_code) for b in draft.bullets if b.id in originals}
-    problems = {
-        aid: unsupported(written[aid], originals[aid], strict=strict) if aid in written else ["sin respuesta"]
-        for aid in originals
-    }
-    failing = {aid: p for aid, p in problems.items() if p}
+    written = {b.id: _clean(b.text, language_code) for b in draft.bullets if b.id in originals}
+    failing = {}  # datos sin respaldo: van a `reverted`
+    styled = {}  # suena a IA: si no se corrige, queda el texto del usuario (no inventa, así que no cuenta como inventado)
+    long = set()  # más de una línea: se pide acortar, pero una versión limpia larga se conserva
+    for aid in originals:
+        if aid not in written:
+            failing[aid] = ["sin respuesta"]
+        elif problems := unsupported(written[aid], originals[aid], strict=strict):
+            failing[aid] = problems
+        else:
+            if problems := style_problems(written[aid], originals[aid], language_code):
+                styled[aid] = problems
+            if len(written[aid]) > BULLET_MAX:
+                long.add(aid)
 
-    if failing:
+    to_fix = {aid: [*failing.get(aid, []), *styled.get(aid, []),
+                    *([f"pasa de {BULLET_MAX} caracteres: déjala en una línea"] if aid in long else [])]
+              for aid in originals if aid in failing or aid in styled or aid in long}
+    if to_fix:
         items = "\n".join(
             f"{aid} | original: {originals[aid]} | tu versión: {written.get(aid, '-')} | problemas: {'; '.join(p)}"
-            for aid, p in failing.items()
+            for aid, p in to_fix.items()
         )
-        repaired = generate_structured(llm, _REPAIR.format(language=language, items=items), Draft, cache=False)
-        for b in repaired.bullets:
-            if b.id in failing:
-                text = _fix_verbs(b.text.strip().rstrip("."), language_code)
-                if not unsupported(text, originals[b.id], strict=strict):
-                    written[b.id] = text
-                    failing.pop(b.id)
+        try:
+            repaired = generate_structured(llm, _REPAIR.format(language=language, items=items, max_chars=BULLET_CHARS),
+                                           Draft, cache=False).bullets
+        except Exception:  # noqa: BLE001 — sin la corrección se decide con lo que ya hay
+            repaired = []
+        for b in repaired:
+            if b.id not in to_fix:
+                continue
+            text = _clean(b.text, language_code)
+            if unsupported(text, originals[b.id], strict=strict) or style_problems(text, originals[b.id], language_code):
+                continue
+            if b.id in failing or b.id in styled or len(text) < len(written[b.id]):
+                written[b.id] = text
+                failing.pop(b.id, None)
+                styled.pop(b.id, None)
 
-    for aid in failing:
-        written[aid] = _without_label(originals[aid]).rstrip(".")  # el texto del usuario nunca miente
+    for aid in list(styled):  # solo le sobraba un gerundio o una raya: se quitan sin IA
+        text = tidy(written[aid], originals[aid], language_code)
+        if not style_problems(text, originals[aid], language_code) and not unsupported(text, originals[aid], strict=strict):
+            written[aid] = text
+            styled.pop(aid)
+
+    for aid in [*failing, *styled]:
+        written[aid] = _without_label(originals[aid]).rstrip(".")  # el texto del usuario nunca miente ni suena a IA
 
     summary_source = " ".join(
         [
@@ -278,9 +380,9 @@ def write_cv(
         if not text.strip():
             return ["sin resumen"], []
         return (unsupported(text, summary_source, strict=strict, extra_numbers=extra_numbers),
-                summary_style_problems(text, vacancy.role, roles, vacancy_texts))
+                summary_style_problems(text, vacancy.role, roles, vacancy_texts, language_code, summary_source))
 
-    summary = draft.summary.strip()
+    summary = tidy(draft.summary.strip(), summary_source, language_code)
     summary_problems, style = check(summary)
     if summary_problems or style:  # una corrección: datos sin respaldo o un perfil robótico, corto o copiado
         try:
@@ -289,6 +391,7 @@ def write_cv(
                 problems="; ".join(summary_problems + style), roles=", ".join(roles) or "-", years=_years_text(match),
                 education=education, skills=", ".join(skills) or "-",
                 achievements=" | ".join(list(written.values())[:6]) or "-"), SummaryDraft, cache=False).summary.strip()
+            fixed = tidy(fixed, summary_source, language_code)
         except Exception:  # noqa: BLE001 — si la corrección falla, se decide con lo que ya hay
             fixed = ""
         fixed_problems, fixed_style = check(fixed)
@@ -300,6 +403,7 @@ def write_cv(
         bullets=written,
         reverted=failing,
         summary_problems=summary_problems,
+        restyled=styled,
     )
 
 

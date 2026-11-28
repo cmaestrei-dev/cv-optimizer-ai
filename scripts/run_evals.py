@@ -28,6 +28,7 @@ from evals.metrics import (  # noqa: E402
     keyword_coverage,
     language_ok,
     match_accuracy,
+    page_stats,
 )
 
 
@@ -44,6 +45,8 @@ def run_case(case, extract: str, write: str) -> CaseResult:
         generated = generate(llm_write, profile, contact, analysis)
         result.bullets = sum(len(e.bullets) for e in generated.document.experiences)
         result.reverted = len(generated.reverted)
+        result.restyled = len(generated.restyled)
+        result.min_bullets, result.ai_style, result.long_bullets = page_stats(generated, profile)
         result.summary_replaced = generated.summary_replaced
         result.pages = generated.output.pages
         result.language_ok = language_ok(generated, case.language)
@@ -56,8 +59,9 @@ def run_case(case, extract: str, write: str) -> CaseResult:
 
 
 def summarize(results: list[CaseResult]) -> str:
-    rows = ["| Proveedor | Match | Inventado (viñetas revertidas) | Resumen reemplazado | 1 página | Idioma | Keywords en CV | Llamadas | Tiempo/caso | Errores |",
-            "|---|---|---|---|---|---|---|---|---|---|"]
+    rows = ["| Proveedor | Match | Inventado (viñetas revertidas) | Sonaban a IA (texto del usuario) | Resumen reemplazado "
+            "| 1 página | ≥4 viñetas | Aún suenan a IA | Viñetas largas | Idioma | Keywords en CV | Llamadas | Tiempo/caso | Errores |",
+            "|---|---|---|---|---|---|---|---|---|---|---|---|---|---|"]
     for provider in dict.fromkeys(r.provider for r in results):
         rs = [r for r in results if r.provider == provider]
         ok = [r for r in rs if not r.error]
@@ -66,7 +70,10 @@ def summarize(results: list[CaseResult]) -> str:
         bullets = sum(r.bullets for r in ok) or 1
         rows.append(
             f"| {provider} | {hits}/{total} ({hits / total:.0%}) | {sum(r.reverted for r in ok)}/{bullets} "
+            f"| {sum(r.restyled for r in ok)}/{bullets} "
             f"| {sum(r.summary_replaced for r in ok)}/{len(ok)} | {sum(r.pages == 1 for r in ok)}/{len(ok)} "
+            f"| {sum(r.min_bullets >= 4 for r in ok)}/{len(ok)} | {sum(r.ai_style for r in ok)} "
+            f"| {sum(r.long_bullets for r in ok)} "
             f"| {sum(r.language_ok for r in ok)}/{len(ok)} "
             f"| {sum(r.keyword_coverage for r in ok) / max(len(ok), 1):.0%} "
             f"| {sum(r.llm_calls for r in rs) / len(rs):.1f} | {sum(r.seconds for r in rs) / len(rs):.1f}s "
@@ -90,7 +97,8 @@ def main() -> int:
             results.append(r)
             status = f"ERROR {r.error}" if r.error else (
                 f"puntaje {r.score}, match {r.match_hits}/{r.match_total}, revertidas {r.reverted}/{r.bullets}, "
-                f"{r.pages} pág, {r.seconds:.1f}s"
+                f"sonaban a IA {r.restyled}, mín. {r.min_bullets} viñetas, aún IA {r.ai_style}, largas {r.long_bullets}, "
+                f"keywords {r.keyword_coverage:.0%}, {r.pages} pág, {r.seconds:.1f}s"
             )
             print(f"[{r.provider}] {case.name}: {status}")
             for miss in r.match_misses:

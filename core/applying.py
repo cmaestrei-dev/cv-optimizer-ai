@@ -166,7 +166,7 @@ def generate_cv(username: str, application_id: int, *, write_llm: LLMClient, ext
     return {
         "cv_id": cv_id, "filename": filename, "pages": generated.output.pages, "trimmed": generated.output.trimmed,
         "reverted": [reason for reasons in generated.reverted.values() for reason in reasons],
-        "summary_replaced": generated.summary_replaced,
+        "summary_replaced": generated.summary_replaced, "keywords": generated.keywords.to_dict(),
     }
 
 
@@ -185,6 +185,7 @@ def edit_cv(username: str, cv_id: int, *, summary: str, bullets: list[list[tuple
     ):
         raise UserInputError("La edición no corresponde a este CV.")
     document.summary = summary.strip()
+    document.density = 0  # se vuelve a medir: con lo editado puede caber con la letra normal
     for exp, rows in zip(document.experiences, bullets, strict=True):
         for bullet, (text, included) in zip(exp.bullets, rows, strict=True):
             bullet.text, bullet.included = text.strip(), included

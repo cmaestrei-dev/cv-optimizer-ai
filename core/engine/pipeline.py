@@ -5,6 +5,7 @@ import json
 from dataclasses import dataclass, field
 
 from core.engine.document import CVDocument, RenderResult, build_document, render
+from core.engine.keywords import KeywordReport, coverage, key_skills
 from core.engine.matching import EvidenceMap, MatchResult, build_evidence_map, compute_match
 from core.engine.selection import Budget, select_content
 from core.engine.writing import write_cv
@@ -27,6 +28,8 @@ class GeneratedCV:
     output: RenderResult
     reverted: dict[int, list[str]] = field(default_factory=dict)
     summary_replaced: bool = False
+    keywords: KeywordReport = field(default_factory=KeywordReport)  # medidas sobre el CV ya ajustado a la página
+    restyled: dict[int, list[str]] = field(default_factory=dict)
 
 
 def analyze(
@@ -100,10 +103,13 @@ def generate(
     selection = select_content(profile, analysis.match, analysis.vacancy, budget)
     written = write_cv(llm, analysis.vacancy, selection, analysis.match, profile, extra_focus=extra_focus)
     language = (analysis.vacancy.language or "es").lower()[:2]
-    document = build_document(selection, written, language)
+    document = build_document(selection, written, language, key_skills(analysis.vacancy, profile))
+    output = render(document, contact, max_pages=max_pages)
     return GeneratedCV(
         document=document,
-        output=render(document, contact, max_pages=max_pages),
+        output=output,
         reverted=written.reverted,
         summary_replaced=bool(written.summary_problems),
+        keywords=coverage(document.to_markdown(), analysis.vacancy, profile),
+        restyled=written.restyled,
     )

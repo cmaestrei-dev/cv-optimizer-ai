@@ -137,6 +137,10 @@ ul li::marker {
     margin: 0 0 2pt 0;
 }
 
+p.clave {
+    margin: 3pt 0 0 0;
+}
+
 strong {
     color: #111111;
 }

@@ -292,7 +292,7 @@ def _prepare(api: Api, conf: cfg.Config, state: State, args, *, portal: str, job
         print(f"        Menos de {minimum}: descartada, sin CV.")
         state.save()
         return False
-    cv_path, cv_id = "", None
+    cv_path, cv_id, keywords = "", None, {}
     if conf.make_cv and not args.sin_cv:
         try:
             cv = api.make_cv(app_id)
@@ -300,12 +300,36 @@ def _prepare(api: Api, conf: cfg.Config, state: State, args, *, portal: str, job
             cv_path = str(api.download_cv(cv["id"], cfg.DATA_DIR / "cvs" / str(app_id) / cv["filename"]))
             cv_id = cv["id"]
             print(f"        CV: {cv['filename']}")
+            if (keywords := cv.get("keywords") or {}).get("total"):
+                print(f"        Palabras clave de la vacante: {len(keywords['present'])} de {keywords['total']} "
+                      f"({keywords['coverage']} %)")
         except ApiError as e:
             print(f"        CV no generado: {e.detail}")
-    state.mark(job_id, "preparada", portal=portal, app=app_id, puntaje=score, cv=cv_path, cv_id=cv_id, url=url)
+    extra = {"claves": keywords["coverage"], "faltan": keywords.get("missing", [])[:8]} if keywords.get("total") else {}
+    state.mark(job_id, "preparada", portal=portal, app=app_id, puntaje=score, cv=cv_path, cv_id=cv_id, url=url, **extra)
     state.count(_key("preparadas", portal))
     state.save()
     return True
+
+
+def _keywords_today(state: State) -> str:
+    """Cuánto de lo que piden las vacantes muestran los CV preparados hoy, y lo que más piden que no está en el perfil
+    (para agregarlo si es cierto: el CV nunca lo pone por su cuenta)."""
+    today = [r for r in state.data["vistas"].values() if r.get("claves") is not None and r.get("cuando")
+             and datetime.fromisoformat(r["cuando"]).astimezone().date() == date.today()]
+    if not today:
+        return ""
+    average = round(sum(r["claves"] for r in today) / len(today))
+    wanted: dict[str, list] = {}
+    for r in today:
+        for word in r.get("faltan") or []:
+            wanted.setdefault(word.casefold(), [word, 0])[1] += 1
+    top = sorted(wanted.values(), key=lambda item: -item[1])[:5]
+    text = f" Palabras clave de la vacante en los CV de hoy: {average} % en promedio."
+    if top:
+        text += (f" Lo que más piden y no está en tu perfil: {', '.join(f'{w} ({n})' for w, n in top)}"
+                 " (agrégalo en la app solo si lo tienes).")
+    return text
 
 
 def cmd_buscar(args) -> int:
@@ -769,6 +793,7 @@ def cmd_diario(_args) -> int:
                 notice += f" Postulación en pausa: {state.pause_reason(paused)}. Entra tú a {name} y revisa."
         for portal in state.data.get("sesion_perdida", []):
             notice += f" El navegador del bot perdió la sesión de {cfg.PORTALS[portal]}: python -m runner entrar {portal}."
+        notice += _keywords_today(state)
         print(notice)
         _notify(notice)
         questions = telegram.pending_questions(state)
