@@ -586,7 +586,7 @@ Cambios:
 
 ## Próximo paso
 
-0. Hojas de vida v3 (2026-11-28): revisar en las primeras vueltas que los CV salgan con 4 o 5 viñetas y la línea de competencias, y que el aviso del bot traiga la cobertura y lo que más piden. Idea pendiente: tras ajustar a la página, volver a poner lo último que se quitó si cabe (a veces queda espacio libre al final).
+0. Hojas de vida v3 (2026-11-28): revisar en las primeras vueltas que los CV salgan con 4 o 5 viñetas y la línea de competencias, y que el aviso del bot traiga la cobertura y lo que más piden. Hecho: tras ajustar a la página, `render` devuelve lo que se quitó y vuelve a caber (cada recorte sabe deshacerse: `_Trim.undo`/`redo`).
 1. ~~(dueño) Renovar la contraseña de aplicación del buzón de alertas~~: hecho el 2026-11-21 (versión 2 del secreto, revisión 00015). La app recibió 13 alertas de LinkedIn acumuladas; analiza 40 vacantes por día y las demás esperan. Ver el primer envío de LinkedIn en la vuelta de las 9:17 del 22-11. Pendiente: el lector de alertas de Computrabajo no saca vacantes de sus correos reales (34 alertas con 0 vacantes).
 2. ~~(dueño) Primer lote de Bancolombia~~: hecho el 2026-11-22 (2 enviadas). Cada oferta nueva que encaja avisa por Telegram con `python -m runner lote bancolombia`; el dueño entra en la ventana del bot y el bot hace el resto.
 3. Revisar `registro.log` tras las vueltas: el primer envío real a elempleo (20 preparadas el 2026-11-21) y las opciones de las preguntas que quedan sin respuesta (ahora se anotan), para ajustar el banco.

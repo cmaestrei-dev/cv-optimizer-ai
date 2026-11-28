@@ -193,3 +193,55 @@ def test_a_topic_in_a_role_or_certificate_is_a_key_skill():
                               education=(Ed(1, "Ingeniería de Sistemas", "UdeC", "2022 - 2027", parse_period("2022 - 2027")),))
     assert key_skills(_vacancy(["ciberseguridad", "Ingeniería de Sistemas", "Analista Ciberseguridad Jr"]), profile) == [
         "Ciberseguridad"]
+
+
+def test_what_fits_again_after_trimming_comes_back(monkeypatch):
+    # La muestra de Credicorp (2026-11-28) quedó con espacio libre al final: lo último que se quitó liberó de más.
+    from types import SimpleNamespace
+
+    from core.engine import document
+    from core.engine.document import CVBullet, CVDocument, CVExperience, render
+
+    def size(doc):  # una «hoja» de 14 líneas: cada viñeta ocupa las que dice su texto; cada línea de educación, 1
+        return sum(int(b.text.split()[0]) for e in doc.visible_experiences() for b in e.included) + len(doc.education)
+
+    monkeypatch.setattr(document, "_layout", lambda doc, contact: SimpleNamespace(
+        pages=[1] * (1 if size(doc) <= 14 else 2), write_pdf=lambda: b"%PDF"))
+
+    def bullets(base, long_first):
+        return [CVBullet(base + i, f"{3 if long_first and i == 0 else 1} logro", "x", score=base + i) for i in range(5)]
+
+    courses = ["Curso A - X | 2024", "Curso B - X | 2024", "Curso C - X | 2023"]
+    doc = CVDocument("es", "Resumen", [CVExperience("Actual", "E", "2026", "", bullets(10, False)),
+                                       CVExperience("Anterior", "O", "2025", "", bullets(0, True))],
+                     ["Ingeniería de Sistemas - UdeC | 2027", *courses], [])
+    # 12 líneas de viñetas + 4 de educación = 16: se quita el curso C (15) y la viñeta larga de 3 líneas (12)…
+    result = render(doc, UserProfile(username="u", full_name="Ana"))
+    # …y como sobran 2, el curso C vuelve
+    assert result.pages == 1 and result.trimmed == ["Viñeta de Anterior: 3 logro…"]
+    assert doc.education[1:] == courses and size(doc) == 13
+
+
+def test_every_trim_can_be_undone_and_redone():
+    import copy
+
+    from core.engine.document import (
+        CVBullet,
+        CVDocument,
+        CVExperience,
+        _denser,
+        _drop_oldest,
+        _drop_skill,
+        _trim_step,
+    )
+
+    doc = CVDocument("es", "R", [CVExperience("A", "E", "2026", "", [CVBullet(1, "x", "x", 1.0)]),
+                                 CVExperience("B", "O", "2025", "", [CVBullet(2, "y", "y", 0.5)])],
+                     ["Ingeniería - U | 2027", "Curso - X | 2024"], [("Lenguajes", ["Python"]), ("Otros", ["Git"])])
+    before = copy.deepcopy(doc.to_dict())
+    for trim in (_drop_skill(doc, 0), _denser(doc), _drop_oldest(doc), _trim_step(doc)):
+        after = copy.deepcopy(doc.to_dict())
+        trim.undo()
+        trim.redo()
+        assert doc.to_dict() == after, trim.message  # deshacer y rehacer deja todo igual
+    assert before != doc.to_dict()
