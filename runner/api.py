@@ -90,10 +90,11 @@ class Api:
                        out.get("status", ""), bool(out.get("cvs")))
 
     def make_cv(self, application_id: int, *, wait: float = 180) -> dict:
-        """Genera el CV a la medida (trabajo en segundo plano) y devuelve su registro (id, archivo, huella)."""
-        self.wait_job(self.post(f"/applications/{application_id}/cvs", {"focus": ""}), wait=wait)
+        """Genera el CV a la medida (trabajo en segundo plano) y devuelve su registro (id, archivo, huella) con la
+        cobertura de palabras clave de la vacante (`keywords`, vacía si la app es anterior a la v3)."""
+        job = self.wait_job(self.post(f"/applications/{application_id}/cvs", {"focus": ""}), wait=wait)
         cvs = self.get(f"/applications/{application_id}")["cvs"]
-        return cvs[-1]
+        return {**cvs[-1], "keywords": (job.get("result") or {}).get("keywords") or {}}
 
     def wait_job(self, job: dict, *, wait: float = 300) -> dict:
         deadline = time.monotonic() + wait

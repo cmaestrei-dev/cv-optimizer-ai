@@ -147,12 +147,20 @@ function CVEditor({ cvId, onSaved }: { cvId: number; onSaved: () => void }) {
   );
 }
 
+type CVResult = {
+  pages: number;
+  trimmed: string[];
+  reverted: string[];
+  summary_replaced: boolean;
+  keywords?: { coverage: number; total: number; present: string[]; missing_owned: string[]; missing: string[] };
+};
+
 function CVSection({ detail }: { detail: Detail }) {
   const invalidate = useInvalidate(detail.id);
   const [focus, setFocus] = useState("");
   const [editing, setEditing] = useState<number | null>(null);
   const generation = useJob();
-  const result = generation.job?.status === "done" ? (generation.job.result as { pages: number; trimmed: string[]; reverted: string[]; summary_replaced: boolean }) : null;
+  const result = generation.job?.status === "done" ? (generation.job.result as CVResult) : null;
   const versions = [...detail.cvs].reverse();
 
   return (
@@ -173,6 +181,13 @@ function CVSection({ detail }: { detail: Detail }) {
           {result.reverted.length > 0 && <small>Se usó tu texto original en {result.reverted.length} viñeta(s): la IA agregaba datos que no están en tu perfil.</small>}
           {result.summary_replaced && <small>El resumen de la IA no se respaldaba; se usó uno armado solo con tus datos.</small>}
           {result.trimmed.length > 0 && <small>Para caber en 1 página se quitó: {result.trimmed.join("; ")}</small>}
+          {result.keywords && result.keywords.total > 0 && (
+            <small>
+              Palabras clave de la vacante en tu CV: {result.keywords.present.length} de {result.keywords.total} ({result.keywords.coverage} %).
+              {result.keywords.missing_owned.length > 0 && <> No cupieron: {result.keywords.missing_owned.join(", ")}.</>}
+              {result.keywords.missing.length > 0 && <> La vacante pide y no están en tu perfil: {result.keywords.missing.join(", ")} (agrégalas solo si las tienes).</>}
+            </small>
+          )}
         </Notice>
       )}
       {versions.map((cv, i) => (
